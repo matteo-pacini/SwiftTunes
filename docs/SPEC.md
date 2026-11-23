@@ -115,7 +115,11 @@ is working material the lead hands to the app role; in words:
     and the tune's shape: 78 mirrored columns of dots that fill as it plays;
     a click seeks, a drag scrubs. Position and length under it. One row of
     six round controls: shuffle, repeat, play/pause (large, solid), next,
-    share, scrap. With nothing to play the hero shows the empty-state
+    share, scrap. A click on the playing tune's name turns it into a
+    text field holding the name, selected, with a tick and a cross beside
+    it: Return or the tick saves (`renameTune`), Esc or the cross puts the
+    old name back. The rule it breaks, or the engine's refusal, shows under
+    it and the field stays open. The name's tooltip is `Rename`. With nothing to play the hero shows the empty-state
     sentences and, while a tune is being made, the forming wave.
   - UP NEXT: the label with its right-hand text, then a shelf of at most
     three cards: queued tunes (artwork, name, `N BPM · <key> · M:SS`, a NEW

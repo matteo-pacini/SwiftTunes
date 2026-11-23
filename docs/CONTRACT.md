@@ -36,6 +36,7 @@ public protocol EngineAPI: AnyObject {
     func shareInfo(for target: TuneTarget) async -> Result<ShareInfo, Refusal>
     func setPinned(_ on: Bool, for target: TuneTarget) async -> Result<PinResult, Refusal>
     func exportCopy(of target: TuneTarget) async -> Result<URL, Refusal>
+    func renameTune(_ target: TuneTarget, to name: String) async -> Result<String, Refusal>
 
     /// Stops the player, cancels the job, stops the server and waits until no
     /// child process remains. Called once, while the app is terminating: the app
@@ -223,6 +224,30 @@ file), `exportPath` (`URL`, where an export would go), `pinned` (`Bool`).
 `PinResult`: `on` (`Bool`), `name` (`String`).
 
 `exportCopy` returns the URL written.
+
+`renameTune` gives a tune a new name and returns the name as saved. The
+engine trims it, checks it with `TuneRules.nameError`, and rewrites the
+title tag of the file in place (a tagged copy beside it, then an atomic
+replace; the file's own name, which holds when it was made, its tempo and
+its key, does not change). The wave cache and the next snapshot carry the
+new name. A name equal to the current one succeeds and writes nothing.
+Refusals: `That tune is no longer there.`, a `TuneRules` sentence, or
+`could not rename <t>: <error>`; `field` is always nil.
+
+```swift
+public enum TuneRules {
+    public static let nameMax = 60
+    /// The first rule a tune's name breaks, or nil. Checked on the trimmed
+    /// name, in this order, with these sentences:
+    ///   `A tune needs a name.`
+    ///   `A name cannot hold control characters or line breaks.`
+    ///   `A name is at most 60 characters; this one has N.`
+    public static func nameError(_ name: String) -> String?
+}
+```
+
+Like `GenreRules`, this is shared so the field and the engine cannot
+disagree; the engine role owns the file and its tests.
 
 Result types are `Sendable` and `Equatable`; they are not coded. Enum cases
 are camel case in Swift with the snake-case raw values given here.
