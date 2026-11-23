@@ -672,6 +672,8 @@ final class Engine: EngineAPI {
 
     func playNow(_ tune: Tune) {
         appended = nil
+        // The item it replaces is no longer the one asked for.
+        currentToken = nil
         let token = newToken()
         loading = Ask(token: token, path: tune.path)
         paused = false

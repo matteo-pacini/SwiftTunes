@@ -120,7 +120,8 @@ public actor FakeAceServer {
             let kind = (body["fake_kind"] as? String).flatMap(Self.kind(named:)) ?? .normal
             var quiet: [Bool] = []
             if kind == .quiet {
-                quiet = slots.indices.map { $0 >= slots.count / 3 && $0 < slots.count / 3 + 30 }
+                // 6 s, clear of the tail the engine cuts.
+                quiet = slots.indices.map { $0 >= 5 && $0 < 35 }
             }
             let wav = WAV.tone(rate: rate, slots: slots, quiet: quiet)
             var reply = Data("--\(Self.boundary)\r\nContent-Type: audio/wav\r\n\r\n".utf8)
@@ -182,7 +183,9 @@ public actor FakeAceServer {
         let n = duration * 5
         var codes = (0..<n).map { 100 + ($0 * 37) % 60000 }
         if kind == .silent {
-            for i in (n / 3)..<min(n, n / 3 + 32) { codes[i] = silenceCode }
+            // Clear of the 2 s tail, with sound on both sides.
+            let start = max(1, (n - 10 - 32) / 2)
+            for i in start..<min(n - 11, start + 32) { codes[i] = silenceCode }
         }
         for i in max(0, n - 10)..<n { codes[i] = silenceCode }
         let text = codes.map(String.init).joined(separator: ",") + ","
