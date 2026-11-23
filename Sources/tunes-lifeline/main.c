@@ -126,7 +126,7 @@ int main(int argc, char **argv) {
         close(fd);
         close(kq);
         execvp(argv[1], argv + 1);
-        fprintf(stderr, "tunes-lifeline: cannot run %s: %s\n", argv[1], strerror(errno));
+        fprintf(stderr, "tunes-lifeline: failed to run %s: %s\n", argv[1], strerror(errno));
         _exit(127);
     }
     /* Also set here, so a kill of the group cannot miss a child that has

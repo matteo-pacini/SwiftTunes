@@ -246,6 +246,8 @@ final class Rig {
     var snapshots: [Snapshot] = []
     var token: (any SnapshotObservation)?
     var modelFiles: [String: Data] = [:]
+    /// Replaces the fake launcher when set.
+    var realLauncher: (any ServerLauncher)?
 
     static let genresText = """
     {
@@ -331,7 +333,7 @@ final class Rig {
         return EngineEnvironment(
             paths: paths, aceServer: URL(filePath: "/nonexistent/ace-server"),
             defaultGenres: root.appending(path: "genres-default.json"), pins: root.appending(path: "pins.json"),
-            clock: clock, random: SplitMix64(seed: 11), player: player, launcher: launcher, holds: holds, probe: FakeProbe(),
+            clock: clock, random: SplitMix64(seed: 11), player: player, launcher: realLauncher ?? launcher, holds: holds, probe: FakeProbe(),
             timeZone: TimeZone(identifier: "UTC")!, freePort: { port }
         )
     }
