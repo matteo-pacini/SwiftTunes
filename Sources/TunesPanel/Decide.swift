@@ -45,7 +45,7 @@ public enum Decide {
                 .init(label: "memory while composing", value: "about \(Format.gib(s.need.ramBytes)) of memory"),
             ]
             let model = s.model.name.isEmpty ? "The music model" : s.model.name
-            return SetupCard(kind: .missing, title: "Tunes needs a music model",
+            return SetupCard(kind: .missing, title: "SwiftTunes needs a music model",
                              detail: "\(model) composes on this computer. Nothing is sent anywhere after the download.",
                              rows: rows, progress: nil, button: Control(text: "Download", help: "Download"), command: .download)
         }

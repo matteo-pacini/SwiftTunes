@@ -8,7 +8,7 @@ struct SetupTests {
     func notSetUp() throws {
         let c = try setup(Fixture.load("01-not-set-up"))
         #expect(c.kind == .missing)
-        #expect(c.title == "Tunes needs a music model")
+        #expect(c.title == "SwiftTunes needs a music model")
         #expect(c.detail == "ACE-Step 1.5 Turbo composes on this computer. Nothing is sent anywhere after the download.")
         #expect(c.rows.map { [$0.label, $0.value] } == [["download", "7.57 GiB"], ["free on disk", "226 GiB"], ["memory while composing", "about 8 GiB of memory"]])
         #expect(c.button.text == "Download")
