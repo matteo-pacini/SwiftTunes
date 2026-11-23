@@ -176,10 +176,12 @@ struct EditorView: View {
                     .font(.system(size: 12.5))
                     .frame(height: 64)
                     .scrollContentBackground(.hidden)
+                    // NSTextView pads each line by its text container's 5 pt; a field does not.
+                    .padding(.leading, -5)
                     .focused($focus, equals: .turns)
                     .overlay(alignment: .topLeading) {
                         if card.values.turns.isEmpty {
-                            Text(verbatim: card.turns.placeholder).foregroundStyle(.tertiary).padding(.leading, 5).allowsHitTesting(false)
+                            Text(verbatim: card.turns.placeholder).foregroundStyle(.tertiary).allowsHitTesting(false)
                         }
                     }
             }
@@ -188,12 +190,18 @@ struct EditorView: View {
                 FieldBox(field: card.fastest) { tempo(.fastest) }
             }
             if !card.tempoError.isEmpty {
-                Text(verbatim: card.tempoError).font(.system(size: 11.5)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                Text(verbatim: card.tempoError).font(.system(size: 11.5)).foregroundStyle(Tone.red.color).fixedSize(horizontal: false, vertical: true)
             }
             Text(verbatim: card.hint).font(.system(size: 11.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 if let delete = card.delete {
-                    PushButton(control: delete, destructive: true, action: model.askDelete)
+                    Button(role: .destructive, action: model.askDelete) {
+                        Text(verbatim: delete.text).foregroundStyle(Color(nsColor: .systemRed))
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(!delete.enabled)
+                    .help(delete.help)
+                    .accessibilityLabel(Text(verbatim: delete.help))
                 }
                 Spacer()
                 PushButton(control: card.cancel, action: model.cancelEdit)
@@ -253,7 +261,7 @@ struct FieldBox<Content: View>: View {
                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(field.bad ? Color.red : Color.secondary.opacity(0.35), lineWidth: 1))
                 .accessibilityLabel(Text(verbatim: field.label.capitalized))
             if !field.error.isEmpty {
-                Text(verbatim: field.error).font(.system(size: 11.5)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                Text(verbatim: field.error).font(.system(size: 11.5)).foregroundStyle(Tone.red.color).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -268,7 +276,7 @@ struct AskView: View {
             Text(verbatim: ask.title).font(.system(size: 17, weight: .semibold))
             Text(verbatim: ask.detail).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if !ask.error.isEmpty {
-                Text(verbatim: ask.error).font(.system(size: 11.5)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                Text(verbatim: ask.error).font(.system(size: 11.5)).foregroundStyle(Tone.red.color).fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 8) {
                 Spacer()

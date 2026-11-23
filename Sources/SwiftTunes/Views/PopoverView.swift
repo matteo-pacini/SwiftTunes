@@ -38,7 +38,7 @@ struct FooterView: View {
                     Text(verbatim: text).foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                 case .undo(let text, let button):
-                    Text(verbatim: text).foregroundStyle(.orange).lineLimit(1)
+                    Text(verbatim: text).foregroundStyle(Tone.orange.color).lineLimit(1)
                     Spacer(minLength: 0)
                     PushButton(control: button, action: model.undo)
                 }
@@ -131,10 +131,15 @@ struct BackLink: View {
 
     var body: some View {
         Button(action: action) {
-            Text(verbatim: "‹ \(control.text)").foregroundStyle(Color(nsColor: .linkColor))
+            HStack(spacing: 3) {
+                Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold))
+                Text(verbatim: control.text)
+            }
+            .foregroundStyle(.primary)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .font(.system(size: 12.5))
+        .buttonStyle(.borderless)
+        .font(.system(size: 13))
         .help(control.help)
         .accessibilityLabel(Text(verbatim: control.help))
     }
@@ -147,7 +152,7 @@ struct Strip: View {
     var body: some View {
         Text(verbatim: text)
             .font(.system(size: 11.5))
-            .foregroundStyle(.orange)
+            .foregroundStyle(Tone.orange.color)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
     }

@@ -76,6 +76,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
     private func show() {
         guard let button = item.button else { return }
         model.opened()
+        // A popover takes its look from the status bar it hangs from unless
+        // told otherwise; nil keeps that, a demo's forced look overrides it.
+        popover.appearance = NSApp.appearance
         NSApp.activate()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
@@ -147,11 +150,22 @@ extension Tone {
         case .normal: .primary
         case .soft: .secondary
         case .dim: .secondary
-        case .cyan: .cyan
-        case .green: .green
-        case .orange: .orange
-        case .red: .red
+        case .cyan: Self.tone(light: 0x0B7A9C, dark: 0x64D2FF)
+        case .green: Self.tone(light: 0x1A7F37, dark: 0x30D158)
+        case .orange: Self.tone(light: 0xB85C00, dark: 0xFF9F0A)
+        case .red: Self.tone(light: 0xC9001A, dark: 0xFF5A4F)
         case .accent: .accentColor
         }
+    }
+
+    /// The system's bright tones lose contrast on a light popover; these keep
+    /// it in both appearances.
+    private static func tone(light: UInt32, dark: UInt32) -> Color {
+        func rgb(_ v: UInt32) -> NSColor {
+            NSColor(srgbRed: CGFloat(v >> 16 & 0xFF) / 255, green: CGFloat(v >> 8 & 0xFF) / 255, blue: CGFloat(v & 0xFF) / 255, alpha: 1)
+        }
+        return Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? rgb(dark) : rgb(light)
+        })
     }
 }

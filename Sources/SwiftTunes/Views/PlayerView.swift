@@ -161,7 +161,7 @@ struct QueueRow: View {
                     Text(verbatim: row.sub).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(1)
                 }
                 if let bar = row.bar {
-                    ProgressView(value: bar).progressViewStyle(.linear).tint(.cyan).controlSize(.mini)
+                    ProgressView(value: bar).progressViewStyle(.linear).tint(Tone.cyan.color).controlSize(.mini)
                 }
             }
             Spacer(minLength: 0)
@@ -213,14 +213,16 @@ struct ComposerSection: View {
             ForEach(Array(composer.lines.enumerated()), id: \.offset) { i, line in
                 let last = i == composer.lines.count - 1
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    (Text(verbatim: line.pre) + Text(verbatim: line.em).bold() + Text(verbatim: line.post))
-                        .font(.system(size: i == 0 ? 13 : 11.5))
-                        .foregroundStyle(i == 0 ? Tone.normal.color : line.tone.color)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 0)
-                    if !line.right.isEmpty {
-                        Text(verbatim: line.right).font(.system(size: 11.5)).foregroundStyle(line.rightTone.color).fixedSize()
+                    VStack(alignment: .leading, spacing: 2) {
+                        (Text(verbatim: line.pre) + Text(verbatim: line.em).bold() + Text(verbatim: line.post))
+                            .font(.system(size: i == 0 ? 13 : 11.5))
+                            .foregroundStyle(i == 0 ? Tone.normal.color : line.tone.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if !line.right.isEmpty {
+                            Text(verbatim: line.right).font(.system(size: 11.5)).foregroundStyle(line.rightTone.color)
+                        }
                     }
+                    Spacer(minLength: 0)
                     if last, let retry = composer.retry {
                         PushButton(control: retry, action: model.retry)
                     }

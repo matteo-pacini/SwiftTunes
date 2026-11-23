@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let demo = DemoOptions(arguments: CommandLine.arguments)
         let engine: EngineAPI
         if let demo {
+            if let name = demo.appearance { NSApp.appearance = NSAppearance(named: name) }
             engine = DemoEngine(options: demo)
         } else {
             let contents = Bundle.main.bundleURL.appending(path: "Contents")
