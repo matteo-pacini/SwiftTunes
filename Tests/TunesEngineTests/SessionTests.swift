@@ -195,7 +195,7 @@ struct Seen {
         log.append("== share\n\(seen.dump)")
         let share = try #require(seen.share)
         #expect(share.head == "Jazz" && share.name == info.name && share.meta.hasSuffix("AAC, \(Format.size(info.bytes))"))
-        #expect(share.rows.map(\.title) == ["Copy the file", "Copy its path", "Show it in Finder", "Export a copy", "Keep it for good"])
+        #expect(share.rows.map(\.title) == ["Share…", "Copy its path", "Show it in Finder", "Export a copy", "Keep it for good"])
         #expect(share.rows.last?.on == false && share.rows.last?.sub == "never removed by the newest-50 rule")
         #expect(share.rows.first { $0.action == .export }?.sub == "to \(info.exportPath.path)")
 
