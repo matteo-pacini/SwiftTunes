@@ -400,7 +400,7 @@ struct ModeTests {
         #expect(p.next.head == head)
         let tunes = p.next.rows.filter { $0.kind == .tune }
         #expect(tunes.allSatisfy { $0.dim == (c.mode == .one) })
-        // The shelf holds three cards.
+        // UP NEXT shows three rows.
         #expect(tunes.map(\.tag) == s.queue.prefix(3).map { $0.new ? "new" : "" })
         #expect(tunes.map(\.number) == Array((c.ended ? [] : (c.fresh ? [""] : []) + (c.shuffle ? ["1"] : ["5", "6", "7"])).prefix(3)))
         #expect(lines(p).filter { $0.contains("until the repeat ends") } == (c.mode == .one && c.fresh ? ["1 new tune waits until the repeat ends."] : []))

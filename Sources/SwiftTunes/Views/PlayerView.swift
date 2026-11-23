@@ -2,7 +2,7 @@ import SwiftUI
 import TunesContract
 import TunesPanel
 
-/// NOW PLAYING as the hero, UP NEXT as a shelf, COMPOSER as a glass bar.
+/// NOW PLAYING as the hero, UP NEXT as a list, COMPOSER as a glass bar.
 struct PlayerView: View {
     let card: PlayerCard
     let model: PanelModel
@@ -12,7 +12,7 @@ struct PlayerView: View {
             VStack(spacing: 14) {
                 if let strip = card.strip { Strip(text: strip) }
                 Hero(now: card.now, model: model)
-                Shelf(next: card.next, palette: card.palette, model: model)
+                UpNext(next: card.next, palette: card.palette, model: model)
                 ComposerBar(composer: card.composer, model: model)
             }
         }
@@ -120,95 +120,89 @@ struct Hero: View {
     }
 }
 
-/// UP NEXT: at most three cards.
-struct Shelf: View {
+/// UP NEXT: at most three rows, read top to bottom in play order.
+struct UpNext: View {
     let next: PlayerCard.Next
     let palette: Palette
     let model: PanelModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(spacing: 7) {
+        VStack(spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Caps(text: "UP NEXT")
                 Spacer()
                 Text(verbatim: next.head).font(.system(size: 11.5)).foregroundStyle(.secondary)
             }
-            if !next.rows.isEmpty {
-                HStack(spacing: 8) {
-                    ForEach(next.rows, id: \.id) { row in
-                        ShelfCard(row: row, palette: palette, model: model)
-                            .transition(.scale(scale: 0.85).combined(with: .opacity))
-                    }
-                }
-                .animation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.2), value: next.rows.map(\.id))
+            ForEach(next.rows, id: \.id) { row in
+                UpNextRow(row: row, palette: palette, model: model)
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .animation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.2), value: next.rows.map(\.id))
     }
 }
 
-struct ShelfCard: View {
+struct UpNextRow: View {
     let row: PlayerCard.Row
     let palette: Palette
     let model: PanelModel
     @State private var hovered = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            art
-                .frame(height: 54)
-                .overlay(alignment: .topLeading) {
+        HStack(spacing: 10) {
+            art.frame(width: 36, height: 36)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 5) {
+                    Text(verbatim: row.name).font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
+                    if row.star { Text(verbatim: "★").font(.system(size: 10)).foregroundStyle(.secondary) }
                     if !row.tag.isEmpty {
                         Text(verbatim: row.tag.uppercased())
                             .font(.system(size: 9, weight: .bold))
                             .tracking(0.5)
                             .foregroundStyle(.white)
                             .padding(.horizontal, 5)
-                            .padding(.vertical, 3)
+                            .padding(.vertical, 2)
                             .background(.black.opacity(0.6), in: .rect(cornerRadius: 4))
-                            .padding(6)
                     }
                 }
-                .overlay {
-                    if hovered { actions }
+                if !row.sub.isEmpty {
+                    Text(verbatim: row.sub).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 }
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
-                    Text(verbatim: row.name).font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
-                    if row.star { Text(verbatim: "★").font(.system(size: 10)).foregroundStyle(.secondary) }
-                }
-                Text(verbatim: line).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
             }
             .foregroundStyle(row.kind == .placeholder ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
-        }
-        .padding(8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            if row.kind == .placeholder {
-                RoundedRectangle(cornerRadius: 13).strokeBorder(.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            Spacer(minLength: 0)
+            if hovered && (row.playNow != nil || row.share != nil || row.scrap != nil) {
+                actions
+            } else if row.kind == .tune && !row.right.isEmpty {
+                Text(verbatim: row.right).font(.system(size: 11.5)).foregroundStyle(.secondary)
             }
         }
-        .glassEffect(row.kind == .placeholder ? .identity : .regular, in: .rect(cornerRadius: 13))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+        .background {
+            if row.kind == .placeholder {
+                RoundedRectangle(cornerRadius: 11).strokeBorder(.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            }
+        }
+        .glassEffect(row.kind == .placeholder ? .identity : .regular, in: .rect(cornerRadius: 11))
         .opacity(row.dim ? 0.5 : 1)
         .onHover { hovered = $0 }
         .accessibilityElement(children: .contain)
     }
 
-    private var line: String {
-        [row.sub, row.kind == .tune ? row.right : ""].filter { !$0.isEmpty }.joined(separator: " · ")
-    }
-
     @ViewBuilder private var art: some View {
         switch row.kind {
-        case .tune: ArtworkView(artwork: row.artwork, palette: palette)
-        case .job: ArtworkView(artwork: nil, palette: palette, stage: row.stage)
+        case .tune: ArtworkView(artwork: row.artwork, palette: palette, corner: 7)
+        case .job: ArtworkView(artwork: nil, palette: palette, stage: row.stage, corner: 7)
         case .placeholder:
-            RoundedRectangle(cornerRadius: 9).strokeBorder(.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            RoundedRectangle(cornerRadius: 7).strokeBorder(.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
         }
     }
 
     private var actions: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             if let c = row.playNow { RoundButton(symbol: "play.fill", control: c, size: 26) { model.send(row.playNowCommand) } }
             if let c = row.share { RoundButton(symbol: "square.and.arrow.up", control: c, size: 26) { model.openShare(row.shareRequest) } }
             if let c = row.scrap { RoundButton(symbol: "trash", control: c, size: 26) { model.send(row.scrapCommand) } }

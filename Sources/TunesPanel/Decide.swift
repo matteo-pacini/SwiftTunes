@@ -375,7 +375,7 @@ public enum Decide {
         } else {
             head = "nothing"
         }
-        // The shelf holds three cards: what is queued, then the job, then
+        // UP NEXT shows three rows in play order: what is queued, then the job, then
         // what has not started.
         return PlayerCard.Next(head: head, rows: Array(rows.prefix(3)))
     }
