@@ -32,7 +32,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.model = model
         self.statusItem = statusItem
         self.nowPlaying = nowPlaying
-        if let demo { statusItem.applyDemo(demo) }
+        if let demo {
+            statusItem.applyDemo(demo)
+        } else if CommandLine.arguments.contains("--open-on-launch") {
+            statusItem.openOnLaunch()
+        }
     }
 
     /// The engine's files inside the running bundle, or nil when the app is

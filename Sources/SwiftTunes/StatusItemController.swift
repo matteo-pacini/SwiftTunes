@@ -13,6 +13,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
     private let menu = NSMenu()
     /// Why the last Start at Login change failed, as the system said it.
     private var loginError: String?
+    private var launchOpen: Task<Void, Never>?
 
     init(model: PanelModel) {
         self.model = model
@@ -130,15 +131,24 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
     /// Opens the popover on the card the demo names, for looking at it.
     func applyDemo(_ demo: DemoOptions) {
         guard let open = demo.open else { return }
-        Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(500))
+        openOnLaunch { [weak self] in
             guard let self else { return }
-            show()
             open.apply(to: model)
             if demo.inactive {
                 try? await Task.sleep(for: .milliseconds(300))
                 NSApp.deactivate()
             }
+        }
+    }
+
+    /// `--open-on-launch`: opens the popover shortly after launch and prints
+    /// its window number on stdout, so a screenshot can be taken of it.
+    func openOnLaunch(then prepare: @escaping @MainActor () async -> Void = {}) {
+        launchOpen = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard let self else { return }
+            show()
+            await prepare()
             try? await Task.sleep(for: .milliseconds(800))
             if let window = popover.contentViewController?.view.window {
                 print("popover window \(window.windowNumber)")
