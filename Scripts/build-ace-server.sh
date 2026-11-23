@@ -5,8 +5,8 @@
 #
 # The source and build tree live in a cache outside the repository:
 # $SWIFTTUNES_BUILD_CACHE, default ~/Library/Caches/SwiftTunes-build.
-# Needs git, make and Apple clang (the Xcode command line tools) and cmake:
-# from PATH, else through nix if nix is installed. Installs nothing.
+# Needs git, make and Apple clang (the Xcode command line tools) and cmake,
+# all from PATH. Installs nothing.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -20,12 +20,8 @@ cache="${SWIFTTUNES_BUILD_CACHE:-$HOME/Library/Caches/SwiftTunes-build}"
 src="$cache/acestep.cpp-$revision"
 build="$src/build"
 
-if command -v cmake >/dev/null 2>&1; then
-    cmake=(cmake)
-elif command -v nix >/dev/null 2>&1; then
-    cmake=(nix --extra-experimental-features "nix-command flakes" shell nixpkgs#cmake -c cmake)
-else
-    echo "build-ace-server: cmake is needed to build ace-server; install cmake (https://cmake.org/download/) and run this again." >&2
+if ! command -v cmake >/dev/null 2>&1; then
+    echo "build-ace-server: cmake is missing; enter the dev shell (nix develop) or install cmake, and run this again." >&2
     exit 1
 fi
 
@@ -65,14 +61,14 @@ if [ -n "$(git -C "$src" status --porcelain --ignore-submodules=none --untracked
 fi
 
 echo "build-ace-server: configuring" >&2
-"${cmake[@]}" -S "$src" -B "$build" -G "Unix Makefiles" \
+cmake -S "$src" -B "$build" -G "Unix Makefiles" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=/usr/bin/clang \
     -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
     -DGGML_METAL=ON -DGGML_NATIVE=OFF -DBUILD_SHARED_LIBS=OFF >&2
 
 echo "build-ace-server: building" >&2
-"${cmake[@]}" --build "$build" --target ace-server -j "$(sysctl -n hw.ncpu)" >&2
+cmake --build "$build" --target ace-server -j "$(sysctl -n hw.ncpu)" >&2
 
 binary="$build/ace-server"
 if [ ! -x "$binary" ]; then

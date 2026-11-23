@@ -16,18 +16,25 @@ interface are still being written, so the app built today is a placeholder.
 
 To build: Xcode 26 or later (Swift 6.2), and `cmake`. `cmake` is the one tool
 beyond Xcode, needed only to build `ace-server`; the build uses the Makefile
-generator, so nothing else. `Scripts/build-ace-server.sh` takes `cmake` from
-`PATH`, or runs it through `nix shell nixpkgs#cmake` when Nix is installed,
-and otherwise stops and says so. It installs nothing.
+generator, so nothing else. The scripts take `cmake` from `PATH` and stop
+with a sentence saying so when it is missing. They install nothing.
 
-## Build and run
+## Building
+
+With Nix, enter the dev shell from `flake.nix`, which adds `cmake` and
+leaves Swift, clang, the SDK and `codesign` to Xcode:
 
 ```sh
+nix develop
 swift build
 swift test
 Scripts/make-app.sh
 open build/SwiftTunes.app
 ```
+
+Without Nix, install `cmake` (from [cmake.org](https://cmake.org/download/)
+or a package manager) so that it is on `PATH`, then run the same commands
+without `nix develop`. `swift build` and `swift test` need no `cmake`.
 
 `Scripts/make-app.sh` builds the app in release, fetches acestep.cpp at the
 revision pinned in `Config/pins.json` and builds `ace-server` with Metal,
