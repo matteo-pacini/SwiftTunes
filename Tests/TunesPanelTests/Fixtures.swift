@@ -104,7 +104,12 @@ func openShare(_ s: Snapshot, index: Int?) throws -> (Panel, TuneTarget?) {
 
 /// Rows as [number, name, sub, right].
 func rows(_ p: PlayerCard) -> [[String]] {
-    p.next.rows.map { [$0.number, $0.name, $0.sub, $0.right] }
+    shown(p).map { [$0.number, $0.name, $0.sub, $0.right] }
+}
+
+/// UP NEXT's rows, then BEING MADE's, as they read down the card.
+func shown(_ p: PlayerCard) -> [PlayerCard.Row] {
+    p.next.rows + (p.making?.rows ?? [])
 }
 
 /// The composer's lines as read, with the right-hand text after " | ".

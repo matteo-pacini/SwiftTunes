@@ -5,7 +5,7 @@ import TunesContract
 /// holds besides the snapshot. A value; every change returns a new one.
 public struct Panel: Sendable, Equatable {
     public enum Mode: Sendable, Equatable {
-        case player, chooser, editor, share
+        case player, chooser, editor, share, queue
     }
 
     public var mode: Mode = .player
@@ -101,6 +101,15 @@ extension Panel {
         var p = self
         p.mode = .chooser
         p.notice = nil
+        return p
+    }
+
+    /// `Show all`: the queue card.
+    public func openingQueue() -> Panel {
+        guard mode == .player else { return self }
+        var p = self
+        p.mode = .queue
+        p.rename = nil
         return p
     }
 
@@ -343,7 +352,7 @@ extension Panel {
             return (editor?.busy == true ? self : keepingGenre(), false)
         case .editor:
             return (discardingEdit(), false)
-        case .share:
+        case .share, .queue:
             return (backToPlayer(), false)
         case .chooser:
             return snapshot.genre == nil ? (self, true) : (backToPlayer(), false)

@@ -61,8 +61,8 @@ struct PlayerTests {
         #expect(p.now.showsPause && p.now.playPause.enabled && p.now.next.enabled)
         #expect([p.now.playPause.help, p.now.next.help, p.now.shuffle.help, p.now.repeat.help, p.now.share.help, p.now.scrap.help]
             == ["Pause", "Next", "Shuffle", "Repeat one", "Share", "Scrap Lazy Avenue"])
-        #expect(p.next.head == "2 ready")
-        #expect(rows(p) == [["", "Brass Lantern", "112 BPM · F major", "2:54"], ["", "Quiet Ledger", "96 BPM · D minor", "2:49"]])
+        #expect(p.next.head == "2 new")
+        #expect(rows(p) == [["1", "Brass Lantern", "112 BPM · F major", "2:54"], ["2", "Quiet Ledger", "96 BPM · D minor", "2:49"]])
         #expect(p.next.rows.allSatisfy { $0.kind == .tune && $0.tag == "new" })
         #expect(p.next.rows.map { $0.scrap?.help } == ["Scrap Brass Lantern", "Scrap Quiet Ledger"])
         #expect(p.next.rows.map { $0.playNow?.help } == ["Play it now", "Play it now"])
@@ -84,15 +84,15 @@ struct PlayerTests {
         #expect(p.now.titleTone == .soft)
         #expect(p.now.wave == nil && p.now.time == nil)
         #expect(!p.now.playPause.enabled && !p.now.next.enabled && !p.now.share.enabled && !p.now.scrap.enabled)
-        #expect(p.next.head == "0 ready")
+        #expect(p.next.head == "nothing")
         // 58 s expected, 18 s spent: 40 s left.
         #expect(rows(p) == [["", "Being rendered", "about 0:40 left · written in 1:04", "composing"], ["", "Not started", "after the one above", ""]])
-        let job = p.next.rows[0]
+        let job = shown(p)[0]
         #expect(job.kind == .job && job.rightTone == .cyan)
         #expect(abs((job.bar ?? 0) - 18.0 / 58) < 1e-9)
         #expect(job.scrap?.help == "Scrap the tune being rendered")
         #expect(job.playNow == nil && job.share == nil)
-        #expect(p.next.rows[1].kind == .placeholder)
+        #expect(shown(p)[1].kind == .placeholder)
         #expect(lines(p) == ["Makes Jazz, keeps 2 ahead | using 3.9 GiB of memory", "ACE-Step 1.5 Turbo · 4B Q8 · Apple M4 Pro"])
         #expect(Decide.statusItem(s) == StatusItem(dim: true, text: "", dot: .cyan, help: "SwiftTunes"))
         #expect(Decide.needsTick(s, Panel(), now: NOW))
@@ -104,20 +104,20 @@ struct PlayerTests {
     ] as [(Double, String)])
     func timeLeft(_ offset: Double, _ sub: String) throws {
         let p = try player(Fixture.load("10-writing"), now: NOW + offset)
-        #expect(p.next.rows[0].sub == sub)
-        #expect(p.next.rows[0].scrap?.help == "Scrap the tune being written")
+        #expect(shown(p)[0].sub == sub)
+        #expect(shown(p)[0].scrap?.help == "Scrap the tune being written")
     }
 
     @Test("the job's bar: spent over the estimate, within 0…1")
     func jobBar() throws {
         let s = try Fixture.load("10-writing")
-        #expect(try player(s, now: NOW + 500).next.rows[0].bar == 1)
-        #expect(try player(s, now: NOW - 200).next.rows[0].bar == 0)
+        #expect(try shown(player(s, now: NOW + 500))[0].bar == 1)
+        #expect(try shown(player(s, now: NOW - 200))[0].bar == 0)
     }
 
     @Test("no estimate: the stage and the time spent")
     func noEstimate() throws {
-        let r = try player(Fixture.load("22-writing-again"), now: NOW + 5).next.rows[0]
+        let r = try shown(player(Fixture.load("22-writing-again"), now: NOW + 5))[0]
         #expect([r.name, r.sub] == ["Being written", "0:35 so far"])
         #expect(r.bar == nil)
     }
@@ -126,12 +126,12 @@ struct PlayerTests {
     func placeholders() throws {
         let writing = try player(Fixture.load("10-writing"))
         #expect(rows(writing) == [["", "Being written", "about 1:10 left", "composing"], ["", "Not started", "after the one above", ""]])
-        #expect(writing.next.rows.map(\.nameTone) == [.soft, .dim])
-        #expect(try rows(player(Fixture.load("12-held-power"))) == [["", "Dusty Notebook", "88 BPM · A major", "2:52"], ["", "Not started", "", ""]])
+        #expect(shown(writing).map(\.nameTone) == [.soft, .dim])
+        #expect(try rows(player(Fixture.load("12-held-power"))) == [["1", "Dusty Notebook", "88 BPM · A major", "2:52"], ["", "Not started", "", ""]])
         #expect(try rows(player(Fixture.load("13-held-memory"))).map { $0[1] } == ["Not started", "Not started"])
         var three = try Fixture.load("13-held-memory")
         three.ahead = 3
-        #expect(try player(three).next.rows.count == 3)
+        #expect(try player(three).making?.rows.count == 3)
         #expect(try rows(player(Fixture.load("08-nothing-kept"))).isEmpty)
         #expect(try rows(player(Fixture.load("07-composer-off-kept"))) == [["1", "Lazy Avenue", "139 BPM · C major", "2:57"]])
         var off = try Fixture.load("10-writing")
@@ -161,11 +161,11 @@ struct PlayerTests {
         let s = try Fixture.load("25-kept-playing-new-ready")
         let p = try player(s)
         #expect(p.now.suffix == "kept tunes")
-        #expect(p.next.head == "1 ready")
+        #expect(p.next.head == "1 new")
         #expect(rows(p).map { $0[1] } == ["Paper Kite", "Being written"])
         var flagged = s
         flagged.keptPlaying = true
-        #expect(try player(flagged).next.head == "1 ready")
+        #expect(try player(flagged).next.head == "1 new")
         var undone = flagged
         undone.ready = 0
         undone.queue[0].kept = true
@@ -210,8 +210,8 @@ struct PlayerTests {
     func afterScrap() throws {
         let s = try Fixture.load("11-after-scrap")
         let p = try player(s)
-        #expect([p.now.title, p.now.time?.left, p.next.head] == ["Brass Lantern", "0:03", "1 ready"])
-        #expect(rows(p) == [["", "Quiet Ledger", "96 BPM · D minor", "2:49"], ["", "Being written", "about 1:50 left", "composing"]])
+        #expect([p.now.title, p.now.time?.left, p.next.head] == ["Brass Lantern", "0:03", "1 new"])
+        #expect(rows(p) == [["1", "Quiet Ledger", "96 BPM · D minor", "2:49"], ["", "Being written", "about 1:50 left", "composing"]])
         #expect(lines(p) == ["Makes Jazz, keeps 2 ahead | using 5.8 GiB of memory", "ACE-Step 1.5 Turbo · 4B Q8 · Apple M4 Pro"])
         #expect(Decide.footer(s, Panel(), now: NOW + 10) == nil)
         #expect(Actions.undo(s, now: NOW + 10) == nil)
@@ -514,8 +514,8 @@ struct ActionTests {
         #expect(Actions.next(s) == .next)
         let first = try player(Fixture.load("06-first-tune"))
         #expect(first.now.scrapCommand == nil && first.now.shareRequest == nil)
-        #expect(first.next.rows.map(\.scrapCommand) == [.scrapJob, nil])
-        #expect(first.next.rows.map(\.playNowCommand) == [nil, nil])
+        #expect(first.making?.rows.map(\.scrapCommand) == [.scrapJob, nil])
+        #expect(first.making?.rows.map(\.playNowCommand) == [nil, nil])
         #expect(Actions.playPause(try Fixture.load("06-first-tune")) == nil)
         #expect(Actions.next(try Fixture.load("06-first-tune")) == nil)
         #expect(Actions.playPause(try Fixture.load("33-ended")) == .toggle)

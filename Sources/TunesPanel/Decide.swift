@@ -16,6 +16,7 @@ public enum Decide {
         if p.mode == .editor, let e = p.editor { return .editor(editor(s, e)) }
         if p.mode == .share, let sh = p.share { return .share(share(s, sh, home: home)) }
         if p.mode == .chooser || s.genre == nil { return .chooser(chooser(s)) }
+        if p.mode == .queue { return .queue(queueCard(s, now: now)) }
         return .player(player(s, rename: p.following(s).rename, now: now))
     }
 
@@ -230,7 +231,7 @@ public enum Decide {
     }
 
     static func player(_ s: Snapshot, rename: Panel.Rename? = nil, now: Double) -> PlayerCard {
-        PlayerCard(palette: palette(s), strip: s.error, now: nowSection(s, rename: rename, now: now), next: nextSection(s, now: now), composer: composer(s, now: now))
+        PlayerCard(palette: palette(s), strip: s.error, now: nowSection(s, rename: rename, now: now), next: nextSection(s, now: now), making: making(s, now: now), composer: composer(s, now: now))
     }
 
     static func nowSection(_ s: Snapshot, rename: Panel.Rename? = nil, now: Double) -> PlayerCard.Now {
@@ -321,18 +322,16 @@ public enum Decide {
         return "about \(Format.clock(max(10, (left / 10).rounded() * 10))) left"
     }
 
-    static func nextSection(_ s: Snapshot, now: Double) -> PlayerCard.Next {
+    /// Rows UP NEXT shows in the player.
+    public static let upNextRows = 3
+
+    /// Every queued tune as a row, numbered from 1 in play order.
+    static func queueRows(_ s: Snapshot) -> [PlayerCard.Row] {
         let waits = s.repeat == .one
-        var keptRows = 0
         let colours = palette(s)
-        var rows: [PlayerCard.Row] = s.queue.enumerated().map { i, q in
-            var number = ""
-            if q.kept {
-                keptRows += 1
-                number = String(q.pos ?? keptRows)
-            }
-            return PlayerCard.Row(
-                id: "tune \(q.file) \(i)", kind: .tune, index: i, number: number, name: q.name, nameTone: .normal,
+        return s.queue.enumerated().map { i, q in
+            PlayerCard.Row(
+                id: "tune \(q.file) \(i)", kind: .tune, index: i, number: String(i + 1), name: q.name, nameTone: .normal,
                 tag: q.new ? "new" : "", star: q.pinned, dim: waits,
                 sub: metaOf(bpm: q.bpm, key: q.key), right: q.length.map { Format.clock($0) } ?? "", rightTone: .dim, bar: nil,
                 artwork: Artwork.recipe(name: q.name, bpm: q.bpm, key: q.key, palette: colours), stage: nil,
@@ -342,7 +341,34 @@ public enum Decide {
                 shareRequest: ShareRequest(target: TuneTarget(name: q.name, index: i), file: q.file)
             )
         }
-        if jobShown(s), let j = s.job {
+    }
+
+    /// UP NEXT's and the queue card's right-hand text.
+    static func queueHead(_ s: Snapshot) -> String {
+        if s.queue.isEmpty { return "nothing" }
+        if s.repeat == .one { return "after the repeat" }
+        let fresh = s.queue.filter(\.new).count
+        let keptFollow = s.queue.contains { $0.kept }
+        if fresh > 0 { return keptFollow ? "\(fresh) new, then kept" : "\(fresh) new" }
+        let kept = keptCount(s)
+        return s.shuffle ? "from \(kept) kept, shuffled" : "\(kept) kept, in the order made"
+    }
+
+    static func nextSection(_ s: Snapshot, now: Double) -> PlayerCard.Next {
+        let rows = queueRows(s)
+        let hidden = rows.count - upNextRows
+        return PlayerCard.Next(
+            head: queueHead(s),
+            rows: Array(rows.prefix(upNextRows)),
+            more: hidden > 0 ? Control(text: "then \(hidden) more this round · Show all", help: "Show all") : nil
+        )
+    }
+
+    /// BEING MADE: the job and the places not started, while the composer is on.
+    static func making(_ s: Snapshot, now: Double) -> PlayerCard.Making? {
+        guard s.composing else { return nil }
+        var rows: [PlayerCard.Row] = []
+        if let j = s.job {
             let spent = max(0, now - j.started)
             var parts: [String] = []
             var bar: Double?
@@ -362,31 +388,31 @@ public enum Decide {
                 playNowCommand: nil, scrapCommand: .scrapJob, shareRequest: nil
             ))
         }
-        if s.composing {
-            let missing = s.ahead - s.ready - (s.job != nil ? 1 : 0)
-            for n in 0..<max(0, missing) {
-                rows.append(PlayerCard.Row(
-                    id: "placeholder \(n)", kind: .placeholder, index: nil, number: "", name: "Not started", nameTone: .dim, tag: "", star: false, dim: false,
-                    sub: s.job != nil ? "after the one above" : "", right: "", rightTone: .dim, bar: nil, artwork: nil, stage: nil, playNow: nil, share: nil, scrap: nil,
-                    playNowCommand: nil, scrapCommand: nil, shareRequest: nil
-                ))
-            }
+        let missing = s.ahead - s.ready - (s.job != nil ? 1 : 0)
+        for n in 0..<max(0, missing) {
+            rows.append(PlayerCard.Row(
+                id: "placeholder \(n)", kind: .placeholder, index: nil, number: "", name: "Not started", nameTone: .dim, tag: "", star: false, dim: false,
+                sub: s.job != nil ? "after the one above" : "", right: "", rightTone: .dim, bar: nil, artwork: nil, stage: nil, playNow: nil, share: nil, scrap: nil,
+                playNowCommand: nil, scrapCommand: nil, shareRequest: nil
+            ))
         }
-        let kept = keptCount(s)
-        let head: String
-        if waits && !s.queue.isEmpty {
-            head = "after the repeat"
-        } else if s.keptPlaying && (s.queue.isEmpty || s.queue[0].kept) {
-            // roundLeft counts the playing tune as played.
-            head = s.shuffle ? "from \(kept) kept, shuffled" : "\(max(0, kept - s.roundLeft)) of \(kept), in the order made"
-        } else if s.composing || !s.queue.isEmpty {
-            head = "\(s.ready) ready"
-        } else {
-            head = "nothing"
+        return PlayerCard.Making(head: "plays next when ready", rows: rows)
+    }
+
+    static func queueCard(_ s: Snapshot, now: Double) -> QueueCard {
+        let last: String? = s.queue.last.map { t in
+            s.repeat == .off ? "The round ends after \(t.name)." : "after these, the round starts over"
         }
-        // UP NEXT shows three rows in play order: what is queued, then the job, then
-        // what has not started.
-        return PlayerCard.Next(head: head, rows: Array(rows.prefix(3)))
+        return QueueCard(
+            back: Control(text: genreName(s), help: "Back"),
+            label: "QUEUE · \(s.queue.count) THIS ROUND",
+            title: "Up next",
+            head: queueHead(s),
+            rows: queueRows(s),
+            last: last,
+            making: making(s, now: now),
+            palette: palette(s)
+        )
     }
 
     static func composer(_ s: Snapshot, now: Double) -> PlayerCard.Composer {
@@ -500,7 +526,11 @@ public enum Decide {
     /// tick must run.
     public static func needsTick(_ s: Snapshot, _ p: Panel, now: Double) -> Bool {
         if case .notice = footer(s, p, now: now) { return true }
-        guard case .player = card(s, p, now: now, home: "") else { return false }
+        switch card(s, p, now: now, home: "") {
+        case .player: break
+        case .queue: return jobShown(s)
+        default: return false
+        }
         if s.player == .playing || undoActive(s, now: now) { return true }
         if jobShown(s) { return true }
         return s.composing && s.model.state == .failed && s.model.retryAt != nil

@@ -25,11 +25,28 @@ public struct Control: Sendable, Equatable {
 
 /// The one card the popover shows.
 public enum Card: Sendable, Equatable {
+    case queue(QueueCard)
     case setup(SetupCard)
     case chooser(ChooserCard)
     case editor(EditorCard)
     case share(ShareCard)
     case player(PlayerCard)
+}
+
+// MARK: - Queue
+
+/// Everything that will play this round, in order.
+public struct QueueCard: Sendable, Equatable {
+    public var back: Control
+    /// `QUEUE · N THIS ROUND`.
+    public var label: String
+    public var title: String
+    public var head: String
+    public var rows: [PlayerCard.Row]
+    /// Under the list: what happens after it, nil with nothing queued.
+    public var last: String?
+    public var making: PlayerCard.Making?
+    public var palette: Palette
 }
 
 // MARK: - Setup
@@ -163,6 +180,7 @@ public struct PlayerCard: Sendable, Equatable {
     public var strip: String?
     public var now: Now
     public var next: Next
+    public var making: Making?
     public var composer: Composer
 
     public struct Now: Sendable, Equatable {
@@ -225,7 +243,17 @@ public struct PlayerCard: Sendable, Equatable {
         public var help: String
     }
 
+    /// UP NEXT: finished tunes in play order, numbered from 1.
     public struct Next: Sendable, Equatable {
+        public var head: String
+        public var rows: [Row]
+        /// `then N more this round · Show all`, opening the queue card, when
+        /// more wait than the rows show.
+        public var more: Control?
+    }
+
+    /// BEING MADE: the job and what has not started, under UP NEXT.
+    public struct Making: Sendable, Equatable {
         public var head: String
         public var rows: [Row]
     }
