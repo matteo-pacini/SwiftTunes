@@ -18,9 +18,11 @@ Read, in this order, before any work:
 
 ## Rules
 
-- Swift 6 with AppKit. No SwiftUI, no Catalyst, no Electron, no Xcode project
-  file. Apple silicon, macOS 14 or later.
-- Apple frameworks and tools only: Foundation, AppKit, AVFoundation,
+- Swift 6. The shell is AppKit (`NSStatusItem`, `NSPopover`, the status
+  item's menu); the popover's content is SwiftUI in an `NSHostingController`.
+  No `MenuBarExtra`, no Catalyst, no Electron, no Xcode project file. Apple
+  silicon, macOS 14 or later.
+- Apple frameworks and tools only: Foundation, AppKit, SwiftUI, AVFoundation,
   Accelerate, MediaPlayer, CryptoKit, Network, ServiceManagement, IOKit;
   SwiftPM, Swift Testing, `codesign`, `plutil`, `taskpolicy`. No third-party
   package, library or runtime, in the app or in the tests (fakes are written
@@ -42,6 +44,41 @@ Read, in this order, before any work:
   its design came from or names another program it resembles.
 - Stay inside the files your role owns (`docs/SPEC.md`, "Ownership"). A
   change you need elsewhere is a request to the lead.
+
+## Swift
+
+Load the matching skill before writing or reviewing Swift, and follow it
+where this file is silent:
+
+- `swift-concurrency` for anything async, actor-isolated or `Sendable`.
+- `swift-testing-expert` for every test.
+- `swiftui-expert-skill` for every SwiftUI view.
+
+Concurrency is Swift 6 language mode with complete checking, set per target
+in `Package.swift` (swift-tools-version 6.2):
+
+- `TunesEngine` and `SwiftTunes` default to the main actor
+  (`.defaultIsolation(MainActor.self)`). The engine is one event loop on the
+  main actor; its state is never touched from anywhere else.
+- `TunesContract`, `TunesRules`, `TunesPanel` and `TunesFakes` keep the
+  default, nonisolated. They are value types and pure functions, `Sendable`,
+  callable from any isolation.
+- Every target enables `NonisolatedNonsendingByDefault` and
+  `InferIsolatedConformances`, so a nonisolated async function runs on its
+  caller's actor.
+- Work that must leave the main actor is an `async` function marked
+  `@concurrent`, taking and returning `Sendable` values: hashing, decoding,
+  the loudness scan, the waveform, encoding, large file copies. Nothing else
+  hops.
+- No `@unchecked Sendable`, `nonisolated(unsafe)` or `@preconcurrency`
+  without a comment giving the invariant that makes it safe. No
+  `DispatchQueue`, locks or semaphores for state; a C callback hops to the
+  main actor before touching anything.
+- No `Task.detached`. A `Task` is stored and cancelled by whoever starts it.
+
+SwiftUI views draw the view state `TunesPanel` computes and send commands;
+they hold no rules. State reaches them through one `@Observable` main-actor
+model the shell owns.
 
 ## Checks
 

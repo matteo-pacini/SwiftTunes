@@ -21,7 +21,7 @@ GPL-3.0-or-later.
 | # | Decision | Taken |
 |---|---|---|
 | 1 | Build system | A Swift package, plus `Scripts/make-app.sh` to build `ace-server` and assemble the bundle. No Xcode project. |
-| 2 | Language | Swift 6 and AppKit. The lifeline shim is C. |
+| 2 | Language and UI | Swift 6, complete concurrency checking. The shell is AppKit; the popover's content is SwiftUI in an `NSHostingController`. The lifeline shim is C. |
 | 2a | Dependencies | Apple frameworks and tools only, in the app and in the tests. The exceptions are `ace-server` itself, the model, and `cmake` to build the server. |
 | 3 | Who owns `ace-server` | The app, through the lifeline shim: the shim holds the read end of a pipe whose write end only the app holds, and kills the server's process group when the pipe closes. |
 | 4 | Where `ace-server` comes from | Built from the pinned acestep.cpp revision and embedded in `SwiftTunes.app/Contents/Helpers`. |
@@ -102,6 +102,7 @@ Buttons: `Download`, `Cancel`, `Resume`, `Try now`, `Save`, `Cancel`,
 380 pt wide. The published draft (owner's private page) is the picture; in
 words:
 
+- The cards are SwiftUI views; a switch is a `Toggle` with the switch style.
 - **Player card**, three sections separated by hairlines:
   - NOW PLAYING: right of the heading, the suffix (`repeating`, `kept tunes`)
     and a genre button (`<g> ⌄`) that opens the chooser. Then the tune's
@@ -110,7 +111,7 @@ words:
     mode as text), share, scrap.
   - UP NEXT: heading with its right-hand text [R78], the rows [R77], the job
     row, `Not started` placeholders.
-  - COMPOSER: heading with the state label and an `NSSwitch`; the lines of
+  - COMPOSER: heading with the state label and a switch; the lines of
     [R80]; `Try now` when failed or no device.
   - A footer line only when there is something to say: the undo line with its
     button, or a notice for 6 s [R91, R92].
@@ -147,7 +148,7 @@ Targets:
 - `TunesPanel`: the pure panel decisions: from a
   snapshot and the panel's own state to what each card shows, every heading,
   row, label and sentence. Depends on `TunesContract` only.
-- `SwiftTunes`: the AppKit executable. Depends on `TunesContract`,
+- `SwiftTunes`: the executable: the AppKit shell and the SwiftUI views. Depends on `TunesContract`,
   `TunesPanel`, `TunesEngine` (to construct it; it talks to it only through
   the contract's protocol).
 - Tests use Swift Testing.
