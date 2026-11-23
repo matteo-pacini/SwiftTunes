@@ -1,0 +1,45 @@
+{
+  "model": {
+    "name": "ACE-Step 1.5 Turbo",
+    "variant": "4B Q8",
+    "base_url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF",
+    "revision": "666ac70204440867d8c01ba4b119cc79c95b370a",
+    "files": [
+      {
+        "role": "lm",
+        "name": "acestep-5Hz-lm-4B-Q8_0.gguf",
+        "sha256": "972f91147a167f0c041f1b158d67985a82c0f6a852e68cdf70e46030cf08b1bc",
+        "bytes": 4457323648
+      },
+      {
+        "role": "dit",
+        "name": "acestep-v15-turbo-Q8_0.gguf",
+        "sha256": "288f708a61cfc241013a98a62f98ba331f83fe34d0d3559acdd9b0f6a2f7cd6b",
+        "bytes": 2549528000
+      },
+      {
+        "role": "text",
+        "name": "Qwen3-Embedding-0.6B-Q8_0.gguf",
+        "sha256": "972f23255e46adfe744a0eb9a0039f3c63988f65753b0968d776e8b27168c321",
+        "bytes": 784144960
+      },
+      {
+        "role": "vae",
+        "name": "vae-BF16.gguf",
+        "sha256": "0599862ac5d15cd308e1d2e368373aea6c02e25ebd1737ad4a4562a0901b0ef8",
+        "bytes": 337420928
+      }
+    ],
+    "silence_code": 35847,
+    "ram_bytes": 8589934592
+  },
+  "keep": 50,
+  "ahead": 2,
+  "duration": 180,
+  "acestep_cpp": {
+    "repository": "https://github.com/ServeurpersoCom/acestep.cpp",
+    "revision": "973517be024ff8b6bbd50e0adc9e308ab2ed71b3",
+    "submodules": true,
+    "source_nar_hash": "sha256-Gw2Wc2UQ4q5yqXjNLYxw2gjTKrAQ9gISL1si4cVRcF8="
+  }
+}
