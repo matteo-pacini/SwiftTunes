@@ -145,7 +145,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             await prepare()
             try? await Task.sleep(for: .milliseconds(800))
             if let window = popover.contentViewController?.view.window {
-                print("popover window \(window.windowNumber)")
+                print("popover window \(window.windowNumber) height \(Int(window.frame.height)) content \(Int(popover.contentViewController?.preferredContentSize.height ?? 0))")
                 fflush(stdout)
             }
         }

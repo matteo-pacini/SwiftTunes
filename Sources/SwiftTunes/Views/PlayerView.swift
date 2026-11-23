@@ -217,19 +217,22 @@ struct QueueView: View {
     let model: PanelModel
 
     var body: some View {
-        GlassEffectContainer(spacing: 6) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    BackLink(control: card.back, action: model.backToPlayer)
-                    Spacer()
-                    Caps(text: card.label)
-                }
-                HStack(alignment: .firstTextBaseline) {
-                    Text(verbatim: card.title).font(.system(size: 20, weight: .bold, design: .rounded))
-                    Spacer()
-                    Text(verbatim: card.head).font(.system(size: 11.5)).foregroundStyle(.secondary)
-                }
-                ScrollView {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                BackLink(control: card.back, action: model.backToPlayer)
+                Spacer()
+                Caps(text: card.label)
+            }
+            HStack(alignment: .firstTextBaseline) {
+                Text(verbatim: card.title).font(.system(size: 20, weight: .bold, design: .rounded))
+                Spacer()
+                Text(verbatim: card.head).font(.system(size: 11.5)).foregroundStyle(.secondary)
+            }
+            // The rows' glass has its own container inside the scroll view: a
+            // container outside it draws the glass in a layer the scroll view
+            // does not clip.
+            ScrollView {
+                GlassEffectContainer(spacing: 6) {
                     VStack(spacing: 6) {
                         ForEach(card.rows, id: \.id) { row in
                             UpNextRow(row: row, palette: card.palette, model: model)
@@ -239,9 +242,13 @@ struct QueueView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 340)
-                .fixedSize(horizontal: false, vertical: true)
-                if let making = card.making { MakingBlock(making: making, palette: card.palette, model: model) }
+            }
+            // A row is 48 pt and 6 apart; the list scrolls past six of them.
+            .frame(height: min(340, Double(card.rows.count) * 54 + (card.last == nil ? 0 : 26)))
+            if let making = card.making {
+                GlassEffectContainer(spacing: 6) {
+                    MakingBlock(making: making, palette: card.palette, model: model)
+                }
             }
         }
     }

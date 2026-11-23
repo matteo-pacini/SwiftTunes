@@ -17,15 +17,12 @@ struct WordsView: View {
                     Caps(text: card.label)
                 }
                 Text(verbatim: card.title).font(.system(size: 20, weight: .bold, design: .rounded)).lineLimit(1)
-                HStack(spacing: 6) {
-                    ForEach(Array(card.inserts.enumerated()), id: \.offset) { i, insert in
-                        Button { model.insertMark(i) } label: {
-                            Text(verbatim: insert.text).font(.system(size: 12, weight: .medium)).padding(.horizontal, 9).padding(.vertical, 3)
-                        }
-                        .buttonStyle(.plain)
-                        .glassEffect(.regular.interactive(), in: .capsule)
-                        .disabled(!insert.enabled)
-                        .helped(insert)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        ForEach(Array(card.inserts.enumerated().prefix(3)), id: \.offset) { i, insert in insertButton(i, insert) }
+                    }
+                    HStack(spacing: 6) {
+                        ForEach(Array(card.inserts.enumerated().dropFirst(3)), id: \.offset) { i, insert in insertButton(i, insert) }
                     }
                 }
                 TextEditor(text: Binding(get: { card.text }, set: { model.typeWords($0, caret: caret(in: $0)) }), selection: $selection)
@@ -77,6 +74,16 @@ struct WordsView: View {
                 }
             }
         }
+    }
+
+    private func insertButton(_ i: Int, _ insert: Control) -> some View {
+        Button { model.insertMark(i) } label: {
+            Text(verbatim: insert.text).font(.system(size: 12, weight: .medium)).fixedSize().padding(.horizontal, 9).padding(.vertical, 3)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .disabled(!insert.enabled)
+        .helped(insert)
     }
 
     private func error(_ text: String) -> some View {

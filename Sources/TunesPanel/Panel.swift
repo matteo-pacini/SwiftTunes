@@ -589,7 +589,7 @@ extension Panel {
 extension Panel {
     /// The marks the sheet's buttons insert, with their buttons' words.
     public static let marks: [(button: String, mark: String)] = [
-        ("+ Verse", "[Verse]"), ("+ Chorus", "[Chorus]"), ("+ Bridge", "[Bridge]"), ("+ Instrumental break", "[Instrumental break]"),
+        ("+ Verse", "[Verse]"), ("+ Chorus", "[Chorus]"), ("+ Bridge", "[Bridge]"), ("+ Instrumental break", "[Instrumental Break]"),
     ]
 
     /// `mark` as a line of its own at `caret` (a count of characters): a

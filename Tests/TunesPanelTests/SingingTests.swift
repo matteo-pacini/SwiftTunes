@@ -133,6 +133,7 @@ struct WordsTests {
         guard case .words(let c) = card(s, p) else { Issue.record("not the sheet"); return }
         #expect([c.label, c.title, c.counterRight, c.nameLabel, c.name] == ["SING MY WORDS", "A tune in Jazz", "English sings best", "Name", "Long Way Home"])
         #expect(c.inserts.map(\.text) == ["+ Verse", "+ Chorus", "+ Bridge", "+ Instrumental break"])
+        #expect(Panel.marks.map(\.mark) == ["[Verse]", "[Chorus]", "[Bridge]", "[Instrumental Break]"])
         #expect(c.counter == "0 sung lines · 0 of 2,000 characters")
         #expect(c.wordsError == "" && c.nameError == "" && !c.compose.enabled)
         #expect(c.note == "It is made once, with the genre's sound, and plays next when ready. The model may not sing every word as written.")
