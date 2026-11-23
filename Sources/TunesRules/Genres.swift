@@ -13,9 +13,12 @@ public struct Genre: Equatable, Sendable {
     public var things: [String]
     /// Four colours as `#RRGGBB`, nil when the file gives none.
     public var palette: [String]?
+    /// The genre's tunes are sung.
+    public var sung: Bool
 
     public init(id: String, name: String, caption: String, turns: [String], bpm: [Int], moods: [String] = Rules.defaultMoods,
-                things: [String] = Rules.defaultThings, palette: [String]? = nil) {
+                things: [String] = Rules.defaultThings, palette: [String]? = nil, sung: Bool = false) {
+        self.sung = sung
         self.id = id
         self.name = name
         self.caption = caption
@@ -28,7 +31,7 @@ public struct Genre: Equatable, Sendable {
 
     /// The fields the editor shows, as stored.
     public var fields: GenreFields {
-        GenreFields(name: name, caption: caption, turns: turns, bpm: bpm, palette: palette)
+        GenreFields(name: name, caption: caption, turns: turns, bpm: bpm, palette: palette, sung: sung)
     }
 }
 
@@ -100,11 +103,16 @@ public enum GenresFile {
                 }
                 palette = colours
             }
+            var sung = false
+            if let raw = g["sung"], raw != .null {
+                guard case .bool(let b) = raw else { throw Mistake("\(place): sung must be true or false") }
+                sung = b
+            }
             ids.insert(id)
             // Without case, as the editor compares, and as a volume that
             // ignores case would give two such genres one folder.
             names.insert(name.lowercased())
-            out.append(Genre(id: id, name: name, caption: caption, turns: turns, bpm: [lo, hi], moods: moods, things: things, palette: palette))
+            out.append(Genre(id: id, name: name, caption: caption, turns: turns, bpm: [lo, hi], moods: moods, things: things, palette: palette, sung: sung))
         }
         return (out, skipped)
     }
@@ -165,7 +173,7 @@ public enum GenresFile {
             if !s.isEmpty && !turns.contains(s) { turns.append(s) }
         }
         return GenreFields(name: GenreRules.trim(fields.name), caption: GenreRules.trim(fields.caption), turns: turns, bpm: fields.bpm,
-                           palette: fields.palette)
+                           palette: fields.palette, sung: fields.sung)
     }
 
     /// The first rule the fields break, through the shared rules. Pass the
@@ -216,6 +224,7 @@ public enum GenresFile {
             ("turns", .array(fields.turns.map(JSONValue.string))),
             ("bpm", .array(fields.bpm.map(JSONValue.int))),
         ]
+        if fields.sung { f.append(("sung", .bool(true))) }
         if let p = fields.palette { f.append(("palette", .array(p.map(JSONValue.string)))) }
         return .object(f)
     }
@@ -234,14 +243,24 @@ public enum GenresFile {
             for (k, v) in new {
                 if let i = f.firstIndex(where: { $0.key == k }) { f[i].value = v } else { f.append((k, v)) }
             }
+            // Written only when true, right after bpm.
+            if fields.sung {
+                if let i = f.firstIndex(where: { $0.key == "sung" }) {
+                    f[i].value = .bool(true)
+                } else {
+                    f.insert(("sung", .bool(true)), at: (f.firstIndex(where: { $0.key == "bpm" }) ?? (f.count - 1)) + 1)
+                }
+            } else {
+                f.removeAll { $0.key == "sung" }
+            }
             if let p = fields.palette {
                 let v = JSONValue.array(p.map(JSONValue.string))
                 if let i = f.firstIndex(where: { $0.key == "palette" }) {
                     f[i].value = v
                 } else {
-                    // A new palette goes right after bpm, where the file keeps it.
-                    let at = (f.firstIndex(where: { $0.key == "bpm" }) ?? (f.count - 1)) + 1
-                    f.insert(("palette", v), at: at)
+                    // A new palette goes after bpm (and sung), where the file keeps it.
+                    let after = f.firstIndex(where: { $0.key == "sung" }) ?? f.firstIndex(where: { $0.key == "bpm" }) ?? (f.count - 1)
+                    f.insert(("palette", v), at: after + 1)
                 }
             } else {
                 f.removeAll { $0.key == "palette" }

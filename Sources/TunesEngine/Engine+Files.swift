@@ -80,8 +80,9 @@ extension Engine {
     func scrapJob() {
         guard let j = job else { return }
         if j.step == .finish { scrappedJobs.insert(j.token) }
-        cancelJob()
+        cancelJob(keepOwnWords: false)
         silenceS = nil
+        thinWords = false
         changed()
         maybeCompose()
         settleState()
@@ -310,6 +311,7 @@ extension Engine {
         }
         if genre?.id == id {
             if let j = job, j.step == .finish { scrappedJobs.insert(j.token) }
+            dropOwnWords()
             composerOff()
             genre = nil
             ready = []
@@ -382,8 +384,8 @@ extension Engine {
         }
         // The cache entry follows the file's new size and time; with nothing
         // known yet, the file is read again when next needed.
-        if let known = readWaveIgnoringFile(path) ?? t.length.map({ TuneMeta(name: nil, length: $0, wave: t.wave) }) {
-            writeWave(path, TuneMeta(name: new, length: known.length, wave: known.wave))
+        if let known = readWaveIgnoringFile(path) ?? t.length.map({ TuneMeta(name: nil, length: $0, wave: t.wave, lyrics: t.lyrics) }) {
+            writeWave(path, TuneMeta(name: new, length: known.length, wave: known.wave, lyrics: known.lyrics))
         } else {
             Files.remove(waveFile(path))
         }
@@ -396,15 +398,13 @@ extension Engine {
     func readWaveIgnoringFile(_ path: URL) -> TuneMeta? {
         guard let text = Files.read(waveFile(path)), let c = try? JSONValue.parse(text),
               let length = c["length"]?.number, case .array(let w)? = c["wave"] else { return nil }
-        return TuneMeta(name: nil, length: length, wave: w.compactMap(\.number))
+        var lyrics: String?
+        if case .string(let l)? = c["lyrics"] { lyrics = l }
+        return TuneMeta(name: nil, length: length, wave: w.compactMap(\.number), lyrics: lyrics)
     }
 }
 
 extension Engine {
-    func composeWithWords(_ words: String, name: String) async -> Result<Void, Refusal> {
-        .failure(Refusal(field: nil, text: "That genre is not sung."))
-    }
-
     func suggestTuneName() -> String {
         guard let g = genre else { return "" }
         return Composing.name(moods: g.moods, things: g.things, rng: &rng)

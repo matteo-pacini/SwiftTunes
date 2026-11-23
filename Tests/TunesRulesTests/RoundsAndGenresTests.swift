@@ -64,7 +64,7 @@ private let K = (1...6).map { "2026010\($0)-000000-90bpm-C-major.m4a" }
     @Test func captionHasTwoDistinctTurns() {
         var rng = SplitMix64(seed: 7)
         for _ in 0..<50 {
-            let cap = Composing.caption(caption: Self.genre.caption, turns: Self.genre.turns, rng: &rng)
+            let cap = Composing.caption(caption: Self.genre.caption, turns: Self.genre.turns, sung: false, rng: &rng)
             #expect(cap.hasPrefix("lo-fi beat, ") && cap.hasSuffix(", instrumental"))
             let turns = cap.dropFirst("lo-fi beat, ".count).dropLast(", instrumental".count).components(separatedBy: ", ")
             #expect(Set(turns).count == 2 && Set(turns).isSubset(of: Self.genre.turns))
@@ -78,7 +78,7 @@ private let K = (1...6).map { "2026010\($0)-000000-90bpm-C-major.m4a" }
     @Test(arguments: [([String](), "c, instrumental"), (["x"], "c, x, instrumental"), (["a", "a"], "c, a, instrumental")])
     func captionWithFewTurns(turns: [String], want: String) {
         var rng = SplitMix64(seed: 1)
-        #expect(Composing.caption(caption: "c", turns: turns, rng: &rng) == want)
+        #expect(Composing.caption(caption: "c", turns: turns, sung: false, rng: &rng) == want)
     }
 }
 

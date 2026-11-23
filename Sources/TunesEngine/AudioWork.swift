@@ -9,6 +9,8 @@ nonisolated struct TuneTags: Sendable {
     var genre: String
     var bpm: Int?
     var key: String?
+    /// The words, for a sung tune.
+    var lyrics: String? = nil
 }
 
 /// What reading a tune's audio gives.
@@ -16,6 +18,8 @@ nonisolated struct TuneMeta: Sendable, Equatable {
     var name: String?
     var length: Double
     var wave: [Double]
+    /// The words in the file's lyrics tag, nil when it has none.
+    var lyrics: String? = nil
 }
 
 nonisolated struct AudioFailure: Error, CustomStringConvertible {
@@ -63,7 +67,8 @@ nonisolated enum AudioWork {
             Files.remove(target)
             throw AudioFailure(description: "the tune could not be encoded: \(error.localizedDescription)")
         }
-        return TuneMeta(name: tags.title, length: Timings.tenth(Double(mono.count) / Rules.decodeRate), wave: Levels.wave(mono))
+        return TuneMeta(name: tags.title, length: Timings.tenth(Double(mono.count) / Rules.decodeRate), wave: Levels.wave(mono),
+                        lyrics: tags.lyrics)
     }
 
     /// A kept tune's title, length and waveform, read from its file.
@@ -76,12 +81,19 @@ nonisolated enum AudioWork {
         let mono = try monoSamples(b)
         let asset = AVURLAsset(url: url)
         var title: String?
-        if let items = try? await asset.load(.metadata),
-           let item = AVMetadataItem.metadataItems(from: items, filteredByIdentifier: .iTunesMetadataSongName).first
-           ?? AVMetadataItem.metadataItems(from: items, filteredByIdentifier: .commonIdentifierTitle).first {
-            title = try? await item.load(.stringValue)
+        var lyrics: String?
+        if let items = try? await asset.load(.metadata) {
+            if let item = AVMetadataItem.metadataItems(from: items, filteredByIdentifier: .iTunesMetadataSongName).first
+                ?? AVMetadataItem.metadataItems(from: items, filteredByIdentifier: .commonIdentifierTitle).first {
+                title = try? await item.load(.stringValue)
+            }
+            if let item = AVMetadataItem.metadataItems(from: items, filteredByIdentifier: .iTunesMetadataLyrics).first {
+                lyrics = try? await item.load(.stringValue)
+            }
         }
-        return TuneMeta(name: title, length: Timings.tenth(Double(mono.count) / Rules.decodeRate), wave: Levels.wave(mono))
+        if let l = lyrics, l.isEmpty { lyrics = nil }
+        return TuneMeta(name: title, length: Timings.tenth(Double(mono.count) / Rules.decodeRate), wave: Levels.wave(mono),
+                        lyrics: lyrics)
     }
 
     /// A linear fade to silence over the buffer's last `seconds`.
@@ -169,6 +181,9 @@ nonisolated enum AudioWork {
         }
         if let key = tags.key, !key.isEmpty {
             items.append(item(.iTunesMetadataUserComment, "key: \(key)" as NSString))
+        }
+        if let lyrics = tags.lyrics, !lyrics.isEmpty {
+            items.append(item(.iTunesMetadataLyrics, lyrics as NSString))
         }
         return items
     }

@@ -38,11 +38,11 @@ public enum Rounds {
 /// What goes into a tune's requests.
 public enum Composing {
     /// The genre's caption, two distinct turns at random (fewer if it has
-    /// fewer), then "instrumental", joined by ", ".
-    public static func caption<R: RandomNumberGenerator>(caption: String, turns: [String], rng: inout R) -> String {
+    /// fewer), then "instrumental" unless the tune is sung, joined by ", ".
+    public static func caption<R: RandomNumberGenerator>(caption: String, turns: [String], sung: Bool, rng: inout R) -> String {
         let distinct = Array(Set(turns)).sorted()
         let picked = Array(distinct.shuffled(using: &rng).prefix(2))
-        return ([caption] + picked + ["instrumental"]).joined(separator: ", ")
+        return ([caption] + picked + (sung ? [] : ["instrumental"])).joined(separator: ", ")
     }
 
     /// A tempo in the genre's range, both ends included.

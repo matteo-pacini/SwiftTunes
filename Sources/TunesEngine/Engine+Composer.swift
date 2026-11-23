@@ -19,14 +19,50 @@ extension Engine {
     func composerOff() {
         guard composing else { return }
         composing = false
+        // A tune with the user's words is made with the switch off too.
+        if job?.words != nil || ownWordsPending != nil {
+            changed()
+            return
+        }
         cancelJob()
         stopServer()
         for t in ["retry", "hold_check", "poll"] { cancelTimer(t) }
         failures = 0
         retryAt = nil
         silenceS = nil
+        thinWords = false
         setState(.unloaded)
         changed()
+    }
+
+    /// Forgets a tune with the user's words, made or waiting: its genre is
+    /// no longer the one picked.
+    func dropOwnWords() {
+        ownWordsPending = nil
+        guard job?.words != nil else { return }
+        cancelJob(keepOwnWords: false)
+        if !composing {
+            stopServer()
+            for t in ["retry", "hold_check", "poll"] { cancelTimer(t) }
+            failures = 0
+            retryAt = nil
+            silenceS = nil
+            thinWords = false
+            setState(.unloaded)
+        }
+    }
+
+    func composeWithWords(_ words: String, name: String) async -> Result<Void, Refusal> {
+        if let why = WordsRules.wordsError(words) { return .failure(Refusal(field: nil, text: why)) }
+        if let why = TuneRules.nameError(name) { return .failure(Refusal(field: nil, text: why)) }
+        guard let g = genre, g.sung else { return .failure(Refusal(field: nil, text: "That genre is not sung.")) }
+        if ownWordsPending != nil || job?.words != nil {
+            return .failure(Refusal(field: nil, text: "A tune with your words is already being made."))
+        }
+        ownWordsPending = OwnWords(words: words, name: GenreRules.trim(name), genreID: g.id)
+        changed()
+        maybeCompose()
+        return .success(())
     }
 
     func setState(_ new: ModelState, detail newDetail: String? = nil) {
@@ -47,16 +83,28 @@ extension Engine {
 
     var held: Bool { state == .heldMemory || state == .heldPower || state == .heldHeat }
 
+    /// Something is to be made: the switch is on, or the user's words wait.
+    var wanted: Bool { composing || ownWordsPending != nil }
+
     func canCompose() -> Bool {
-        setup == .ready && genre != nil && composing && state != .failed && state != .noDevice && !held
+        setup == .ready && genre != nil && wanted && state != .failed && state != .noDevice && !held
     }
 
     /// Starts what the composer needs next: the server, then a job, while
     /// fewer than `ahead` new tunes wait. A full queue rests the composer
-    /// and stops the server.
+    /// and stops the server. A tune with the user's words comes first, full
+    /// queue or not; once made with the switch off, the server stops.
     func maybeCompose() {
-        guard canCompose(), job == nil, !shuttingDown else { return }
-        if newReady() >= (pins?.ahead ?? 2) {
+        guard job == nil, !shuttingDown else { return }
+        if !wanted {
+            if server != nil || state == .starting || state == .writing || state == .rendering {
+                stopServer()
+                setState(.unloaded)
+            }
+            return
+        }
+        guard canCompose() else { return }
+        if ownWordsPending == nil && newReady() >= (pins?.ahead ?? 2) {
             stopServer()
             setState(.idle)
             return
@@ -87,12 +135,13 @@ extension Engine {
         cancelJob()
         stopServer()
         silenceS = nil
+        thinWords = false
         setState(Self.state(for: hold))
         setTimer("hold_check", Rules.holdWaiting) { [weak self] in self?.holdTick() }
     }
 
     func holdTick() {
-        guard genre != nil, composing, held else { return }
+        guard genre != nil, wanted, held else { return }
         if let h = env.holds.current(memory: true) {
             setState(Self.state(for: h))
             setTimer("hold_check", Rules.holdWaiting) { [weak self] in self?.holdTick() }
@@ -121,6 +170,7 @@ extension Engine {
         let record = ServerRecord(port: port, client: ServerClient(host: env.host, port: port))
         server = record
         silenceS = nil
+        thinWords = false
         setState(.starting)
         setTimer("server_start", Rules.startTimeout) { [weak self] in
             self?.failure("the model server did not start in time")
@@ -240,9 +290,14 @@ extension Engine {
 
     // MARK: - Jobs
 
-    func cancelJob() {
+    /// Ends the job. A tune with the user's words goes back to wait, to be
+    /// made when the hold or the failure lifts, unless `keepOwnWords` is off.
+    func cancelJob(keepOwnWords: Bool = true) {
         let j = job
         job = nil
+        if let j, let words = j.words, keepOwnWords {
+            ownWordsPending = OwnWords(words: words, name: j.name, genreID: j.genre.id)
+        }
         cancelTimer("poll")
         cancelTimer("lost")
         if !held { cancelTimer("hold_check") }
@@ -303,10 +358,14 @@ extension Engine {
     func startJob() {
         guard let g = genre, let s = server else { return }
         jobSeq += 1
+        let own = ownWordsPending.flatMap { $0.genreID == g.id ? $0 : nil }
+        ownWordsPending = nil
+        let sung = own != nil || g.sung
         let j = JobRecord(
             token: jobSeq, genre: g, bpm: Composing.bpm(g.bpm, rng: &rng),
-            caption: Composing.caption(caption: g.caption, turns: g.turns, rng: &rng),
-            name: Composing.name(moods: g.moods, things: g.things, rng: &rng), writeAt: clock.now
+            caption: Composing.caption(caption: g.caption, turns: g.turns, sung: sung, rng: &rng),
+            name: own?.name ?? Composing.name(moods: g.moods, things: g.things, rng: &rng), writeAt: clock.now,
+            sung: sung, words: own?.words
         )
         job = j
         // Writing from the moment it starts, before the server answers.
@@ -318,10 +377,15 @@ extension Engine {
     }
 
     func postLM(_ j: JobRecord, _ s: ServerRecord) {
-        let body: JSONValue = .object([
-            ("caption", .string(j.caption)), ("lyrics", .string(Rules.lyrics)),
+        // Sung: empty lyrics ask the model to write the words; given words
+        // are sent as given. Either way the language is asked for, since
+        // left free the model picks one, or none, by itself.
+        var fields: [(key: String, value: JSONValue)] = [
+            ("caption", .string(j.caption)), ("lyrics", .string(j.words ?? (j.sung ? "" : Rules.lyrics))),
             ("duration", .int(pins?.duration ?? 180)), ("bpm", .int(j.bpm)),
-        ])
+        ]
+        if j.sung { fields.append(("vocal_language", .string(Rules.vocalLanguage))) }
+        let body: JSONValue = .object(fields)
         j.posting = true
         spawn { [weak self] in
             let result: Result<String, any Error>
@@ -438,11 +502,30 @@ extension Engine {
                 return
             }
             silenceS = Int(rewrite.rounded(.toNearestOrEven))
+            thinWords = false
             changed()
             postLM(j, s)
             return
         }
+        // The model's own words must be enough to sing; given words are not judged.
+        if j.sung && j.words == nil {
+            var words = ""
+            if case .string(let w)? = plan["lyrics"] { words = w }
+            if WordsRules.tooThin(words) {
+                j.thinRewrites += 1
+                if j.thinRewrites >= Rules.rewritesMax {
+                    failure("\(Rules.rewritesMax) plans in a row had too few sung lines")
+                    return
+                }
+                silenceS = nil
+                thinWords = true
+                changed()
+                postLM(j, s)
+                return
+            }
+        }
         silenceS = nil
+        thinWords = false
         j.cut = verdict.cut
         j.plan = plan
         guard case .object(var fields) = plan else { return }
@@ -498,7 +581,9 @@ extension Engine {
             return
         }
         let g = j.genre
-        let tags = TuneTags(title: j.name, genre: g.name, bpm: bpm, key: key.isEmpty ? nil : key)
+        var lyrics: String?
+        if j.sung, case .string(let w)? = j.plan["lyrics"], !WordsRules.sungLines(w).isEmpty { lyrics = w }
+        let tags = TuneTags(title: j.name, genre: g.name, bpm: bpm, key: key.isEmpty ? nil : key, lyrics: lyrics)
         let token = j.token
         let cut = j.cut
         spawn { [weak self] in
@@ -561,7 +646,8 @@ extension Engine {
         }
         let name = mine ? (job?.name ?? meta.name ?? "") : TuneFiles.stem(target.lastPathComponent)
         let tune = Tune(path: target, name: name, bpm: bpm, key: key.isEmpty ? nil : key, length: meta.length, kept: false, wave: meta.wave)
-        writeWave(target, TuneMeta(name: tune.name, length: meta.length, wave: meta.wave))
+        tune.lyrics = meta.lyrics
+        writeWave(target, TuneMeta(name: tune.name, length: meta.length, wave: meta.wave, lyrics: meta.lyrics))
         prune(g, fresh: target)
         changed()
         guard mine, let j = job else { return }
@@ -572,7 +658,8 @@ extension Engine {
         failures = 0
         retryAt = nil
         if self.genre?.id == g.id {
-            ready.append(tune)
+            // The user's words play next when ready.
+            if j.words != nil { ready.insert(tune, at: 0) } else { ready.append(tune) }
         }
         syncPlaylist()
         changed()
@@ -608,6 +695,7 @@ extension Engine {
         let delay = Rules.retryDelay(failures: failures)
         retryAt = clock.now + delay
         silenceS = nil
+        thinWords = false
         setState(.failed, detail: text)
         changed()
         setTimer("retry", delay) { [weak self] in self?.retryDue() }

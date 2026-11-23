@@ -11,6 +11,11 @@ final class Tune {
     var length: Double?
     var kept: Bool
     var wave: [Double]
+    /// The words in the file's lyrics tag, nil until read or when it has none.
+    var lyrics: String?
+
+    /// The file has words.
+    var sung: Bool { !WordsRules.sungLines(lyrics ?? "").isEmpty }
 
     init(path: URL, name: String, bpm: Int?, key: String?, length: Double?, kept: Bool, wave: [Double]) {
         self.path = path
@@ -77,12 +82,20 @@ final class JobRecord {
     let writeAt: Double
     var renderAt: Double = 0
     var writtenS: Double?
+    /// Sung: the request asks for words and the plan's words are kept.
+    let sung: Bool
+    /// The user's own words, sent as given; nil for the genre's own tunes.
+    let words: String?
+    /// Plans written again for too few sung lines; its own count.
+    var thinRewrites = 0
     /// A POST for this job is waiting for its answer.
     var posting = false
     /// The job was cancelled during that POST; its id is cancelled on arrival.
     var cancelWhenPosted = false
 
-    init(token: Int, genre: Genre, bpm: Int, caption: String, name: String, writeAt: Double) {
+    init(token: Int, genre: Genre, bpm: Int, caption: String, name: String, writeAt: Double, sung: Bool = false, words: String? = nil) {
+        self.sung = sung
+        self.words = words
         self.token = token
         self.genre = genre
         self.bpm = bpm
@@ -90,6 +103,13 @@ final class JobRecord {
         self.name = name
         self.writeAt = writeAt
     }
+}
+
+/// A tune with the user's words, waiting to be made.
+struct OwnWords {
+    var words: String
+    var name: String
+    var genreID: String
 }
 
 struct Scrap {
@@ -213,6 +233,9 @@ final class Engine: EngineAPI {
     var since: Double
     var detail: String?
     var silenceS: Int?
+    /// The plan being written again had too few sung lines.
+    var thinWords = false
+    var ownWordsPending: OwnWords?
     var failures = 0
     var retryAt: Double?
     var server: ServerRecord?
@@ -477,11 +500,11 @@ final class Engine: EngineAPI {
         }
         let tune = current.map {
             PlayingTune(name: $0.name, file: $0.stem, bpm: $0.bpm, key: $0.key, length: $0.length, kept: $0.kept,
-                        new: !$0.kept, pinned: pinned($0), pos: orderPos($0), wave: $0.wave)
+                        new: !$0.kept, pinned: pinned($0), pos: orderPos($0), wave: $0.wave, sung: $0.sung, lyrics: $0.sung ? $0.lyrics : nil)
         }
         let queue = queueNow().map {
             QueuedTune(name: $0.name, file: $0.stem, bpm: $0.bpm, key: $0.key, length: $0.length, kept: $0.kept,
-                       new: !$0.kept, pinned: pinned($0), pos: orderPos($0))
+                       new: !$0.kept, pinned: pinned($0), pos: orderPos($0), sung: $0.sung)
         }
         var present: [String: Int64] = [:]
         for f in pins?.files ?? [] {
@@ -492,8 +515,10 @@ final class Engine: EngineAPI {
         let files = (pins?.files ?? []).map { (name: $0.name, bytes: $0.bytes) }
         let jobView: Job? = job.flatMap { j in
             switch j.step {
-            case .lm?: Job(stage: .writing, started: j.writeAt, expectS: Timings.median(timings.writing), writtenS: nil)
-            case .synth?, .finish?: Job(stage: .rendering, started: j.renderAt, expectS: Timings.median(timings.rendering), writtenS: j.writtenS)
+            case .lm?: Job(stage: .writing, started: j.writeAt, expectS: Timings.median(timings.writing), writtenS: nil,
+                           sung: j.sung, ownWords: j.words != nil, name: j.words != nil ? j.name : nil)
+            case .synth?, .finish?: Job(stage: .rendering, started: j.renderAt, expectS: Timings.median(timings.rendering), writtenS: j.writtenS,
+                                        sung: j.sung, ownWords: j.words != nil, name: j.words != nil ? j.name : nil)
             case nil: nil
             }
         }
@@ -518,7 +543,7 @@ final class Engine: EngineAPI {
             need: Need(downloadBytes: TuneFiles.needBytes(files, present: present),
                        diskFreeBytes: env.probe.diskFree(near: env.paths.models),
                        ramBytes: pins?.ramBytes ?? Rules.ramBytes),
-            genres: genres.map { GenreSummary(id: $0.id, name: $0.name, kept: listTunes($0).count, palette: $0.palette) },
+            genres: genres.map { GenreSummary(id: $0.id, name: $0.name, kept: listTunes($0).count, palette: $0.palette, sung: $0.sung) },
             genre: genre?.id,
             keptTotal: order.count,
             composing: composing,
@@ -542,7 +567,7 @@ final class Engine: EngineAPI {
             undo: undo,
             model: Model(name: pins?.name ?? "ACE-Step 1.5 Turbo", variant: pins?.variant ?? "4B Q8",
                          device: lastDevice ?? "Metal", state: state, since: since, silenceS: silenceS, detail: detail,
-                         failures: failures, retryAt: retryAt, ramUsedBytes: ram, ramFreeBytes: nil),
+                         failures: failures, retryAt: retryAt, ramUsedBytes: ram, ramFreeBytes: nil, thinWords: thinWords),
             error: genresError ?? playError ?? fileError ?? pinsError
         )
     }
@@ -631,6 +656,7 @@ final class Engine: EngineAPI {
         readGenres()
         guard let g = genreByID(id), genre?.id != id else { return }
         wantsPlay = true
+        dropOwnWords()
         composerOff()
         genre = g
         ready = []
@@ -875,15 +901,18 @@ final class Engine: EngineAPI {
         var name: String?
         if case .string(let s)? = c["name"] { name = s }
         guard let length = c["length"]?.number, case .array(let w)? = c["wave"] else { return nil }
-        return TuneMeta(name: name, length: length, wave: w.compactMap(\.number))
+        var lyrics: String?
+        if case .string(let l)? = c["lyrics"] { lyrics = l }
+        return TuneMeta(name: name, length: length, wave: w.compactMap(\.number), lyrics: lyrics)
     }
 
     func writeWave(_ path: URL, _ meta: TuneMeta) {
         guard let sig = Files.signature(path) else { return }
         var fields: [(key: String, value: JSONValue)] = []
         if let n = meta.name { fields.append(("name", .string(n))) }
-        fields += [("length", .double(meta.length)), ("wave", .array(meta.wave.map { .double($0) })),
-                   ("size", .int(Int(sig[1]))), ("mtime", .int(Int(sig[0])))]
+        fields += [("length", .double(meta.length)), ("wave", .array(meta.wave.map { .double($0) }))]
+        if let l = meta.lyrics { fields.append(("lyrics", .string(l))) }
+        fields += [("size", .int(Int(sig[1]))), ("mtime", .int(Int(sig[0])))]
         try? Files.writeAtomic(Data(JSONValue.object(fields).dumps().utf8), to: waveFile(path))
     }
 
@@ -897,6 +926,7 @@ final class Engine: EngineAPI {
             if let n = cached.name { t.name = n }
             t.length = cached.length
             t.wave = cached.wave
+            t.lyrics = cached.lyrics
         } else if decode && !metaPending.contains(path.path) {
             metaPending.insert(path.path)
             spawn { [weak self] in
@@ -915,6 +945,7 @@ final class Engine: EngineAPI {
             if let n = meta.name { t.name = n }
             t.length = meta.length
             t.wave = meta.wave
+            t.lyrics = meta.lyrics
             changed()
         }
     }

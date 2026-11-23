@@ -39,6 +39,8 @@ public enum Rules {
     public static let genreGone = "That genre no longer exists."
     public static let ramBytes: Int64 = 8 * 1024 * 1024 * 1024
     public static let lyrics = "[Instrumental]"
+    /// The language asked of a sung plan.
+    public static let vocalLanguage = "en"
     public static let tuneExtension = "m4a"
     public static let roleWords = ["lm": "language model", "dit": "diffusion model", "text": "text encoder", "vae": "VAE"]
     public static let defaultMoods = ["Quiet", "Golden", "Distant", "Gentle", "Bright", "Hidden", "Slow", "Silver", "Warm", "Late"]
