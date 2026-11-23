@@ -1,7 +1,9 @@
 import TunesContract
 
-/// The command each player control sends, carrying the tune's name where it
-/// aims at a tune; nil when the control has nothing to act on.
+/// The command each player control not aimed at a tune sends; nil when the
+/// control has nothing to act on. Commands aimed at a tune are built with
+/// the card, from the tune as drawn (`PlayerCard.Now.scrapCommand`, the rows'
+/// commands).
 public enum Actions {
     public static func playPause(_ s: Snapshot) -> Command? {
         Decide.nowSection(s, now: 0).playPause.enabled ? .toggle : nil
@@ -18,22 +20,6 @@ public enum Actions {
         case .one: .setRepeat(.off)
         case .off: .setRepeat(.all)
         }
-    }
-
-    public static func scrapPlaying(_ s: Snapshot) -> Command? {
-        s.tune.map { .scrapPlaying(name: $0.name) }
-    }
-
-    public static func scrapQueued(_ s: Snapshot, index: Int) -> Command? {
-        s.queue.indices.contains(index) ? .scrapQueued(index: index, name: s.queue[index].name) : nil
-    }
-
-    public static func playQueued(_ s: Snapshot, index: Int) -> Command? {
-        s.queue.indices.contains(index) ? .playQueued(index: index, name: s.queue[index].name) : nil
-    }
-
-    public static func scrapJob(_ s: Snapshot) -> Command? {
-        Decide.jobShown(s) ? .scrapJob : nil
     }
 
     public static func composer(_ s: Snapshot) -> Command { .setComposer(on: !s.composing) }

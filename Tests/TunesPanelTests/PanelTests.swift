@@ -446,7 +446,7 @@ struct ModeTests {
 struct ShareTests {
     func described(_ name: String = "30-modes-default", index: Int? = nil, line: Int = 0) throws -> (Snapshot, Panel) {
         let s = try Fixture.load(name)
-        let (p, target) = Panel().openingShare(s, index: index)
+        let (p, target) = try openShare(s, index: index)
         let t = try #require(target)
         return (s, p.described(.success(Answers.info(try Answers.share()[line])), target: t, now: NOW))
     }
@@ -454,15 +454,15 @@ struct ShareTests {
     @Test("the share control on the playing tune: the sheet, waiting for its description")
     func open() throws {
         let s = try Fixture.load("30-modes-default")
-        let (p, target) = Panel().openingShare(s, index: nil)
+        let (p, target) = try openShare(s, index: nil)
         #expect(target == TuneTarget(name: "Lazy Avenue", index: nil))
         let c = try share(s, p)
         #expect([c.head, c.name, c.meta] == ["Jazz", "Lazy Avenue", ""])
         #expect(c.rows.map(\.title) == ["Copy the file", "Copy its path", "Show it in Finder", "Export a copy", "Keep it for good"])
         #expect(c.rows.allSatisfy { !$0.control.enabled })
         #expect(c.back.text == "Back")
-        #expect(Panel().openingShare(try Fixture.load("06-first-tune"), index: nil).1 == nil)
-        #expect(Panel().openingShare(s, index: 3).1 == nil)
+        #expect(try openShare(Fixture.load("06-first-tune"), index: nil).1 == nil)
+        #expect(try openShare(s, index: 3).1 == nil)
     }
 
     @Test("described: the meta line, the paths with ~, the rule, the switch")
@@ -485,7 +485,7 @@ struct ShareTests {
     @Test("an answer for another tune, or a second one, changes nothing")
     func notCrossed() throws {
         let s = try Fixture.load("30-modes-default")
-        let (p, _) = Panel().openingShare(s, index: nil)
+        let (p, _) = try openShare(s, index: nil)
         let other = p.described(.success(Answers.info(try Answers.share()[5])), target: TuneTarget(name: "Brass Lantern", index: 0), now: NOW)
         #expect(other == p)
         let (_, done) = try described()
@@ -495,7 +495,7 @@ struct ShareTests {
     @Test("a refusal of the description closes the sheet with its words")
     func refused() throws {
         let s = try Fixture.load("30-modes-default")
-        let (p, t) = Panel().openingShare(s, index: nil)
+        let (p, t) = try openShare(s, index: nil)
         let closed = p.described(.failure(Refusal(field: nil, text: "That tune is no longer there.")), target: t!, now: NOW)
         #expect(closed.mode == .player)
         #expect(Decide.footer(s, closed, now: NOW) == .notice("That tune is no longer there."))
@@ -537,9 +537,9 @@ struct ShareTests {
     @Test("nothing acts before the tune is described")
     func notYet() throws {
         let s = try Fixture.load("30-modes-default")
-        let (p, _) = Panel().openingShare(s, index: nil)
+        let (p, _) = try openShare(s, index: nil)
         #expect(p.sharing(s).1 == nil)
-        #expect(p.didFileAction(.copyFile, now: NOW) == p)
+        #expect(p.didFileAction(.copyFile, done: true, now: NOW) == p)
     }
 
     @Test("each result closes the sheet with its line in the footer")
@@ -554,19 +554,64 @@ struct ShareTests {
         #expect(Decide.footer(s, busy.exported(.failure(Answers.refusal(lines[4])), home: HOME, now: NOW), now: NOW) == .notice("Lazy Avenue is no longer there."))
         #expect(p.exported(.success(URL(fileURLWithPath: "/x/y")), home: HOME, now: NOW) == p)
         for (action, text) in [(Panel.FileAction.copyFile, "Copied Lazy Avenue as a file. Paste it anywhere."), (.copyPath, "Copied the path of Lazy Avenue."), (.showInFinder, "Showed Lazy Avenue in Finder.")] {
-            let done = p.didFileAction(action, now: NOW)
+            let done = p.didFileAction(action, done: true, now: NOW)
             #expect(done.mode == .player && done.share == nil)
             #expect(Decide.footer(s, done, now: NOW) == .notice(text))
             #expect(Decide.needsTick(s, done, now: NOW))
         }
     }
 
+    @Test("a file action the system did not do: the sheet closes with no line", arguments: [Panel.FileAction.copyFile, .copyPath, .showInFinder])
+    func fileActionFailed(_ action: Panel.FileAction) throws {
+        let (s, p) = try described()
+        let closed = p.didFileAction(action, done: false, now: NOW)
+        #expect(closed.mode == .player && closed.share == nil && closed.notice == nil)
+        #expect(Decide.footer(s, closed, now: NOW) == nil)
+    }
+
     @Test("a notice in the player shows in place of the undo line, then the undo line again")
     func noticeOverUndo() throws {
         let s = try Fixture.load("11-after-scrap")
-        let (p, t) = Panel().openingShare(s, index: nil)
+        let (p, t) = try openShare(s, index: nil)
         let closed = p.described(.failure(Refusal(field: nil, text: "That tune is no longer there.")), target: t!, now: NOW - 1)
         #expect(Decide.footer(s, closed, now: NOW) == .notice("That tune is no longer there."))
         #expect(Decide.footer(s, closed, now: NOW + 5) == .undo(text: "Scrapped Lazy Avenue.", button: Control(text: "Undo · 5 s", help: "Undo")))
+    }
+}
+
+@Suite("Esc")
+struct EscapeTests {
+    @Test("the player and the setup cards close the popover", arguments: ["05-queue-full", "01-not-set-up", "02-downloading", "03-download-failed"])
+    func closes(_ name: String) throws {
+        let (p, close) = Panel().escaping(try Fixture.load(name))
+        #expect(close && p == Panel())
+    }
+
+    @Test("the chooser goes back to the player, or closes with no genre picked")
+    func chooser() throws {
+        let (back, close) = Panel().openingChooser().escaping(try Fixture.load("05-queue-full"))
+        #expect(!close && back.mode == .player)
+        #expect(Panel().openingChooser().escaping(try Fixture.load("04-chooser-first")).close)
+    }
+
+    @Test("the share sheet goes back to the player")
+    func shareSheet() throws {
+        let s = try Fixture.load("30-modes-default")
+        let (p, _) = try openShare(s, index: nil)
+        let (back, close) = p.escaping(s)
+        #expect(!close && back.mode == .player && back.share == nil)
+    }
+
+    @Test("the editor discards; its delete question keeps the genre")
+    func editor() throws {
+        let s = try Fixture.load("05-queue-full")
+        let edit = Panel().openingChooser().editingGenre(s.genres[5])
+            .loaded(.success(GenreFields(name: "Classical", caption: "c", turns: [], bpm: [60, 90])), id: "classical", now: NOW)
+        let (discarded, c1) = edit.typed(.name, "Changed").escaping(s)
+        #expect(!c1 && discarded.mode == .chooser && discarded.editor == nil)
+        let (kept, c2) = edit.askingDelete().escaping(s)
+        #expect(!c2 && kept.mode == .editor && kept.editor?.asking == false)
+        let (stays, c3) = edit.askingDelete().deleting().0.escaping(s)
+        #expect(!c3 && stays.editor?.busy == true && stays.editor?.asking == true)
     }
 }

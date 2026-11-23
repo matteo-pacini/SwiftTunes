@@ -111,14 +111,25 @@ final class PanelModel {
     func next() { send(Actions.next(snapshot)) }
     func shuffle() { send(Actions.shuffle(snapshot)) }
     func cycleRepeat() { send(Actions.repeat(snapshot)) }
-    func scrapPlaying() { send(Actions.scrapPlaying(snapshot)) }
-    func scrapQueued(_ index: Int) { send(Actions.scrapQueued(snapshot, index: index)) }
-    func playQueued(_ index: Int) { send(Actions.playQueued(snapshot, index: index)) }
-    func scrapJob() { send(Actions.scrapJob(snapshot)) }
     func toggleComposer() { send(Actions.composer(snapshot)) }
     func retry() { send(Actions.retry(snapshot)) }
     func undo() { send(Actions.undo(snapshot, now: Self.clock())) }
     func seek(fraction: Double) { send(Decide.seek(snapshot, fraction: fraction)) }
+
+    /// Asks the popover to close.
+    @ObservationIgnored var close: (() -> Void)?
+
+    /// Esc on whatever card shows.
+    func escape() {
+        let (p, closing) = panel.escaping(snapshot)
+        if closing {
+            close?()
+        } else {
+            editorCall?.cancel()
+            shareCall?.cancel()
+            set(p)
+        }
+    }
 
     // MARK: Chooser
 
@@ -187,12 +198,12 @@ final class PanelModel {
 
     // MARK: Share sheet
 
-    /// The share control of the playing tune (`index` nil) or of a queue row.
-    func openShare(index: Int?) {
-        let (p, target) = panel.openingShare(snapshot, index: index)
-        guard let target else { return }
+    /// A share control clicked, with the tune as the card drew it.
+    func openShare(_ request: ShareRequest?) {
+        guard let request else { return }
+        let target = request.target
         shareCall?.cancel()
-        set(p)
+        set(panel.openingShare(request))
         shareCall = Task { [weak self, engine] in
             let result = await engine.shareInfo(for: target)
             guard let self, !Task.isCancelled else { return }
@@ -214,15 +225,18 @@ final class PanelModel {
             switch action {
             case .copyFile:
                 pasteboard.clearContents()
-                pasteboard.writeObjects([info.path as NSURL])
-                set(panel.didFileAction(.copyFile, now: Self.clock()))
+                let done = pasteboard.writeObjects([info.path as NSURL])
+                set(panel.didFileAction(.copyFile, done: done, now: Self.clock()))
             case .copyPath:
                 pasteboard.clearContents()
-                pasteboard.setString(info.path.path, forType: .string)
-                set(panel.didFileAction(.copyPath, now: Self.clock()))
+                let done = pasteboard.setString(info.path.path, forType: .string)
+                set(panel.didFileAction(.copyPath, done: done, now: Self.clock()))
             default:
-                NSWorkspace.shared.activateFileViewerSelecting([info.path])
-                set(panel.didFileAction(.showInFinder, now: Self.clock()))
+                // Finder reports nothing back; the file being there is the
+                // one thing that can be checked first.
+                let there = FileManager.default.fileExists(atPath: info.path.path)
+                if there { NSWorkspace.shared.activateFileViewerSelecting([info.path]) }
+                set(panel.didFileAction(.showInFinder, done: there, now: Self.clock()))
             }
         case .export:
             let (p, target) = panel.sharing(snapshot)

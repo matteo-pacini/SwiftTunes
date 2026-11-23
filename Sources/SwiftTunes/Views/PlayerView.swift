@@ -71,8 +71,8 @@ struct NowSection: View {
                 Spacer(minLength: 0)
                 IconButton(symbol: "shuffle", control: now.shuffle, action: model.shuffle)
                 IconButton(symbol: "repeat", control: now.repeat, action: model.cycleRepeat)
-                IconButton(symbol: "square.and.arrow.up", control: now.share) { model.openShare(index: nil) }
-                IconButton(symbol: "trash", control: now.scrap, action: model.scrapPlaying)
+                IconButton(symbol: "square.and.arrow.up", control: now.share) { model.openShare(now.shareRequest) }
+                IconButton(symbol: "trash", control: now.scrap) { model.send(now.scrapCommand) }
             }
         }
     }
@@ -120,7 +120,7 @@ struct NextSection: View {
                 Text(verbatim: next.head).font(.system(size: 11.5)).foregroundStyle(.secondary)
             }
             .padding(.bottom, 5)
-            ForEach(Array(next.rows.enumerated()), id: \.offset) { _, row in
+            ForEach(next.rows, id: \.id) { row in
                 QueueRow(row: row, model: model)
             }
         }
@@ -167,16 +167,14 @@ struct QueueRow: View {
             Spacer(minLength: 0)
             if hovered && (row.playNow != nil || row.share != nil || row.scrap != nil) {
                 HStack(spacing: 4) {
-                    if let c = row.playNow, let i = row.index {
-                        IconButton(symbol: "play.fill", control: c) { model.playQueued(i) }
+                    if let c = row.playNow {
+                        IconButton(symbol: "play.fill", control: c) { model.send(row.playNowCommand) }
                     }
-                    if let c = row.share, let i = row.index {
-                        IconButton(symbol: "square.and.arrow.up", control: c) { model.openShare(index: i) }
+                    if let c = row.share {
+                        IconButton(symbol: "square.and.arrow.up", control: c) { model.openShare(row.shareRequest) }
                     }
                     if let c = row.scrap {
-                        IconButton(symbol: "trash", control: c) {
-                            if let i = row.index { model.scrapQueued(i) } else { model.scrapJob() }
-                        }
+                        IconButton(symbol: "trash", control: c) { model.send(row.scrapCommand) }
                     }
                 }
                 .controlSize(.small)

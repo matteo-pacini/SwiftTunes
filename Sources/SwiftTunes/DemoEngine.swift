@@ -26,7 +26,7 @@ struct DemoOptions {
         case edit(String), ask(String)
         case share(Int?)
 
-        @MainActor func apply(to model: PanelModel) {
+        @MainActor func apply(to model: PanelModel) async {
             switch self {
             case .player: break
             case .chooser: model.openChooser()
@@ -39,11 +39,16 @@ struct DemoOptions {
             case .ask(let id):
                 model.openChooser()
                 model.editGenre(id)
-                Task {
-                    try? await Task.sleep(for: .milliseconds(200))
-                    model.askDelete()
+                // The question opens once the genre's fields have loaded.
+                try? await Task.sleep(for: .milliseconds(200))
+                model.askDelete()
+            case .share(let index):
+                guard case .player(let card) = model.card else { return }
+                if let index {
+                    model.openShare(card.next.rows.first { $0.index == index }?.shareRequest)
+                } else {
+                    model.openShare(card.now.shareRequest)
                 }
-            case .share(let index): model.openShare(index: index)
             }
         }
     }
