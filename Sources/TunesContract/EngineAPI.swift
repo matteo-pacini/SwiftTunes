@@ -10,7 +10,7 @@ public protocol EngineAPI: AnyObject {
     /// Calls `handler` once now with the current snapshot, then after every
     /// change, at most once per main run loop pass. Returns a token; the
     /// observation ends when the token is cancelled or released.
-    func observe(_ handler: @escaping @MainActor (Snapshot) -> Void) -> Observation
+    func observe(_ handler: @escaping @MainActor (Snapshot) -> Void) -> SnapshotObservation
 
     /// Fire and forget. A command that does not apply is ignored silently and
     /// produces no snapshot. Never throws, never blocks.
@@ -33,7 +33,7 @@ public protocol EngineAPI: AnyObject {
 }
 
 /// A token returned by `EngineAPI.observe`.
-public protocol Observation: AnyObject { func cancel() }
+public protocol SnapshotObservation: AnyObject { func cancel() }
 
 /// The bundle paths the live engine is built from.
 public struct EngineBootstrap: Sendable {
