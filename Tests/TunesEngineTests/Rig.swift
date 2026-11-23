@@ -1,3 +1,4 @@
+import AVFoundation
 import CryptoKit
 import Foundation
 import Testing
@@ -420,6 +421,26 @@ final class Rig {
         let name = String(format: "202601%02d-120000-%dbpm-%@.m4a", day, bpm, key)
         let url = dir.appending(path: name)
         try Data("not audio \(day)".utf8).write(to: url)
+        return url
+    }
+
+    /// A kept tune that is real audio: a quiet tone, tagged as the engine tags.
+    @discardableResult
+    func realKeptTune(_ genre: String, day: Int, title: String, seconds: Double = 2) async throws -> URL {
+        let dir = genreDir(genre)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appending(path: String(format: "202601%02d-120000-100bpm-A-minor.m4a", day))
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2))
+        let frames = AVAudioFrameCount(48000 * seconds)
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames))
+        buffer.frameLength = frames
+        for c in 0..<2 {
+            for i in 0..<Int(frames) { buffer.floatChannelData![c][i] = Float(sin(Double(i) * 0.0576)) * 0.2 }
+        }
+        let raw = root.appending(path: "raw-\(day).m4a")
+        try AudioWork.encode(buffer, to: raw)
+        try await AudioWork.tag(raw, to: url, tags: TuneTags(title: title, genre: genre, bpm: 100, key: "A minor"))
+        Files.remove(raw)
         return url
     }
 

@@ -73,7 +73,9 @@ struct Seen {
 
     @Test func aSession() async throws {
         let rig = try await Rig(ready: false)
-        for d in 1...3 { try rig.keptTune("Jazz", day: d) }
+        for (d, title) in ["Blue Lamp", "Smoky Window", "Late Avenue"].enumerated() {
+            try await rig.realKeptTune("Jazz", day: d + 1, title: title)
+        }
         rig.make()
         var log: [String] = []
         func step(_ name: String) -> Seen {
@@ -187,6 +189,16 @@ struct Seen {
         #expect(p.next.head == "nothing" && p.now.repeat.text == "off" && !p.now.repeat.lit)
 
         await rig.send(.play)
+        let before = try #require(rig.snap.tune)
+        let renamed = await rig.engine.renameTune(TuneTarget(name: before.name, index: nil), to: "Evening Walk")
+        #expect(renamed == .success("Evening Walk"))
+        await rig.settle()
+        seen = step("renamed")
+        p = try #require(seen.player)
+        #expect(p.now.title == "Evening Walk" && p.now.scrap.help == "Scrap Evening Walk")
+        #expect(p.now.scrapCommand == .scrapPlaying(name: "Evening Walk"))
+        #expect(p.now.shareRequest?.target.name == "Evening Walk" && p.now.shareRequest?.file == before.file)
+
         let request = try #require(see(rig).player?.now.shareRequest)
         var panel = Panel().openingShare(request)
         let info = try await rig.engine.shareInfo(for: request.target).get()

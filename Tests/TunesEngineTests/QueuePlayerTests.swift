@@ -87,4 +87,30 @@ import Testing
         #expect(events.contains { if case .failed(2, _) = $0 { true } else { false } })
         #expect(events.contains(.ended(token: 1)))
     }
+
+    @Test func aRenameUnderThePlayingFileDoesNotStopIt() async throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "queue-player-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let a = dir.appending(path: "a.m4a")
+        try Self.silence(a, seconds: 0.6)
+        let player = QueuePlayer(muted: true)
+        var events: [PlayerEvent] = []
+        var waiters: [(check: () -> Bool, cont: CheckedContinuation<Void, Never>)] = []
+        player.onEvent = { e in
+            events.append(e)
+            let ready = waiters.filter { $0.check() }
+            waiters.removeAll { $0.check() }
+            ready.forEach { $0.cont.resume() }
+        }
+        func until(_ check: @escaping () -> Bool) async {
+            if check() { return }
+            await withCheckedContinuation { waiters.append((check, $0)) }
+        }
+        player.play(a, token: 1)
+        await until { events.contains(.started(token: 1)) }
+        try await AudioWork.retitle(a, to: "Renamed", part: dir.appending(path: ".a.m4a.part"))
+        await until { events.count > 1 }
+        #expect(events == [.started(token: 1), .ended(token: 1)])
+    }
 }

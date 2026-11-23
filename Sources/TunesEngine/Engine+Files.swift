@@ -355,7 +355,47 @@ struct NotEditable: Error {
 }
 
 extension Engine {
+    /// Renames a tune: its title tag, rewritten beside the file and renamed
+    /// over it. The file's name, pin mark and place in the order stay.
     func renameTune(_ target: TuneTarget, to name: String) async -> Result<String, Refusal> {
-        .failure(Refusal(field: nil, text: Rules.gone))
+        guard let t = tuneAt(target) else { return .failure(Refusal(field: nil, text: Rules.gone)) }
+        if let why = TuneRules.nameError(name) { return .failure(Refusal(field: nil, text: why)) }
+        let new = GenreRules.trim(name)
+        if new == t.name { return .success(new) }
+        let path = t.path
+        let old = t.name
+        let part = path.deletingLastPathComponent().appending(path: TuneFiles.partName(path.lastPathComponent))
+        // A read of the file begun before the rename would bring the old title back.
+        metaPending.remove(path.path)
+        let failure: String? = await tracked {
+            do {
+                try await AudioWork.retitle(path, to: new, part: part)
+                return nil
+            } catch {
+                return Files.reason(error)
+            }
+        }
+        if let failure { return .failure(Refusal(field: nil, text: "could not rename \(old): \(failure)")) }
+        // The file may have moved meanwhile (a genre rename): follow it by name.
+        for held in ([current, nextKept, scrap?.tune] + ready).compactMap({ $0 }) where held.file == path.lastPathComponent {
+            held.name = new
+        }
+        // The cache entry follows the file's new size and time; with nothing
+        // known yet, the file is read again when next needed.
+        if let known = readWaveIgnoringFile(path) ?? t.length.map({ TuneMeta(name: nil, length: $0, wave: t.wave) }) {
+            writeWave(path, TuneMeta(name: new, length: known.length, wave: known.wave))
+        } else {
+            Files.remove(waveFile(path))
+        }
+        changed()
+        return .success(new)
+    }
+
+    /// The wave cache's figures for a tune whose file just changed, so its
+    /// size and time no longer match the entry.
+    func readWaveIgnoringFile(_ path: URL) -> TuneMeta? {
+        guard let text = Files.read(waveFile(path)), let c = try? JSONValue.parse(text),
+              let length = c["length"]?.number, case .array(let w)? = c["wave"] else { return nil }
+        return TuneMeta(name: nil, length: length, wave: w.compactMap(\.number))
     }
 }
