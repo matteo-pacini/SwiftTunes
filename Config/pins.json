@@ -39,7 +39,6 @@
   "acestep_cpp": {
     "repository": "https://github.com/ServeurpersoCom/acestep.cpp",
     "revision": "973517be024ff8b6bbd50e0adc9e308ab2ed71b3",
-    "submodules": true,
-    "source_nar_hash": "sha256-Gw2Wc2UQ4q5yqXjNLYxw2gjTKrAQ9gISL1si4cVRcF8="
+    "submodules": true
   }
 }
