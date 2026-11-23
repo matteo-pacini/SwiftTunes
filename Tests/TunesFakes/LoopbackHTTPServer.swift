@@ -17,7 +17,8 @@ public struct HTTPRequest: Sendable {
         var out: [String: String] = [:]
         for pair in q.split(separator: "&") {
             let kv = pair.split(separator: "=", maxSplits: 1)
-            out[String(kv[0])] = kv.count > 1 ? String(kv[1]) : ""
+            let value = kv.count > 1 ? String(kv[1]) : ""
+            out[String(kv[0])] = value.removingPercentEncoding ?? value
         }
         return out
     }

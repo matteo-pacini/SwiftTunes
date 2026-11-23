@@ -125,9 +125,13 @@ final class LifelineProcess: ServerProcess {
 
         let handle = FileHandle(fileDescriptor: err[0], closeOnDealloc: true)
         reader = Task { [weak self] in
+            var first = true
             do {
                 for try await line in handle.bytes.lines {
-                    if let p = ServerLog.serverPID(line) { self?.serverPID = p }
+                    // Only the shim's own first line names the server: the
+                    // server writes to the same pipe after it.
+                    if first, let p = ServerLog.serverPID(line), p != pid { self?.serverPID = p }
+                    first = false
                     onLine(line)
                 }
             } catch {}
@@ -145,7 +149,7 @@ final class LifelineProcess: ServerProcess {
 
     func kill() {
         // The shim made the server's pid its process group.
-        if let pid = serverPID, pid > 0 { Darwin.kill(-pid, SIGKILL) }
+        if let pid = serverPID, pid > 1 { Darwin.kill(-pid, SIGKILL) }
         stop()
     }
 
@@ -173,6 +177,8 @@ final class QueuePlayer: TunePlayer {
     private var pendingNext: (url: URL?, token: Int)?
     private var loading: Int?
     private var loader: Task<Void, Never>?
+    private var nextLoader: Task<Void, Never>?
+    private var nextAsked: Int?
     private var paused = false
     private var observers: [any NSObjectProtocol] = []
 
@@ -227,16 +233,38 @@ final class QueuePlayer: TunePlayer {
     }
 
     func setNext(_ url: URL?, token: Int) {
-        guard let current else {
+        guard current != nil else {
             pendingNext = (url, token)
             return
         }
+        nextLoader?.cancel()
+        nextLoader = nil
+        nextAsked = token
         if let n = next { player.remove(n.item) }
         next = nil
         guard let url else { return }
-        let item = AVPlayerItem(url: url)
-        player.insert(item, after: current.item)
-        next = (item, token)
+        // Queued only once it is known to play: an item that cannot load
+        // would otherwise be moved to, and reported started, in silence.
+        nextLoader = Task { [weak self] in
+            let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+            var reason = "the file cannot be played"
+            var playable = false
+            do {
+                playable = try await asset.load(.isPlayable)
+            } catch {
+                reason = error.localizedDescription
+            }
+            guard let self, !Task.isCancelled, self.nextAsked == token else { return }
+            self.nextLoader = nil
+            guard playable else {
+                self.onEvent?(.failed(token: token, reason: reason))
+                return
+            }
+            guard let cur = self.current else { return }
+            let item = AVPlayerItem(asset: asset)
+            self.player.insert(item, after: cur.item)
+            self.next = (item, token)
+        }
     }
 
     func advance() {
@@ -260,6 +288,9 @@ final class QueuePlayer: TunePlayer {
     func stop() {
         loader?.cancel()
         loader = nil
+        nextLoader?.cancel()
+        nextLoader = nil
+        nextAsked = nil
         loading = nil
         pendingNext = nil
         player.pause()
@@ -278,6 +309,7 @@ final class QueuePlayer: TunePlayer {
         if repeatOne {
             player.seek(to: .zero)
             if !paused { player.play() }
+            onEvent?(.looped(token: cur.token))
             return
         }
         if let n = next {

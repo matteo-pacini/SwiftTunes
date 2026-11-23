@@ -147,6 +147,8 @@ final class Engine: EngineAPI {
 
     // Work in flight, for tests that wait until the engine is quiet.
     var inFlight = 0
+    var tasks: [Int: Task<Void, Never>] = [:]
+    var taskSeq = 0
     var quietWaiters: [CheckedContinuation<Void, Never>] = []
     var timers: [String: (seq: Int, timer: any EngineTimer)] = [:]
     var timerSeq = 0
@@ -184,6 +186,15 @@ final class Engine: EngineAPI {
     var askSeq = 0
     var wantsPlay = false
     var paused = false
+    /// The position as last sampled, and when. Not sampled while a tune
+    /// loads: the player still reports the item being replaced.
+    var pos = 0.0
+    var posAt = 0.0
+    /// `pos` was set by the engine just now (a start, a loop, a seek): the
+    /// player's own figure may still be the old one, so it is not read.
+    var posSet = false
+    /// The server's footprint as last published.
+    var publishedRAM: Int64?
     var playError: String?
     var fileError: String?
     var metaPending: Set<String> = []
@@ -269,14 +280,21 @@ final class Engine: EngineAPI {
 
     // MARK: - The loop's plumbing
 
-    /// Runs `op` as tracked work on the main actor.
+    /// Runs `op` as tracked work on the main actor. The task is kept until
+    /// it ends, and `shutdown()` cancels every one still running.
     @discardableResult
     func spawn(_ op: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
         inFlight += 1
-        return Task {
+        taskSeq += 1
+        let id = taskSeq
+        let task = Task {
             await op()
+            self.tasks[id] = nil
             self.workEnded()
         }
+        // Stored before its body can run: both are on the main actor.
+        tasks[id] = task
+        return task
     }
 
     /// Runs `op` in the caller's task, counted as tracked work.
@@ -403,22 +421,33 @@ final class Engine: EngineAPI {
         Files.exists(t.path.deletingLastPathComponent().appending(path: TuneFiles.pinMark(t.file)))
     }
 
+    func serverFootprint() -> Int64? {
+        server?.process?.serverPID.flatMap { env.probe.footprint(pid: $0) }
+    }
+
+    /// Sets the position the next snapshot shows.
+    func setPosition(_ seconds: Double) {
+        pos = seconds
+        posAt = clock.now
+        posSet = true
+    }
+
     func buildSnapshot() -> Snapshot {
         readGenres()
         let now = clock.now
         let order = keptNames()
-        func pos(_ t: Tune) -> Int? {
+        func orderPos(_ t: Tune) -> Int? {
             guard t.kept, !shuffle, let g = genre, t.path.deletingLastPathComponent().standardizedFileURL == genreDir(g).standardizedFileURL,
                   let i = order.firstIndex(of: t.file) else { return nil }
             return i + 1
         }
         let tune = current.map {
             PlayingTune(name: $0.name, file: $0.stem, bpm: $0.bpm, key: $0.key, length: $0.length, kept: $0.kept,
-                        new: !$0.kept, pinned: pinned($0), pos: pos($0), wave: $0.wave)
+                        new: !$0.kept, pinned: pinned($0), pos: orderPos($0), wave: $0.wave)
         }
         let queue = queueNow().map {
             QueuedTune(name: $0.name, file: $0.stem, bpm: $0.bpm, key: $0.key, length: $0.length, kept: $0.kept,
-                       new: !$0.kept, pinned: pinned($0), pos: pos($0))
+                       new: !$0.kept, pinned: pinned($0), pos: orderPos($0))
         }
         var present: [String: Int64] = [:]
         for f in pins?.files ?? [] {
@@ -438,7 +467,16 @@ final class Engine: EngineAPI {
             Undo(name: s.tune.name, until: s.until,
                  genre: genres.first { genreDir($0).standardizedFileURL == s.from.deletingLastPathComponent().standardizedFileURL }?.id)
         }
-        let ram = server?.process?.serverPID.flatMap { env.probe.footprint(pid: $0) }
+        let ram = serverFootprint()
+        publishedRAM = ram
+        if current == nil {
+            pos = 0
+            posAt = now
+        } else if loading == nil && !posSet {
+            pos = player.position
+            posAt = now
+        }
+        posSet = false
         return Snapshot(
             version: 1,
             setup: setup,
@@ -454,8 +492,8 @@ final class Engine: EngineAPI {
             player: current == nil ? .none : (paused ? .paused : .playing),
             stopped: genre != nil && !wantsPlay,
             tune: tune,
-            pos: current == nil ? 0 : player.position,
-            posAt: now,
+            pos: pos,
+            posAt: posAt,
             queue: queue,
             shuffle: shuffle,
             repeat: repeatMode,
@@ -569,6 +607,7 @@ final class Engine: EngineAPI {
             nextKept = nil
             current = cand
             paused = false
+            setPosition(0)
             playNow(cand)
         } else {
             haltPlayer()
@@ -611,6 +650,8 @@ final class Engine: EngineAPI {
         guard let cur = current, t.isFinite else { return }
         let clamped = min(max(0, t), cur.length ?? .infinity)
         player.seek(to: clamped)
+        // The player's seek completes later; show where it is going.
+        setPosition(clamped)
         changed()
     }
 
@@ -714,6 +755,10 @@ final class Engine: EngineAPI {
             // since replaced, as an earlier genre's tune after a pick.
             guard let ask = loading ?? appended, ask.token == token else { return }
             onTrack(ask, token: token)
+        case .looped(let token):
+            guard token == currentToken, loading == nil else { return }
+            setPosition(0)
+            changed()
         case .ended(let token):
             guard token == currentToken, loading == nil, current != nil else { return }
             onIdle(natural: true)
@@ -752,6 +797,7 @@ final class Engine: EngineAPI {
         played.insert(path.lastPathComponent)
         appended = nil
         playError = nil
+        setPosition(0)
         syncPlaylist()
         changed()
         maybeCompose()

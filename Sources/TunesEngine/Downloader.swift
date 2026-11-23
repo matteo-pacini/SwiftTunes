@@ -98,6 +98,21 @@ nonisolated enum Downloader {
                 hash = h
             }
             if Task.isCancelled { return .cancelled }
+            if offset == f.bytes {
+                // All of it is here (a stop came after the last byte): there
+                // is nothing to ask for, and a range past the end is refused.
+                if hex(hash) != f.sha256 {
+                    Files.remove(part)
+                    return .failed(DownloadRules.checksumError(file: f.name))
+                }
+                do {
+                    try Files.rename(part, final)
+                } catch {
+                    return .failed("download failed: \(Files.reason(error))")
+                }
+                done += f.bytes
+                continue
+            }
             guard let url = URL(string: "\(base)/resolve/\(revision)/\(f.name)") else {
                 return .failed("download failed: the address is not valid")
             }
@@ -166,8 +181,7 @@ nonisolated enum Downloader {
             try? out?.close()
             out = nil
             if got != f.bytes { return .failed(DownloadRules.shortError(file: f.name, got: got, expected: f.bytes)) }
-            let digest = hash.finalize().map { String(format: "%02x", $0) }.joined()
-            if digest != f.sha256 {
+            if hex(hash) != f.sha256 {
                 Files.remove(part)
                 return .failed(DownloadRules.checksumError(file: f.name))
             }
@@ -179,6 +193,10 @@ nonisolated enum Downloader {
             done += f.bytes
         }
         return .done
+    }
+
+    static func hex(_ hash: SHA256) -> String {
+        hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     static func hashFile(_ url: URL) throws -> SHA256 {

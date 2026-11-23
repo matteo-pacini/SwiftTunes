@@ -21,10 +21,12 @@ public enum ServerLog {
 
     public static func isListening(_ line: String) -> Bool { line.hasPrefix(listening) }
 
-    /// The server's pid from the lifeline's own line.
+    /// The server's pid from the lifeline's own line; never 1 or less, which
+    /// as a process group would reach every process or the caller's own.
     public static func serverPID(_ line: String) -> Int32? {
-        guard line.hasPrefix(started) else { return nil }
-        return Int32(line.dropFirst(started.count).trimmingCharacters(in: .whitespaces))
+        guard line.hasPrefix(started), let pid = Int32(line.dropFirst(started.count).trimmingCharacters(in: .whitespaces)),
+              pid > 1 else { return nil }
+        return pid
     }
 
     /// The no_device detail: what the server offered instead, when its log

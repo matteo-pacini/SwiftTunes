@@ -84,13 +84,15 @@ extension Engine {
         silenceS = nil
         changed()
         maybeCompose()
+        settleState()
     }
 
     func undo() {
         guard let s = scrap else { return }
-        // The undo stays offered until the file is back.
+        // The undo stays offered until the file is back. It never replaces a
+        // file that took the tune's place meanwhile: that one is not ours.
         do {
-            try Files.move(s.to, s.from)
+            try Files.moveExclusive(s.to, s.from)
         } catch {
             fileError = "could not bring \(s.tune.name) back: \(Files.reason(error))"
             changed()
@@ -265,12 +267,12 @@ extension Engine {
                 renamed = Renamed(from: onDisk.name, to: edited.name)
                 let old = env.paths.music.appending(path: onDisk.name, directoryHint: .isDirectory)
                 let new = env.paths.music.appending(path: edited.name, directoryHint: .isDirectory)
-                if Files.exists(new) {
+                if Files.exists(new) && !Files.sameFile(old, new) {
                     return .failure(Refusal(field: .name, text: "A folder called \(edited.name) already exists in ~/Music/Tunes."))
                 }
                 if Files.isDirectory(old) {
                     do {
-                        try Files.rename(old, new)
+                        try Files.renameThroughTemporary(old, new)
                     } catch {
                         return .failure(Refusal(field: nil, text: "Nothing was saved: its folder could not be moved (\(Files.reason(error)))."))
                     }
@@ -285,7 +287,7 @@ extension Engine {
         do {
             try writeGenres(doc, old: disk.text)
         } catch {
-            if let (old, new) = moved { try? Files.rename(new, old) }
+            if let (old, new) = moved { try? Files.renameThroughTemporary(new, old) }
             return .failure(Refusal(field: nil, text: "Nothing was saved: \(Files.reason(error))."))
         }
         if let (old, new) = moved { followRename(old, new) }

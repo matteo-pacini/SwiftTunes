@@ -57,4 +57,34 @@ import Testing
             return
         }
     }
+
+    @Test func aNextItemThatCannotLoadIsReportedFailedNeverStarted() async throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "queue-player-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let a = dir.appending(path: "a.m4a")
+        let broken = dir.appending(path: "broken.m4a")
+        try Self.silence(a, seconds: 0.3)
+        try Data("not audio at all".utf8).write(to: broken)
+
+        let player = QueuePlayer(muted: true)
+        var events: [PlayerEvent] = []
+        var waiters: [(check: () -> Bool, cont: CheckedContinuation<Void, Never>)] = []
+        player.onEvent = { e in
+            events.append(e)
+            let ready = waiters.filter { $0.check() }
+            waiters.removeAll { $0.check() }
+            ready.forEach { $0.cont.resume() }
+        }
+        func until(_ check: @escaping () -> Bool) async {
+            if check() { return }
+            await withCheckedContinuation { waiters.append((check, $0)) }
+        }
+        player.play(a, token: 1)
+        player.setNext(broken, token: 2)
+        await until { events.contains(.ended(token: 1)) || events.contains(.started(token: 2)) }
+        #expect(!events.contains(.started(token: 2)))
+        #expect(events.contains { if case .failed(2, _) = $0 { true } else { false } })
+        #expect(events.contains(.ended(token: 1)))
+    }
 }

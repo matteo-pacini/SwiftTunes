@@ -286,5 +286,9 @@ private func codes(_ parts: (String, Int)...) -> [Int] {
     @Test func lifelinePID() {
         #expect(ServerLog.serverPID("tunes-lifeline: started 4242") == 4242)
         #expect(ServerLog.serverPID("other") == nil)
+        // Never a pid that would signal every process (-1) or the caller's group (0).
+        for bad in ["1", "0", "-1", "-4242", "x"] {
+            #expect(ServerLog.serverPID("tunes-lifeline: started \(bad)") == nil)
+        }
     }
 }

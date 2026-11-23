@@ -31,6 +31,8 @@ public enum Rules {
     public static let drainMax = 1.0
     /// How often that wait asks whether it has ended.
     public static let drainPoll = 0.1
+    /// The footprint change that is worth a new snapshot: 0.1 GiB.
+    public static let ramStep: Int64 = 107_374_182
     /// Kept tunes the queue shows with shuffle off.
     public static let keptShown = 3
     public static let gone = "That tune is no longer there."

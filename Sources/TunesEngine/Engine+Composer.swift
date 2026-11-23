@@ -227,7 +227,7 @@ extension Engine {
     func drain(_ s: ServerRecord) {
         guard s.stopping, let id = s.cancelling else { return }
         spawn { [weak self] in
-            let reply = try? await s.client.json("GET", "/job?id=\(id)")
+            let reply = try? await s.client.json("GET", ServerClient.jobPath(id))
             guard let self else { return }
             if reply?["status"] == .string("running") {
                 self.setTimer("drain-poll:\(s.port)", Rules.drainPoll) { [weak self] in self?.drain(s) }
@@ -255,16 +255,13 @@ extension Engine {
                 sendCancel(id, s)
             }
         }
-        if state == .writing || state == .rendering {
-            setState(server?.up == true ? .idle : .unloaded)
-        }
         if j != nil { changed() }
     }
 
     func sendCancel(_ id: String, _ s: ServerRecord) {
         s.cancelling = id
         spawn { [weak self] in
-            let sent = (try? await s.client.call("POST", "/job?id=\(id)&cancel=1")) != nil
+            let sent = (try? await s.client.call("POST", ServerClient.jobPath(id, "&cancel=1"))) != nil
             guard let self else { return }
             guard s.stopping else {
                 // The server stays: nothing waits on this job's end.
@@ -296,6 +293,13 @@ extension Engine {
         return false
     }
 
+    /// With no job, `writing` and `rendering` do not stand: `idle` is only
+    /// for a composer at rest with no server, which `maybeCompose` sets.
+    func settleState() {
+        guard job == nil, state == .writing || state == .rendering else { return }
+        setState(server == nil ? .unloaded : .starting)
+    }
+
     func startJob() {
         guard let g = genre, let s = server else { return }
         jobSeq += 1
@@ -305,6 +309,10 @@ extension Engine {
             name: Composing.name(moods: g.moods, things: g.things, rng: &rng), writeAt: clock.now
         )
         job = j
+        // Writing from the moment it starts, before the server answers.
+        j.step = .lm
+        setState(.writing)
+        changed()
         setTimer("hold_check", Rules.holdRunning) { [weak self] in self?.runningHoldTick() }
         postLM(j, s)
     }
@@ -341,7 +349,7 @@ extension Engine {
         spawn { [weak self] in
             let status: Result<String, any Error>
             do {
-                let reply = try await s.client.json("GET", "/job?id=\(id)")
+                let reply = try await s.client.json("GET", ServerClient.jobPath(id))
                 guard case .string(let st)? = reply["status"] else { throw ServerClient.Failure(description: "the answer has no status") }
                 status = .success(st)
             } catch {
@@ -352,6 +360,7 @@ extension Engine {
             case .failure(let e):
                 self.pollFailed(j, s, e)
             case .success("running"):
+                self.ramMoved()
                 self.setTimer("poll", Rules.poll) { [weak self] in self?.poll(j, s) }
             case .success("done"):
                 self.fetch(j, s, id)
@@ -359,6 +368,17 @@ extension Engine {
                 let what = j.step == .lm ? "song" : "audio"
                 self.failure("the \(what) job \(other)" + (ServerLog.lastError(s.lines).map { ": \($0)" } ?? ""))
             }
+        }
+    }
+
+    /// Publishes the server's footprint when it moved by 0.1 GiB or more
+    /// since the last snapshot: a stage's memory comes and goes inside it.
+    func ramMoved() {
+        let now = serverFootprint()
+        switch (now, publishedRAM) {
+        case let (n?, p?) where abs(n - p) < Rules.ramStep: return
+        case (nil, nil): return
+        default: changed()
         }
     }
 
@@ -379,7 +399,7 @@ extension Engine {
         spawn { [weak self] in
             let body: Result<Data, any Error>
             do {
-                body = .success(try await s.client.call("GET", "/job?id=\(id)&result=1", timeout: 60))
+                body = .success(try await s.client.call("GET", ServerClient.jobPath(id, "&result=1"), timeout: 60))
             } catch {
                 body = .failure(error)
             }
@@ -555,10 +575,10 @@ extension Engine {
             ready.append(tune)
             if let nk = nextKept, appended?.path == nk.path { nextKept = nil }
         }
-        setState(server?.up == true ? .idle : .unloaded)
         syncPlaylist()
         changed()
         maybeCompose()
+        settleState()
     }
 
     /// The keep rule over `genre`'s folder; `fresh`, a tune just placed, is
@@ -691,5 +711,10 @@ extension Engine {
         player.stop()
         for task in downloads { await task.value }
         for process in Array(exiting.values) { await process.waitForExit() }
+        // What is still running (a request, a file's decode) is cancelled,
+        // and waited for, so nothing the engine started outlives it.
+        let running = Array(tasks.values)
+        running.forEach { $0.cancel() }
+        for task in running { await task.value }
     }
 }

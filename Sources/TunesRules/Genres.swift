@@ -54,7 +54,7 @@ public enum GenresFile {
                 throw Mistake("\(place): id missing, repeated or not lower-case letters, digits and dashes")
             }
             guard case .string(let name)? = g["name"], !GenreRules.trim(name).isEmpty, !name.contains("/"),
-                  !name.hasPrefix("."), !names.contains(name),
+                  !name.hasPrefix("."), !names.contains(name.lowercased()),
                   !name.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 })
             else {
                 throw Mistake("\(place): name missing, repeated, or usable as no folder name")
@@ -87,7 +87,9 @@ public enum GenresFile {
                 throw Mistake("\(place): bpm must be [low, high] between \(GenreRules.bpmRange.lowerBound) and \(GenreRules.bpmRange.upperBound)")
             }
             ids.insert(id)
-            names.insert(name)
+            // Without case, as the editor compares, and as a volume that
+            // ignores case would give two such genres one folder.
+            names.insert(name.lowercased())
             out.append(Genre(id: id, name: name, caption: caption, turns: turns, bpm: [lo, hi], moods: moods, things: things))
         }
         return (out, skipped)

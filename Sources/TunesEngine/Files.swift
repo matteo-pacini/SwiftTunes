@@ -66,6 +66,36 @@ nonisolated enum Files {
         if Darwin.rename(from.path, to.path) != 0 { throw POSIXError(errno) }
     }
 
+    /// Whether two paths name one file: on a volume that ignores case,
+    /// `Lo-fi` and `Lo-Fi` do.
+    static func sameFile(_ a: URL, _ b: URL) -> Bool {
+        var sa = stat()
+        var sb = stat()
+        return lstat(a.path, &sa) == 0 && lstat(b.path, &sb) == 0 && sa.st_dev == sb.st_dev && sa.st_ino == sb.st_ino
+    }
+
+    /// Renames by way of a hidden name beside it, so a change of case alone
+    /// takes on any volume.
+    static func renameThroughTemporary(_ from: URL, _ to: URL) throws {
+        let tmp = from.deletingLastPathComponent().appending(path: ".rename-\(getpid())-\(UUID().uuidString)")
+        try rename(from, tmp)
+        do {
+            try rename(tmp, to)
+        } catch {
+            try? rename(tmp, from)
+            throw error
+        }
+    }
+
+    /// Moves a file without ever replacing one at `to`; EEXIST when one is there.
+    static func moveExclusive(_ from: URL, _ to: URL) throws {
+        if renamex_np(from.path, to.path, UInt32(RENAME_EXCL)) == 0 { return }
+        let code = errno
+        guard code == EXDEV else { throw POSIXError(code) }
+        if copyfile(from.path, to.path, nil, copyfile_flags_t(COPYFILE_DATA | COPYFILE_EXCL)) != 0 { throw POSIXError(errno) }
+        unlink(from.path)
+    }
+
     static func remove(_ url: URL) {
         unlink(url.path)
     }

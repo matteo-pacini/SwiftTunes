@@ -161,7 +161,7 @@ public actor FakeAceServer {
             reply.append(Data("\r\n--\(Self.boundary)--\r\n".utf8))
             return start(kind: kind == .fail || kind == .exit ? kind : .normal, stage: "synth", result: reply)
         case ("GET", "/job"), ("POST", "/job"):
-            guard let id = Int(r.query["id"] ?? ""), var job = jobs[id] else { return .json(#"{"error":"no such job"}"#, status: 404) }
+            guard let id = number(r.query["id"]), var job = jobs[id] else { return .json(#"{"error":"no such job"}"#, status: 404) }
             if r.query["cancel"] == "1" {
                 cancelled.append(id)
                 job.status = "cancelling"
@@ -198,11 +198,22 @@ public actor FakeAceServer {
         }
     }
 
+    /// Job ids are given as text with this prefix, when set.
+    public var idPrefix: String?
+    public func set(idPrefix: String?) { self.idPrefix = idPrefix }
+
     private func start(kind: Kind, stage: String, result: Data) -> HTTPResponse {
         let id = nextID
         nextID += 1
         jobs[id] = Job(kind: kind, stage: stage, result: result)
+        if let p = idPrefix { return .json(#"{"id":"\#(p)\#(id)"}"#) }
         return .json(#"{"id":\#(id)}"#)
+    }
+
+    private func number(_ id: String?) -> Int? {
+        guard var id else { return nil }
+        if let p = idPrefix, id.hasPrefix(p) { id = String(id.dropFirst(p.count)) }
+        return Int(id)
     }
 
     static func kind(named s: String) -> Kind? {
@@ -304,7 +315,10 @@ public actor FakeModelHost {
         var status = 200
         var headers: [(String, String)] = []
         if !ignoreRange, let range = r.headers["range"], range.hasPrefix("bytes="), range.hasSuffix("-"),
-           let from = Int(range.dropFirst(6).dropLast()), from <= data.count {
+           let from = Int(range.dropFirst(6).dropLast()) {
+            guard from < data.count else {
+                return HTTPResponse(status: 416, headers: [("Content-Range", "bytes */\(data.count)")])
+            }
             headers.append(("Content-Range", "bytes \(from)-\(data.count - 1)/\(data.count)"))
             data = data.subdata(in: from..<data.count)
             status = 206

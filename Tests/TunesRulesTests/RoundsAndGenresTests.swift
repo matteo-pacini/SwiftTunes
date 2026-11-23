@@ -218,6 +218,7 @@ private func playRounds(
         (doc(#"{"id": "a", "name": "  "}"#), "genre 1: name missing, repeated, or usable as no folder name"),
         (doc(#"{"id": "a", "name": "a\u0007"}"#), "genre 1: name missing, repeated, or usable as no folder name"),
         (doc(good + #", {"id": "b", "name": "Jazz"}"#), "genre 2: name missing, repeated, or usable as no folder name"),
+        (doc(good + #", {"id": "b", "name": "jAZZ"}"#), "genre 2: name missing, repeated, or usable as no folder name"),
         (doc(#"{"id": "a", "name": "A", "caption": " "}"#), "genre 1: caption missing"),
         (doc(#"{"id": "a", "name": "A", "caption": "c"}"#), "genre 1: turns must be a list of texts"),
         (doc(#"{"id": "a", "name": "A", "caption": "c", "turns": [1]}"#), "genre 1: turns must be a list of texts"),

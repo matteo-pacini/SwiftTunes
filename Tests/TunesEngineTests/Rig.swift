@@ -67,7 +67,6 @@ final class FakePlayer: TunePlayer {
         next = nil
         pendingPlay = (url, token)
         paused = false
-        position = 0
     }
 
     func setNext(_ url: URL?, token: Int) {
@@ -110,6 +109,7 @@ final class FakePlayer: TunePlayer {
             onEvent?(.failed(token: p.token, reason: "the file cannot be played"))
         } else {
             current = p
+            position = 0
             onEvent?(.started(token: p.token))
         }
         return true
@@ -117,7 +117,12 @@ final class FakePlayer: TunePlayer {
 
     /// The playing item reaches its end.
     func finish() {
-        guard let c = current, !repeatOne else { return }
+        guard let c = current else { return }
+        if repeatOne {
+            position = 0
+            onEvent?(.looped(token: c.token))
+            return
+        }
         position = 0
         if let n = next {
             current = n
@@ -139,7 +144,8 @@ final class FakeHolds: HoldSource {
 }
 
 final class FakeProbe: SystemProbe {
-    func footprint(pid: Int32) -> Int64? { 7_000_000_000 }
+    var bytes: Int64 = 7_000_000_000
+    func footprint(pid: Int32) -> Int64? { bytes }
     func diskFree(near url: URL) -> Int64 { 100_000_000_000 }
 }
 
@@ -255,6 +261,7 @@ final class Rig {
     let clock: ManualClock
     let player = FakePlayer()
     let holds = FakeHolds()
+    let probe = FakeProbe()
     let ace = FakeAceServer()
     let host = FakeModelHost()
     let launcher: FakeLauncher
@@ -351,7 +358,7 @@ final class Rig {
         return EngineEnvironment(
             paths: paths, aceServer: URL(filePath: "/nonexistent/ace-server"),
             defaultGenres: root.appending(path: "genres-default.json"), pins: root.appending(path: "pins.json"),
-            clock: clock, random: SplitMix64(seed: 11), player: player, launcher: realLauncher ?? launcher, holds: holds, probe: FakeProbe(),
+            clock: clock, random: SplitMix64(seed: 11), player: player, launcher: realLauncher ?? launcher, holds: holds, probe: probe,
             timeZone: TimeZone(identifier: "UTC")!, freePort: { port }
         )
     }
@@ -429,8 +436,9 @@ final class Rig {
             done = true
         }
         for _ in 0..<10_000 where !done {
+            await Task.yield()
             await settle()
-            if !done && !clock.fireNext() { await Task.yield() }
+            if !done { _ = clock.fireNext() }
         }
         await task.value
     }

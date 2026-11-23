@@ -48,6 +48,8 @@ nonisolated public enum PlayerEvent: Sendable, Equatable {
     case started(token: Int)
     /// The item played to its end and nothing followed.
     case ended(token: Int)
+    /// Under repeat one the item reached its end and started over.
+    case looped(token: Int)
     /// The item cannot be played; the reason is plain text.
     case failed(token: Int, reason: String)
 }
@@ -68,7 +70,7 @@ public protocol TunePlayer: AnyObject {
     func stop()
     /// Seconds into the playing item.
     var position: Double { get }
-    /// The playing item starts over at its end, with no event.
+    /// The playing item starts over at its end, reported as `.looped`.
     var repeatOne: Bool { get set }
 }
 

@@ -26,7 +26,8 @@ nonisolated struct ServerClient: Sendable {
 
     /// The raw body of a request; `body` is sent as JSON.
     func call(_ method: String, _ path: String, body: JSONValue? = nil, timeout: Double = 10) async throws -> Data {
-        var req = URLRequest(url: URL(string: path, relativeTo: base)!)
+        guard let url = URL(string: path, relativeTo: base) else { throw Failure(description: "the address is not valid") }
+        var req = URLRequest(url: url)
         req.httpMethod = method
         req.timeoutInterval = timeout
         if let body {
@@ -47,6 +48,13 @@ nonisolated struct ServerClient: Sendable {
         } catch {
             throw Failure(description: "the answer is not JSON")
         }
+    }
+
+    /// `/job?id=<id>` with the id escaped, then `extra` (as `&result=1`).
+    static func jobPath(_ id: String, _ extra: String = "") -> String {
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
+        let escaped = id.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+        return "/job?id=\(escaped)\(extra)"
     }
 
     /// A job's id from a reply to `/lm` or `/synth`, as text for the query.

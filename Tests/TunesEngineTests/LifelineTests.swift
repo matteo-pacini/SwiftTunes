@@ -68,6 +68,7 @@ final class TapLauncher: ServerLauncher {
         #!/bin/sh
         sleep 1000 &
         echo "$$ $! $(ps -o nice= -p $$)" > "$2/pids"
+        echo "tunes-lifeline: started 1" >&2
         echo "ggml_metal_device_init: GPU name:   MTL0 (Stand-in)" >&2
         echo "[Server] Listening on 127.0.0.1:0" >&2
         wait
@@ -138,12 +139,13 @@ final class TapLauncher: ServerLauncher {
         let url = dir.appending(path: "deaf-server")
         let script = """
         #!/bin/sh
-        trap '' TERM
+        trap 'echo term >> "$2/term"' TERM
+        trap '' HUP
         sleep 1000 &
         echo "$$ $!" > "$2/pids"
         echo "ggml_metal_device_init: GPU name:   MTL0 (Stand-in)" >&2
         echo "[Server] Listening on 127.0.0.1:0" >&2
-        wait
+        while :; do wait; done
 
         """
         try Data(script.utf8).write(to: url)
@@ -171,15 +173,14 @@ final class TapLauncher: ServerLauncher {
         #expect(pids.count == 2 && pids.allSatisfy(Self.alive))
 
         let port = rig.aceHTTP.port
-        let wall = Date()
         let t = rig.clock.now
         rig.engine.send(.setComposer(on: false))
         #expect(await rig.run { rig.engine.timers["drain:\(port)"] == nil })
         await tap.until { !tap.exits.isEmpty }
-        let took = Date().timeIntervalSince(wall)
         #expect(abs(rig.clock.now - t - 1) < 1e-6, "the wait is one second")
-        // Without the kill the shim's grace alone is 5 s of wall time.
-        #expect(took < 3, "stopped after \(took) s")
+        // Killed by the engine, not ended by the shim: the shim's way starts
+        // with a SIGTERM, which the stand-in would have noted.
+        #expect(!Files.exists(rig.paths.models.appending(path: "term")))
         #expect(tap.exits == [137])
         #expect(pids.allSatisfy { !Self.alive($0) })
         #expect(await rig.ace.cancelled.count == 1)
