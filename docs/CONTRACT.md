@@ -114,7 +114,9 @@ second), `error` (`String?`).
 `diskFreeBytes` / `disk_free_bytes` (`Int64`), `ramBytes` / `ram_bytes`
 (`Int64`, 8 GiB: the figure the wording quotes).
 
-`GenreSummary`: `id`, `name`, `kept` (`Int`).
+`GenreSummary`: `id`, `name`, `kept` (`Int`), `palette` (`[String]?`: four
+colours as `#RRGGBB`, nil when the genres file gives none; the panel then
+makes one from the name).
 
 `PlayingTune`: `name` (`String`: the title once read, the file stem until
 then), `file` (`String`: the file stem, no extension), `bpm` (`Int?`), `key`
@@ -198,7 +200,10 @@ sends `toggle`.
 ## Results
 
 `GenreFields`: `name` (`String`), `caption` (`String`), `turns`
-(`[String]`), `bpm` (`[Int]`, exactly two: slowest, fastest). Sent to
+(`[String]`), `bpm` (`[Int]`, exactly two: slowest, fastest), `palette`
+(`[String]?`, four `#RRGGBB` colours or nil; saved as the genre's optional
+`palette` key, removed from the file when nil; anything else is refused
+with `A palette is four colours.` and no field). Sent to
 `saveGenre` untrimmed; the engine trims and drops blank and repeated
 variations [R52]. `base` is the value `genre(id:)` returned, unchanged, and
 is nil for a new genre [R55].

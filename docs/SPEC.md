@@ -21,7 +21,7 @@ GPL-3.0-or-later.
 | # | Decision | Taken |
 |---|---|---|
 | 1 | Build system | A Swift package, plus `Scripts/make-app.sh` to build `ace-server` and assemble the bundle. No Xcode project. |
-| 2 | Language and UI | Swift 6, complete concurrency checking. The shell is AppKit; the popover's content is SwiftUI in an `NSHostingController`. The lifeline shim is C. |
+| 2 | Language and UI | Swift 6, complete concurrency checking. macOS 26 is the oldest system it runs on; Liquid Glass is the base material. The shell is AppKit; the popover's content is SwiftUI in an `NSHostingController`. The lifeline shim is C. |
 | 2a | Dependencies | Apple frameworks and tools only, in the app and in the tests. The exceptions are `ace-server` itself, the model, and `cmake` to build the server. |
 | 3 | Who owns `ace-server` | The app, through the lifeline shim: the shim holds the read end of a pipe whose write end only the app holds, and kills the server's process group when the pipe closes. |
 | 4 | Where `ace-server` comes from | Built from the pinned acestep.cpp revision and embedded in `SwiftTunes.app/Contents/Helpers`. |
@@ -31,7 +31,7 @@ GPL-3.0-or-later.
 | 8 | Holds | Memory pressure (warn or critical), Low Power Mode, thermal state serious or critical. All three are checked before each job and every 30 s while held. While a job runs only power and heat are checked, every 10 s: the server's own load raises memory pressure, so that check would hold every tune. |
 | 9 | Global shortcut | None. No notifications either. |
 | 10 | Keys in the popover | Only the standard ones: Esc closes or cancels, Return presses the default button, Tab moves between fields, fields edit as fields do. |
-| 11 | Starting genres | Nine starting genres, bundled, copied to Application Support at first launch. |
+| 11 | Starting genres | Nine starting genres, bundled, copied to Application Support at first launch. Each has a palette of four colours; a genre without one gets one from its name. |
 | 12 | Start at login | A "Start at Login" item in the status item's menu through `SMAppService`, off by default. If registration fails the item shows the failure as plain text and stays off. |
 | 13 | Updates | None. The menu shows the running version. |
 | 14 | Memory figure | "about 8 GiB of memory". |
@@ -99,33 +99,60 @@ Buttons: `Download`, `Cancel`, `Resume`, `Try now`, `Save`, `Cancel`,
 
 ## Layout of the popover
 
-380 pt wide. The published draft (owner's private page) is the picture; in
-words:
+380 pt wide, macOS 26, Liquid Glass throughout. The owner's approved picture
+is working material the lead hands to the app role; in words:
 
-- The cards are SwiftUI views; a switch is a `Toggle` with the switch style.
-- **Player card**, three sections separated by hairlines:
-  - NOW PLAYING: right of the heading, the suffix (`repeating`, `kept tunes`)
-    and a genre button (`<g> ⌄`) that opens the chooser. Then the tune's
-    name, `N BPM · <key>`, the waveform (click seeks), position and length,
-    and one row of controls: play/pause, next, then shuffle, repeat (with its
-    mode as text), share, scrap.
-  - UP NEXT: heading with its right-hand text [R78], the rows [R77], the job
-    row, `Not started` placeholders.
-  - COMPOSER: heading with the state label and a switch; the lines of
-    [R80]; `Try now` when failed or no device.
-  - A footer line only when there is something to say: the undo line with its
-    button, or a notice for 6 s [R91, R92].
-- **Chooser**: back link to the player, title `Genre`, the chip, a grid three
-  across, `+ New genre` last. A pencil on the hovered cell opens the editor.
-- **Editor**: back link, title, chip, the four fields, error under its field,
-  the hint, then `Delete genre…` on the left (absent for a new genre and for
-  the last genre) and `Cancel`, `Save` on the right. Delete asks in place
-  with `Keep it` and `Delete <g>`.
-- **Share sheet**: back link, the tune, five rows; keep for good is a switch.
-- **Setup cards**: the three of [notes (c), "Setup"] with one button each.
-- **Status item**: a note glyph (template image), the genre's name while
-  playing, the composer's dot. Left click opens the popover; right click
-  opens the menu.
+- **Backdrop.** Every card sits on a colour field made from the selected
+  genre's palette: a `MeshGradient` whose points drift slowly in a
+  `TimelineView`. It animates only while the popover is open. Text is white
+  on it in dark appearance and near-black on a paler field in light.
+- **Glass.** Controls, shelf cards, the composer bar, the footer toast and
+  grouped rows use `glassEffect` inside a `GlassEffectContainer`; nothing
+  draws its own blur. Play and pause morph in place.
+- **Player card**, three parts kept apart:
+  - NOW PLAYING: the label (with `· KEPT TUNES` or `· REPEATING`) and the
+    genre button, then the tune's name large and rounded, `N BPM · <key>`,
+    and the tune's shape: 78 mirrored columns of dots that fill as it plays;
+    a click seeks, a drag scrubs. Position and length under it. One row of
+    six round controls: shuffle, repeat, play/pause (large, solid), next,
+    share, scrap. With nothing to play the hero shows the empty-state
+    sentences and, while a tune is being made, the forming wave.
+  - UP NEXT: the label with its right-hand text, then a shelf of at most
+    three cards: queued tunes (artwork, name, `N BPM · <key> · M:SS`, a NEW
+    badge), the job (a small forming wave, `Being written` / `Being
+    rendered`, the time line), and `Not started` placeholders. Hover on a
+    tune card offers play it now, share and scrap; on the job card, scrap.
+  - COMPOSER: one glass bar: the label, the state as a pill, the switch;
+    the `Makes <g>, keeps N ahead` line; the hold or failure sentence and
+    the model line when they apply; `Try now` when failed or no device.
+  - The undo line and notices are a glass toast above the bottom edge.
+- **Forming wave.** The same dots moving like a level meter: low and loose
+  while writing, taller while rendering, settling into the tune's shape when
+  it is done. It shows the stage and nothing else: no growth over time.
+- **Artwork.** Each tune has a picture drawn from its name, tempo and key
+  inside its genre's palette: a pure recipe in `TunesPanel`, drawn in
+  SwiftUI, never stored. It is on the shelf, in the share sheet, and in the
+  Now Playing widget (rendered once per tune with `ImageRenderer`).
+- **Chooser.** Title `Genre`, the chip, a grid three across of tiles in each
+  genre's palette with its name and kept count, `+ New genre` last. A click
+  plays what is kept and the tile grows into the player's backdrop. Hover
+  shows the pencil.
+- **Editor.** A grouped form: Name, Prompt, Variations, Tempo (slowest and
+  fastest), Colours (four swatches, each a colour well). The error sits
+  under its row. Then the hint, `Delete genre…` on the left, `Cancel` and
+  `Save` on the right.
+- **Share sheet.** The artwork, large, draggable: dropping it anywhere
+  gives the tune's file. Under the name and meta line the hint `Drag the
+  picture to drop the tune anywhere`. Rows: `Share…` (the system share
+  sheet; sub line `Mail, Messages, AirDrop and the rest`), `Copy its path`,
+  `Show it in Finder`, `Export a copy`, `Keep it for good` (a switch).
+  There is no `Copy the file` row.
+- **Setup cards**: as before, on glass over a neutral field.
+- **Status item**: a waveform symbol that animates while playing and holds
+  still when paused, the genre's name while playing, the composer's dot.
+- **Motion and power.** Everything animated stops when the popover closes.
+  Reduce Motion: still fields, no forming motion, no morphs. Low Power
+  Mode: still backdrop. Reduce Transparency is left to the system's glass.
 
 ## Ownership
 

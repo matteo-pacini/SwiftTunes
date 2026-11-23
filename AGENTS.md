@@ -18,10 +18,11 @@ Read, in this order, before any work:
 
 ## Rules
 
+- macOS 26 or later, Apple silicon. Liquid Glass is the base material: adopt
+  it everywhere a surface floats, with no fallback path.
 - Swift 6. The shell is AppKit (`NSStatusItem`, `NSPopover`, the status
   item's menu); the popover's content is SwiftUI in an `NSHostingController`.
-  No `MenuBarExtra`, no Catalyst, no Electron, no Xcode project file. Apple
-  silicon, macOS 14 or later.
+  No `MenuBarExtra`, no Catalyst, no Electron, no Xcode project file.
 - Apple frameworks and tools only: Foundation, AppKit, SwiftUI, AVFoundation,
   Accelerate, MediaPlayer, CryptoKit, Network, ServiceManagement, IOKit;
   SwiftPM, Swift Testing, `codesign`, `plutil`, `taskpolicy`. No third-party
