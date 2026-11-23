@@ -28,14 +28,14 @@ GPL-3.0-or-later.
 | 5 | Signing, releases | Local builds only, ad-hoc signed. No release workflow yet. |
 | 6 | Repository | Private on GitHub; nothing is pushed without the owner's word. |
 | 7 | Kept format | AAC, 256 kbit/s, `.m4a`, encoded by the system. |
-| 8 | Holds | Memory pressure (warn or critical), Low Power Mode, thermal state serious or critical. Checked before each job, every 10 s while one runs, every 30 s while held. |
+| 8 | Holds | Memory pressure (warn or critical), Low Power Mode, thermal state serious or critical. All three are checked before each job and every 30 s while held. While a job runs only power and heat are checked, every 10 s: the server's own load raises memory pressure, so that check would hold every tune. |
 | 9 | Global shortcut | None. No notifications either. |
 | 10 | Keys in the popover | Only the standard ones: Esc closes or cancels, Return presses the default button, Tab moves between fields, fields edit as fields do. |
 | 11 | Starting genres | Nine starting genres, bundled, copied to Application Support at first launch. |
 | 12 | Start at login | A "Start at Login" item in the status item's menu through `SMAppService`, off by default. If registration fails the item shows the failure as plain text and stays off. |
 | 13 | Updates | None. The menu shows the running version. |
 | 14 | Memory figure | "about 8 GiB of memory". |
-| 15 | Server lifetime | The server runs only while a job needs it: stopped whenever the composer rests (queue full), is held, fails, or is off. |
+| 15 | Server lifetime | The server runs only while a job needs it: stopped whenever the composer rests (queue full), is held, fails, or is off. A stop while a job runs first asks the server to cancel the job and waits up to 1 s, so quitting does not wait out the 5 s kill grace. The server runs at lower priority (nice 10). |
 | 16 | Wording | The sentences of the rule notes, with the substitutions of the working wording table. |
 | 17 | Validation mismatches | Where the rule notes give two readings of a validation rule (their "Read first", 1 to 3), the first, panel-side reading. |
 

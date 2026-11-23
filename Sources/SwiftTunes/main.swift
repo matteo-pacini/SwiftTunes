@@ -1,9 +1,7 @@
 import AppKit
-import TunesContract
-import TunesEngine
-import TunesPanel
 
-// Placeholder until the app role fills this target.
 let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
 app.setActivationPolicy(.accessory)
 app.run()
