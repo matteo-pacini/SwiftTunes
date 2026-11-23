@@ -1,4 +1,5 @@
 import MediaPlayer
+import SwiftUI
 import TunesContract
 import TunesPanel
 
@@ -7,6 +8,9 @@ import TunesPanel
 final class NowPlayingController {
     private let model: PanelModel
     private let center = MPRemoteCommandCenter.shared()
+    /// The last tune's picture and what it was drawn for, so each tune is
+    /// drawn once.
+    private var artwork: (key: String, item: MPMediaItemArtwork)?
 
     init(model: PanelModel) {
         self.model = model
@@ -55,7 +59,32 @@ final class NowPlayingController {
             d[MPMediaItemPropertyArtist] = genre
         }
         if let duration = n.duration { d[MPMediaItemPropertyPlaybackDuration] = duration }
+        if let item = picture(for: s) { d[MPMediaItemPropertyArtwork] = item }
         info.nowPlayingInfo = d
         info.playbackState = n.state == .playing ? .playing : .paused
+    }
+
+    /// The tune's artwork for the widget, drawn the first time a tune (by its
+    /// file and the name it is drawn from) is seen.
+    private func picture(for s: Snapshot) -> MPMediaItemArtwork? {
+        guard let t = s.tune else { return nil }
+        let key = "\(t.file)|\(t.name)"
+        if let artwork, artwork.key == key { return artwork.item }
+        let recipe = Artwork.recipe(name: t.name, bpm: t.bpm, key: t.key, palette: Decide.palette(s))
+        let renderer = ImageRenderer(content: ArtworkView(artwork: recipe, palette: Decide.palette(s), corner: 0)
+            .frame(width: 300, height: 300)
+            .environment(\.colorScheme, .dark))
+        renderer.scale = 2
+        guard let image = renderer.cgImage else { return nil }
+        let item = MPMediaItemArtwork(boundsSize: CGSize(width: 300, height: 300), requestHandler: Self.handler(image))
+        artwork = (key, item)
+        return item
+    }
+
+    /// MediaPlayer asks for the picture on a queue of its own, so the
+    /// handler must not belong to the main actor; it holds only an
+    /// immutable image.
+    private nonisolated static func handler(_ image: CGImage) -> @Sendable (CGSize) -> NSImage {
+        { _ in NSImage(cgImage: image, size: CGSize(width: 300, height: 300)) }
     }
 }

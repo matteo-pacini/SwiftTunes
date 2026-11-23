@@ -18,6 +18,9 @@ final class PanelModel {
         didSet { updateTick() }
     }
 
+    /// Low Power Mode is on: the backdrop holds still.
+    private(set) var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+
     /// Called after every new snapshot, for the status item and Now Playing.
     @ObservationIgnored var onSnapshot: ((Snapshot) -> Void)?
 
@@ -26,6 +29,7 @@ final class PanelModel {
     @ObservationIgnored private var tick: Task<Void, Never>?
     @ObservationIgnored private var editorCall: Task<Void, Never>?
     @ObservationIgnored private var shareCall: Task<Void, Never>?
+    @ObservationIgnored private var powerWatch: Task<Void, Never>?
 
     init(engine: EngineAPI, home: String) {
         self.engine = engine
@@ -38,6 +42,11 @@ final class PanelModel {
             now = Self.clock()
             updateTick()
             onSnapshot?(s)
+        }
+        powerWatch = Task { [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: .NSProcessInfoPowerStateDidChange).map({ _ in () }) {
+                self?.lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+            }
         }
     }
 
@@ -66,6 +75,7 @@ final class PanelModel {
         observation?.cancel()
         observation = nil
         tick?.cancel()
+        powerWatch?.cancel()
         cancelCalls()
         await engine.shutdown()
     }
@@ -161,6 +171,13 @@ final class PanelModel {
     }
 
     func type(_ field: EditorField, _ text: String) { set(panel.typed(field, text)) }
+
+    func pickColour(_ index: Int, hex: String, shown: [String]) { set(panel.pickingColour(index, hex: hex, shown: shown)) }
+
+    /// A genre's palette for its chooser tile.
+    func palette(ofGenre id: String) -> Palette {
+        snapshot.genres.first { $0.id == id }.map(Decide.palette(of:)) ?? Palette.made(from: id)
+    }
 
     func save() {
         switch panel.saving(snapshot) {

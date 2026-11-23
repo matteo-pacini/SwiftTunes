@@ -9,31 +9,47 @@ struct SetupView: View {
     let model: PanelModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(verbatim: card.title).font(.system(size: 17, weight: .semibold))
-            Text(verbatim: card.detail).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 10) {
+            Text(verbatim: card.title).font(.system(size: 20, weight: .bold, design: .rounded))
+            Text(verbatim: card.detail).font(.system(size: 12.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let progress = card.progress {
                 ProgressView(value: progress).progressViewStyle(.linear)
             }
             if !card.rows.isEmpty {
-                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
-                    ForEach(card.rows, id: \.label) { row in
-                        GridRow {
+                VStack(spacing: 0) {
+                    ForEach(Array(card.rows.enumerated()), id: \.offset) { i, row in
+                        if i > 0 { Divider() }
+                        HStack {
                             Text(verbatim: row.label).foregroundStyle(.secondary)
-                            Text(verbatim: row.value).gridColumnAlignment(.trailing).frame(maxWidth: .infinity, alignment: .trailing)
+                            Spacer()
+                            Text(verbatim: row.value).contentTransition(.numericText())
                         }
+                        .font(.system(size: 12.5))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                     }
                 }
-                .font(.system(size: 12))
+                .glassEffect(.regular, in: .rect(cornerRadius: 13))
             }
             HStack {
                 Spacer()
-                PushButton(control: card.button, prominent: card.kind != .downloading) { model.send(card.command) }
+                Button { model.send(card.command) } label: { Text(verbatim: card.button.text) }
+                    .buttonStyle(card.kind == .downloading ? AnyPrimitiveButtonStyle(.glass) : AnyPrimitiveButtonStyle(.glassProminent))
+                    .helped(card.button)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
     }
+}
+
+/// A button style chosen at run time.
+struct AnyPrimitiveButtonStyle: PrimitiveButtonStyle {
+    private let make: (Configuration) -> AnyView
+
+    init<S: PrimitiveButtonStyle>(_ style: S) {
+        make = { AnyView(style.makeBody(configuration: $0)) }
+    }
+
+    func makeBody(configuration: Configuration) -> some View { make(configuration) }
 }
 
 // MARK: - Chooser
@@ -41,97 +57,89 @@ struct SetupView: View {
 struct ChooserView: View {
     let card: ChooserCard
     let model: PanelModel
+    let space: Namespace.ID
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 12) {
             if let back = card.back {
                 BackLink(control: back, action: model.backToPlayer)
             }
             HStack(alignment: .firstTextBaseline) {
-                Text(verbatim: card.title).font(.system(size: 17, weight: .semibold))
+                Text(verbatim: card.title).font(.system(size: 20, weight: .bold, design: .rounded))
                 Spacer()
-                Chip(text: card.chip)
+                Pill(text: card.chip)
             }
             if let strip = card.strip { Strip(text: strip) }
             if !card.empty.isEmpty {
-                Text(verbatim: card.empty).foregroundStyle(.secondary)
+                ContentUnavailableView {
+                    Label { Text(verbatim: card.empty) } icon: { Image(systemName: "music.note.list") }
+                }
             }
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                 ForEach(card.cells, id: \.id) { cell in
-                    GenreCell(cell: cell, model: model)
+                    GenreTile(cell: cell, palette: model.palette(ofGenre: cell.id), model: model, space: space)
                 }
                 Button(action: model.addGenre) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(verbatim: card.add.text).fontWeight(.medium).foregroundStyle(Color.accentColor).lineLimit(1)
-                        Text(verbatim: " ").font(.system(size: 11))
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 8)
-                    .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 7))
-                    .contentShape(Rectangle())
+                    Text(verbatim: card.add.text)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 74)
+                        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.secondary.opacity(0.6), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])))
+                        .contentShape(.rect(cornerRadius: 14))
                 }
                 .buttonStyle(.plain)
-                .help(card.add.help)
-                .accessibilityLabel(Text(verbatim: card.add.help))
+                .helped(card.add)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
     }
 }
 
-struct GenreCell: View {
+struct GenreTile: View {
     let cell: ChooserCard.Cell
+    let palette: Palette
     let model: PanelModel
+    let space: Namespace.ID
     @State private var hovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Button { model.pick(cell.id) } label: {
+        Button {
+            withAnimation(reduceMotion ? nil : .spring(duration: 0.5)) { model.pick(cell.id) }
+        } label: {
             VStack(alignment: .leading, spacing: 1) {
-                Text(verbatim: cell.name).fontWeight(.medium).lineLimit(1).truncationMode(.tail)
-                Text(verbatim: cell.sub).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                Spacer(minLength: 0)
+                Text(verbatim: cell.name).font(.system(size: 13.5, weight: .bold, design: .rounded)).lineLimit(1)
+                Text(verbatim: cell.sub).font(.system(size: 11)).opacity(0.75).lineLimit(1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .foregroundStyle(.white)
             .padding(.horizontal, 9)
             .padding(.vertical, 8)
-            .background(.quaternary.opacity(hovered ? 1 : 0.6), in: RoundedRectangle(cornerRadius: 7))
-            .overlay {
-                if cell.current {
-                    RoundedRectangle(cornerRadius: 7).strokeBorder(Color.accentColor, lineWidth: 2)
-                }
+            .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
+            .background {
+                Backdrop(palette: palette)
+                    .environment(\.colorScheme, .dark)
+                    .matchedGeometryEffect(id: cell.id, in: space)
             }
-            .contentShape(Rectangle())
+            .clipShape(.rect(cornerRadius: 14))
+            .overlay {
+                if cell.current { RoundedRectangle(cornerRadius: 14).strokeBorder(.white, lineWidth: 2.5) }
+            }
+            .contentShape(.rect(cornerRadius: 14))
         }
         .buttonStyle(.plain)
-        .help(cell.pick.help)
-        .accessibilityLabel(Text(verbatim: cell.pick.help))
+        .helped(cell.pick)
         .overlay(alignment: .topTrailing) {
             if hovered {
                 Button { model.editGenre(cell.id) } label: {
-                    Image(systemName: "pencil").font(.system(size: 12)).foregroundStyle(.secondary).padding(6)
+                    Image(systemName: "pencil").font(.system(size: 11, weight: .semibold)).frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain)
-                .help(cell.edit.help)
-                .accessibilityLabel(Text(verbatim: cell.edit.help))
+                .glassEffect(.regular.interactive(), in: .circle)
+                .padding(5)
+                .helped(cell.edit)
             }
         }
         .onHover { hovered = $0 }
-    }
-}
-
-struct Chip: View {
-    let text: String
-
-    var body: some View {
-        if !text.isEmpty {
-            Text(verbatim: text)
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
-                .background(.quaternary.opacity(0.6), in: Capsule())
-        }
     }
 }
 
@@ -143,83 +151,133 @@ struct EditorView: View {
     @FocusState private var focus: EditorField?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            if let ask = card.ask {
-                AskView(ask: ask, model: model)
-            } else {
-                form
-            }
+        if let ask = card.ask {
+            AskView(ask: ask, model: model)
+        } else {
+            form
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
     }
 
     private var form: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            BackLink(control: card.back, action: model.cancelEdit)
-            HStack(alignment: .firstTextBaseline) {
-                Text(verbatim: card.title).font(.system(size: 17, weight: .semibold)).lineLimit(1)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                BackLink(control: card.back, action: model.cancelEdit)
                 Spacer()
-                Chip(text: card.chip)
+                if !card.chip.isEmpty { Pill(text: card.chip) }
             }
-            FieldBox(field: card.name) {
-                TextField(text: binding(.name)) { Text(verbatim: card.name.placeholder) }
-                    .focused($focus, equals: .name)
-            }
-            FieldBox(field: card.caption) {
-                TextField(text: binding(.caption), axis: .vertical) { Text(verbatim: card.caption.placeholder) }
-                    .lineLimit(2...4)
-                    .focused($focus, equals: .caption)
-            }
-            FieldBox(field: card.turns) {
-                TextEditor(text: binding(.turns))
-                    .font(.system(size: 12.5))
-                    .frame(height: 64)
-                    .scrollContentBackground(.hidden)
-                    // NSTextView pads each line by its text container's 5 pt; a field does not.
-                    .padding(.leading, -5)
-                    .focused($focus, equals: .turns)
-                    .overlay(alignment: .topLeading) {
-                        if card.values.turns.isEmpty {
-                            Text(verbatim: card.turns.placeholder).foregroundStyle(.tertiary).allowsHitTesting(false)
-                        }
+            Text(verbatim: card.title).font(.system(size: 20, weight: .bold, design: .rounded)).lineLimit(1)
+            Form {
+                Section {
+                    row(card.name, .name) {
+                        TextField(text: binding(.name), prompt: Text(verbatim: card.name.placeholder)) { Text(verbatim: card.name.label) }
+                            .labelsHidden()
+                            .multilineTextAlignment(.trailing)
+                            .focused($focus, equals: .name)
                     }
+                    row(card.caption, .caption) {
+                        TextField(text: binding(.caption), prompt: Text(verbatim: card.caption.placeholder), axis: .vertical) { Text(verbatim: card.caption.label) }
+                            .labelsHidden()
+                            .lineLimit(1...4)
+                            .multilineTextAlignment(.trailing)
+                            .focused($focus, equals: .caption)
+                    }
+                    row(card.turns, .turns) {
+                        TextEditor(text: binding(.turns))
+                            .frame(height: 54)
+                            .scrollContentBackground(.hidden)
+                            .focused($focus, equals: .turns)
+                            .overlay(alignment: .topTrailing) {
+                                if card.values.turns.isEmpty {
+                                    Text(verbatim: card.turns.placeholder).foregroundStyle(.tertiary).allowsHitTesting(false)
+                                }
+                            }
+                    }
+                    VStack(alignment: .leading, spacing: 3) {
+                        LabeledContent {
+                            HStack(spacing: 6) {
+                                tempo(.slowest, card.slowest)
+                                Text(verbatim: "to").foregroundStyle(.secondary)
+                                tempo(.fastest, card.fastest)
+                                Text(verbatim: "BPM").foregroundStyle(.secondary)
+                            }
+                        } label: {
+                            Text(verbatim: "Tempo")
+                        }
+                        if !card.tempoError.isEmpty { error(card.tempoError) }
+                    }
+                    LabeledContent {
+                        HStack(spacing: 6) {
+                            ForEach(0..<card.colours.count, id: \.self) { i in
+                                ColorPicker(selection: colour(i), supportsOpacity: false) { Text(verbatim: "\(card.coloursLabel) \(i + 1)") }
+                                    .labelsHidden()
+                                    .controlSize(.small)
+                            }
+                        }
+                    } label: {
+                        Text(verbatim: card.coloursLabel)
+                    }
+                }
             }
-            HStack(alignment: .top, spacing: 10) {
-                FieldBox(field: card.slowest) { tempo(.slowest) }
-                FieldBox(field: card.fastest) { tempo(.fastest) }
-            }
-            if !card.tempoError.isEmpty {
-                Text(verbatim: card.tempoError).font(.system(size: 11.5)).foregroundStyle(Tone.red.color).fixedSize(horizontal: false, vertical: true)
-            }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .scrollDisabled(true)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, -20)
+            .padding(.vertical, -20)
             Text(verbatim: card.hint).font(.system(size: 11.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 if let delete = card.delete {
                     Button(role: .destructive, action: model.askDelete) {
-                        Text(verbatim: delete.text).foregroundStyle(Color(nsColor: .systemRed))
+                        Text(verbatim: delete.text).foregroundStyle(Tone.red.color).fontWeight(.semibold)
                     }
                     .buttonStyle(.borderless)
                     .disabled(!delete.enabled)
-                    .help(delete.help)
-                    .accessibilityLabel(Text(verbatim: delete.help))
+                    .helped(delete)
                 }
                 Spacer()
-                PushButton(control: card.cancel, action: model.cancelEdit)
+                Button(action: model.cancelEdit) { Text(verbatim: card.cancel.text) }
+                    .buttonStyle(.glass)
                     .keyboardShortcut(.cancelAction)
-                PushButton(control: card.save, prominent: true, action: model.save)
+                    .helped(card.cancel)
+                Button(action: model.save) { Text(verbatim: card.save.text) }
+                    .buttonStyle(.glassProminent)
                     .keyboardShortcut(.defaultAction)
+                    .disabled(!card.save.enabled)
+                    .helped(card.save)
             }
         }
         .disabled(card.loading)
         .onAppear { focus = .name }
     }
 
-    private func tempo(_ field: EditorField) -> some View {
-        HStack(spacing: 4) {
-            TextField(text: binding(field)) { Text(verbatim: "") }
-                .focused($focus, equals: field)
-            Text(verbatim: "BPM").foregroundStyle(.secondary)
+    private func row<C: View>(_ field: EditorCard.Field, _ which: EditorField, @ViewBuilder content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            LabeledContent {
+                content()
+            } label: {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(verbatim: field.label)
+                    if !field.side.isEmpty { Text(verbatim: field.side).font(.system(size: 10.5)).foregroundStyle(.secondary) }
+                }
+            }
+            .accessibilityLabel(Text(verbatim: field.label))
+            if !field.error.isEmpty { error(field.error) }
         }
+    }
+
+    private func error(_ text: String) -> some View {
+        Text(verbatim: text).font(.system(size: 11.5)).foregroundStyle(Tone.red.color).fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func tempo(_ which: EditorField, _ field: EditorCard.Field) -> some View {
+        TextField(text: binding(which), prompt: Text(verbatim: "")) { Text(verbatim: field.label) }
+            .labelsHidden()
+            .multilineTextAlignment(.trailing)
+            .frame(width: 44)
+            .focused($focus, equals: which)
+            .padding(.horizontal, 4)
+            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(field.bad ? Tone.red.color : .clear))
+            .accessibilityLabel(Text(verbatim: field.label))
     }
 
     private func binding(_ field: EditorField) -> Binding<String> {
@@ -236,34 +294,12 @@ struct EditorView: View {
             set: { model.type(field, $0) }
         )
     }
-}
 
-/// A labelled box with its note, drawn red when it is wrong, its error
-/// under it.
-struct FieldBox<Content: View>: View {
-    let field: EditorCard.Field
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack {
-                Text(verbatim: field.label).font(.system(size: 10, weight: .semibold)).tracking(0.7)
-                Spacer()
-                Text(verbatim: field.side).font(.system(size: 11))
-            }
-            .foregroundStyle(.secondary)
-            content
-                .textFieldStyle(.plain)
-                .font(.system(size: 12.5))
-                .padding(.horizontal, 7)
-                .padding(.vertical, 5)
-                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(field.bad ? Color.red : Color.secondary.opacity(0.35), lineWidth: 1))
-                .accessibilityLabel(Text(verbatim: field.label.capitalized))
-            if !field.error.isEmpty {
-                Text(verbatim: field.error).font(.system(size: 11.5)).foregroundStyle(Tone.red.color).fixedSize(horizontal: false, vertical: true)
-            }
-        }
+    private func colour(_ i: Int) -> Binding<Color> {
+        Binding(
+            get: { (RGB(hex: card.colours[i]) ?? RGB(0, 0, 0)).color },
+            set: { model.pickColour(i, hex: RGB($0).hex, shown: card.colours) }
+        )
     }
 }
 
@@ -272,16 +308,25 @@ struct AskView: View {
     let model: PanelModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(verbatim: ask.title).font(.system(size: 17, weight: .semibold))
-            Text(verbatim: ask.detail).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 10) {
+            Text(verbatim: ask.title).font(.system(size: 20, weight: .bold, design: .rounded))
+            Text(verbatim: ask.detail).font(.system(size: 12.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if !ask.error.isEmpty {
                 Text(verbatim: ask.error).font(.system(size: 11.5)).foregroundStyle(Tone.red.color).fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 8) {
                 Spacer()
-                PushButton(control: ask.keep, action: model.keepGenre).keyboardShortcut(.cancelAction)
-                PushButton(control: ask.delete, destructive: true, action: model.deleteGenre)
+                Button(action: model.keepGenre) { Text(verbatim: ask.keep.text) }
+                    .buttonStyle(.glass)
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(!ask.keep.enabled)
+                    .helped(ask.keep)
+                Button(role: .destructive, action: model.deleteGenre) {
+                    Text(verbatim: ask.delete.text).foregroundStyle(Tone.red.color)
+                }
+                .buttonStyle(.glass)
+                .disabled(!ask.delete.enabled)
+                .helped(ask.delete)
             }
         }
     }
@@ -294,68 +339,98 @@ struct ShareView: View {
     let model: PanelModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            BackLink(control: card.back, action: model.closeShare)
-            SectionHeading(title: "SHARE") {
-                Text(verbatim: card.head).font(.system(size: 11.5)).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                BackLink(control: card.back, action: model.closeShare)
+                Spacer()
+                Caps(text: "SHARE")
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(verbatim: card.name).font(.system(size: 17, weight: .semibold)).lineLimit(2)
-                Text(verbatim: card.meta.isEmpty ? " " : card.meta).font(.system(size: 12)).foregroundStyle(.secondary)
-            }
-            VStack(spacing: 0) {
-                ForEach(card.rows, id: \.title) { row in
-                    ShareRow(row: row) { model.shareAction(row.action) }
+            HStack(spacing: 12) {
+                picture
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: card.name).font(.system(size: 19, weight: .bold, design: .rounded)).lineLimit(2)
+                    Text(verbatim: card.meta.isEmpty ? " " : card.meta).font(.system(size: 12)).foregroundStyle(.secondary)
+                    Text(verbatim: card.hint).font(.system(size: 11.5)).foregroundStyle(.tertiary).padding(.top, 2)
                 }
             }
+            VStack(spacing: 0) {
+                ForEach(Array(card.rows.enumerated()), id: \.offset) { i, row in
+                    if i > 0 { Divider().padding(.horizontal, 12) }
+                    ShareRow(row: row, file: card.file, model: model)
+                }
+            }
+            .glassEffect(.regular, in: .rect(cornerRadius: 13))
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+    }
+
+    @ViewBuilder private var picture: some View {
+        let art = ArtworkView(artwork: card.artwork, palette: Decide.palette(model.snapshot), corner: 14)
+            .frame(width: 74, height: 74)
+            .shadow(color: .black.opacity(0.35), radius: 8, y: 4)
+        if let file = card.file {
+            art.draggable(file) {
+                ArtworkView(artwork: card.artwork, palette: Decide.palette(model.snapshot), corner: 14).frame(width: 74, height: 74)
+            }
+            .helped(Control(help: card.hint))
+        } else {
+            art
+        }
     }
 }
 
 struct ShareRow: View {
     let row: ShareCard.Row
-    let action: () -> Void
+    let file: URL?
+    let model: PanelModel
     @State private var hovered = false
 
-    private var symbol: String {
-        switch row.action {
-        case .share: "square.and.arrow.up.on.square"
-        case .copyPath: "link"
-        case .showInFinder: "folder"
-        case .export: "square.and.arrow.up"
-        case .keep: "star"
+    var body: some View {
+        if row.action == .share, let file {
+            ShareLink(item: file) { label }
+                .buttonStyle(.plain)
+                .disabled(!row.control.enabled)
+                .helped(row.control)
+                .onHover { hovered = $0 }
+        } else if let on = row.on {
+            HStack {
+                text
+                Spacer(minLength: 0)
+                Toggle(isOn: Binding(get: { on }, set: { _ in model.shareAction(row.action) })) { Text(verbatim: row.title) }
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .disabled(!row.control.enabled)
+                    .helped(row.control)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        } else {
+            Button { model.shareAction(row.action) } label: { label }
+                .buttonStyle(.plain)
+                .disabled(!row.control.enabled)
+                .helped(row.control)
+                .onHover { hovered = $0 }
         }
     }
 
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 9) {
-                Image(systemName: symbol).frame(width: 22)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(verbatim: row.title).fontWeight(.medium)
-                    if !row.sub.isEmpty {
-                        Text(verbatim: row.sub).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
-                    }
-                }
-                Spacer(minLength: 0)
-                if let on = row.on {
-                    Toggle(isOn: .constant(on)) { Text(verbatim: row.title) }
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                        .controlSize(.mini)
-                        .allowsHitTesting(false)
-                }
+    private var text: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(verbatim: row.title).font(.system(size: 12.5))
+            if !row.sub.isEmpty {
+                Text(verbatim: row.sub).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
             }
-            .padding(6)
-            .background(hovered && row.control.enabled ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 6))
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .disabled(!row.control.enabled)
-        .help(row.control.help)
-        .accessibilityLabel(Text(verbatim: row.control.help))
-        .onHover { hovered = $0 }
+    }
+
+    private var label: some View {
+        HStack {
+            text
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(hovered && row.control.enabled ? Color.primary.opacity(0.08) : .clear)
+        .contentShape(Rectangle())
+        .opacity(row.control.enabled ? 1 : 0.5)
     }
 }

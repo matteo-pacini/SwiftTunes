@@ -14,15 +14,15 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
     /// Why the last Start at Login change failed, as the system said it.
     private var loginError: String?
     private var launchOpen: Task<Void, Never>?
+    private let look = StatusLook()
+    private lazy var content = PassThroughHostingView(rootView: StatusContent(look: look))
 
     init(model: PanelModel) {
         self.model = model
         super.init()
-        let image = NSImage(systemSymbolName: "music.note", accessibilityDescription: "SwiftTunes")
-        image?.isTemplate = true
         if let button = item.button {
-            button.image = image
-            button.imagePosition = .imageLeading
+            button.addSubview(content)
+            button.setAccessibilityLabel("SwiftTunes")
             button.target = self
             button.action = #selector(clicked)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -39,21 +39,14 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
 
     func update(_ s: Snapshot) {
         let view = Decide.statusItem(s)
-        guard let button = item.button else { return }
-        button.appearsDisabled = view.dim
-        button.toolTip = view.help
-        let title = NSMutableAttributedString()
-        if !view.text.isEmpty {
-            title.append(NSAttributedString(string: " " + view.text))
+        look.item = view
+        look.playing = s.player == .playing
+        item.button?.toolTip = view.help
+        let size = content.fittingSize
+        item.length = size.width
+        if let button = item.button {
+            content.frame = NSRect(x: 0, y: (button.bounds.height - size.height) / 2, width: size.width, height: size.height)
         }
-        if let dot = view.dot {
-            title.append(NSAttributedString(string: " ●", attributes: [
-                .foregroundColor: NSColor(dot.color),
-                .font: NSFont.systemFont(ofSize: 7),
-                .baselineOffset: 4,
-            ]))
-        }
-        button.attributedTitle = title
     }
 
     @objc private func clicked() {
@@ -159,28 +152,42 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
     }
 }
 
-extension Tone {
-    var color: Color {
-        switch self {
-        case .normal: .primary
-        case .soft: .secondary
-        case .dim: .secondary
-        case .cyan: Self.tone(light: 0x0B7A9C, dark: 0x64D2FF)
-        case .green: Self.tone(light: 0x1A7F37, dark: 0x30D158)
-        case .orange: Self.tone(light: 0xB85C00, dark: 0xFF9F0A)
-        case .red: Self.tone(light: 0xC9001A, dark: 0xFF5A4F)
-        case .accent: .accentColor
-        }
-    }
+/// What the status item draws.
+@Observable
+final class StatusLook {
+    /// nil before the first snapshot.
+    var item: StatusItem?
+    var playing = false
+}
 
-    /// The system's bright tones lose contrast on a light popover; these keep
-    /// it in both appearances.
-    private static func tone(light: UInt32, dark: UInt32) -> Color {
-        func rgb(_ v: UInt32) -> NSColor {
-            NSColor(srgbRed: CGFloat(v >> 16 & 0xFF) / 255, green: CGFloat(v >> 8 & 0xFF) / 255, blue: CGFloat(v & 0xFF) / 255, alpha: 1)
+/// The waveform symbol (moving while a tune plays, still otherwise), the
+/// genre's name while playing, the composer's dot.
+struct StatusContent: View {
+    let look: StatusLook
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "waveform")
+                .symbolEffect(.variableColor.iterative, options: .repeat(.continuous), isActive: look.playing)
+            if let text = look.item?.text, !text.isEmpty {
+                Text(verbatim: text)
+            }
         }
-        return Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? rgb(dark) : rgb(light)
-        })
+        .font(.system(size: 13))
+        .opacity(look.item?.dim ?? true ? 0.45 : 1)
+        .overlay(alignment: .topTrailing) {
+            if let dot = look.item?.dot {
+                Circle().fill(dot.color).frame(width: 5, height: 5).offset(x: 5, y: 1)
+            }
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 2)
+        .fixedSize()
     }
+}
+
+/// Draws SwiftUI inside the status bar button and leaves every click to
+/// the button.
+final class PassThroughHostingView<Content: View>: NSHostingView<Content> {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
