@@ -74,7 +74,10 @@ in `Package.swift` (swift-tools-version 6.2):
   without a comment giving the invariant that makes it safe. No
   `DispatchQueue`, locks or semaphores for state; a C callback hops to the
   main actor before touching anything.
-- No `Task.detached`. A `Task` is stored and cancelled by whoever starts it.
+- No `Task.detached`. A `Task` is stored and cancelled by whoever starts it;
+  the engine cancels all of its own in `shutdown()`. The one exception is a
+  one-shot hop to the main actor from a framework callback that says nothing
+  about its thread, with a comment saying so.
 
 SwiftUI views draw the view state `TunesPanel` computes and send commands;
 they hold no rules. State reaches them through one `@Observable` main-actor

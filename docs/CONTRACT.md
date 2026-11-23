@@ -38,7 +38,9 @@ public protocol EngineAPI: AnyObject {
     func exportCopy(of target: TuneTarget) async -> Result<URL, Refusal>
 
     /// Stops the player, cancels the job, stops the server and waits until no
-    /// child process remains. Called once, from applicationWillTerminate.
+    /// child process remains. Called once, while the app is terminating: the app
+    /// answers applicationShouldTerminate with terminateLater and replies when
+    /// this returns.
     func shutdown() async
 }
 
@@ -101,7 +103,7 @@ seconds as `Double`. Sizes are bytes as `Int64`. A field marked optional is
 | `expect` | `expect` | `Expect?` | Median stage times of the last five tunes; nil until both stages have been timed once [R41]. |
 | `undo` | `undo` | `Undo?` | An offered undo. |
 | `model` | `model` | `Model` | The composer's model and its state. |
-| `error` | `error` | `String?` | One line for the strip over the player: the first present of the genres file's error, the play error, the file error. Plain text. |
+| `error` | `error` | `String?` | One line for the strip over the player: the first present of the pins file's error, the genres file's error, the play error, the file error. Plain text. |
 
 `Download`: `file` (`Int`, 1-based), `files` (`Int`), `name` (`String`: one of
 `language model`, `diffusion model`, `text encoder`, `VAE`), `done`
