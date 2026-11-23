@@ -148,16 +148,7 @@ nonisolated enum AudioWork {
             throw AudioFailure(description: "no export session")
         }
         session.metadata = metadata(tags)
-        if #available(macOS 15, *) {
-            try await session.export(to: target, as: .m4a)
-        } else {
-            session.outputURL = target
-            session.outputFileType = .m4a
-            await session.export()
-            if session.status != .completed {
-                throw session.error ?? AudioFailure(description: "the export did not finish")
-            }
-        }
+        try await session.export(to: target, as: .m4a)
     }
 
     static func metadata(_ tags: TuneTags) -> [AVMetadataItem] {
