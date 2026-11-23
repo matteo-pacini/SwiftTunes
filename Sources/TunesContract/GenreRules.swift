@@ -18,37 +18,48 @@ public enum GenreRules {
     /// counted in Unicode scalars. "Line N" counts the lines as typed,
     /// blank and repeated ones included. Names compare without case.
     public static func fieldError(_ fields: GenreFieldsText, others: [String]) -> Refusal? {
+        problems(fields, others: others).first.map { Refusal(field: $0.field, text: $0.text) }
+    }
+
+    /// At most one problem per field, in the order `fieldError` checks them.
+    /// `fieldError` is the first of these as a `Refusal`.
+    public static func problems(_ fields: GenreFieldsText, others: [String]) -> [GenreProblem] {
+        var out: [GenreProblem] = []
         if let text = nameError(trim(fields.name), others: others) {
-            return Refusal(field: .name, text: text)
+            out.append(GenreProblem(field: .name, boxes: [.name], text: text))
         }
         let caption = trim(fields.caption)
-        if caption.isEmpty {
-            return Refusal(field: .caption, text: "A genre needs a prompt.")
-        }
         let captionCount = caption.unicodeScalars.count
-        if captionCount > captionMax {
-            return Refusal(field: .caption, text: "A prompt is at most \(captionMax) characters; this one has \(captionCount).")
+        if caption.isEmpty {
+            out.append(GenreProblem(field: .caption, boxes: [.caption], text: "A genre needs a prompt."))
+        } else if captionCount > captionMax {
+            out.append(GenreProblem(field: .caption, boxes: [.caption], text: "A prompt is at most \(captionMax) characters; this one has \(captionCount)."))
         }
         let parsed = parseTurns(fields.turns)
         if let line = parsed.longLine {
-            return Refusal(field: .turns, text: "Line \(line) is longer than \(turnMax) characters.")
-        }
-        if parsed.turns.count > turnsMax {
-            return Refusal(field: .turns, text: "At most \(turnsMax) variations; this has \(parsed.turns.count).")
+            out.append(GenreProblem(field: .turns, boxes: [.turns], text: "Line \(line) is longer than \(turnMax) characters."))
+        } else if parsed.turns.count > turnsMax {
+            out.append(GenreProblem(field: .turns, boxes: [.turns], text: "At most \(turnsMax) variations; this has \(parsed.turns.count)."))
         }
         let lo = wholeNumber(fields.slowest)
         let hi = wholeNumber(fields.fastest)
-        guard let lo, let hi else {
+        if lo == nil || hi == nil {
+            var boxes: Set<GenreBox> = []
+            if lo == nil { boxes.insert(.slowest) }
+            if hi == nil { boxes.insert(.fastest) }
             let which = lo == nil ? "slowest" : "fastest"
-            return Refusal(field: .bpm, text: "The \(which) tempo needs a whole number.")
+            out.append(GenreProblem(field: .bpm, boxes: boxes, text: "The \(which) tempo needs a whole number."))
+        } else if let lo, let hi {
+            if !bpmRange.contains(lo) || !bpmRange.contains(hi) {
+                var boxes: Set<GenreBox> = []
+                if !bpmRange.contains(lo) { boxes.insert(.slowest) }
+                if !bpmRange.contains(hi) { boxes.insert(.fastest) }
+                out.append(GenreProblem(field: .bpm, boxes: boxes, text: "Tempos go from \(bpmRange.lowerBound) to \(bpmRange.upperBound) BPM."))
+            } else if lo > hi {
+                out.append(GenreProblem(field: .bpm, boxes: [.slowest, .fastest], text: "The slowest tempo is above the fastest."))
+            }
         }
-        if !bpmRange.contains(lo) || !bpmRange.contains(hi) {
-            return Refusal(field: .bpm, text: "Tempos go from \(bpmRange.lowerBound) to \(bpmRange.upperBound) BPM.")
-        }
-        if lo > hi {
-            return Refusal(field: .bpm, text: "The slowest tempo is above the fastest.")
-        }
-        return nil
+        return out
     }
 
     /// The text trimmed as both sides trim it.
@@ -128,6 +139,24 @@ public enum GenreRules {
         }
         out.append(String(current))
         return out
+    }
+}
+
+/// A box of the genre editor.
+public enum GenreBox: Sendable, Hashable { case name, caption, turns, slowest, fastest }
+
+/// One field's first problem, with the boxes to mark.
+public struct GenreProblem: Sendable, Equatable {
+    /// The slowest and fastest boxes share `bpm`.
+    public var field: GenreField
+    /// Both tempo boxes when slowest is above fastest.
+    public var boxes: Set<GenreBox>
+    public var text: String
+
+    public init(field: GenreField, boxes: Set<GenreBox>, text: String) {
+        self.field = field
+        self.boxes = boxes
+        self.text = text
     }
 }
 

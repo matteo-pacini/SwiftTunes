@@ -107,4 +107,44 @@ import TunesContract
         #expect(parsed.turns == ["a", "b", "c"])
         #expect(parsed.longLine == nil)
     }
+
+    @Test func problemsGiveOnePerFieldInOrder() {
+        let f = Self.fields(name: "", caption: "", turns: Self.long121, slowest: "x", fastest: "")
+        let p = GenreRules.problems(f, others: [])
+        #expect(p == [
+            GenreProblem(field: .name, boxes: [.name], text: "A genre needs a name."),
+            GenreProblem(field: .caption, boxes: [.caption], text: "A genre needs a prompt."),
+            GenreProblem(field: .turns, boxes: [.turns], text: "Line 1 is longer than 120 characters."),
+            GenreProblem(field: .bpm, boxes: [.slowest, .fastest], text: "The slowest tempo needs a whole number."),
+        ])
+        #expect(GenreRules.fieldError(f, others: []) == Refusal(field: .name, text: "A genre needs a name."))
+    }
+
+    @Test func noProblemsForGoodFields() {
+        #expect(GenreRules.problems(Self.fields(), others: ["Lo-fi"]).isEmpty)
+    }
+
+    @Test(arguments: [
+        ("x", "120", Set<GenreBox>([.slowest]), "The slowest tempo needs a whole number."),
+        ("70", "", Set<GenreBox>([.fastest]), "The fastest tempo needs a whole number."),
+        ("29", "120", Set<GenreBox>([.slowest]), "Tempos go from 30 to 300 BPM."),
+        ("70", "301", Set<GenreBox>([.fastest]), "Tempos go from 30 to 300 BPM."),
+        ("10", "999", Set<GenreBox>([.slowest, .fastest]), "Tempos go from 30 to 300 BPM."),
+        ("121", "120", Set<GenreBox>([.slowest, .fastest]), "The slowest tempo is above the fastest."),
+    ])
+    func tempoBoxes(slowest: String, fastest: String, boxes: Set<GenreBox>, text: String) {
+        let p = GenreRules.problems(Self.fields(slowest: slowest, fastest: fastest), others: [])
+        #expect(p == [GenreProblem(field: .bpm, boxes: boxes, text: text)])
+    }
+
+    @Test func fieldErrorIsTheFirstProblem() {
+        let cases = [
+            Self.fields(caption: ""), Self.fields(turns: Self.long121, slowest: "1"),
+            Self.fields(name: "Exports", fastest: "x"), Self.fields(slowest: "200", fastest: "100"),
+        ]
+        for f in cases {
+            let first = GenreRules.problems(f, others: []).first
+            #expect(GenreRules.fieldError(f, others: []) == first.map { Refusal(field: $0.field, text: $0.text) })
+        }
+    }
 }
