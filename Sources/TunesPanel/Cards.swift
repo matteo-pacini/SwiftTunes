@@ -25,12 +25,41 @@ public struct Control: Sendable, Equatable {
 
 /// The one card the popover shows.
 public enum Card: Sendable, Equatable {
+    case words(WordsCard)
     case queue(QueueCard)
     case setup(SetupCard)
     case chooser(ChooserCard)
     case editor(EditorCard)
     case share(ShareCard)
     case player(PlayerCard)
+}
+
+// MARK: - Your own words
+
+/// The sheet asking for one tune sung with the user's words.
+public struct WordsCard: Sendable, Equatable {
+    public var back: Control
+    /// `SING MY WORDS`.
+    public var label: String
+    /// `A tune in <g>`.
+    public var title: String
+    /// `+ Verse` and the rest.
+    public var inserts: [Control]
+    public var text: String
+    public var caret: Int
+    /// `N sung lines · N of 2,000 characters`.
+    public var counter: String
+    public var counterRight: String
+    /// The words' rule, once they have been typed in.
+    public var wordsError: String
+    public var nameLabel: String
+    public var name: String
+    public var nameError: String
+    public var note: String
+    /// The engine's refusal of the last request.
+    public var refused: String
+    public var cancel: Control
+    public var compose: Control
 }
 
 // MARK: - Queue
@@ -114,6 +143,14 @@ public struct EditorCard: Sendable, Equatable {
     /// The Colours row: the four colours as `#RRGGBB`.
     public var colours: [String]
     public var coloursLabel: String
+    /// The Singing row.
+    public var singing: Singing
+
+    public struct Singing: Sendable, Equatable {
+        public var label: String
+        public var sub: String
+        public var on: Bool
+    }
     public var hint: String
     /// Absent for a new genre and for the last genre.
     public var delete: Control?
@@ -196,6 +233,11 @@ public struct PlayerCard: Sendable, Equatable {
         public var titleControl: Control?
         /// The name as a text field, while it is being renamed.
         public var rename: RenameField?
+        /// `Lyrics`, on a sung tune; lit while its words are open.
+        public var lyricsButton: Control?
+        /// The words, as written, while they are open.
+        public var lyrics: String?
+        public var lyricsHead: String
         /// "" or "★ kept for good".
         public var badge: String
         public var meta: String
@@ -305,6 +347,8 @@ public struct PlayerCard: Sendable, Equatable {
         public var lines: [Line]
         /// "Try now", when failed or no device.
         public var retry: Control?
+        /// `Sing my words…`, for a sung genre.
+        public var words: Control?
     }
 
     public struct Line: Sendable, Equatable {
@@ -335,6 +379,8 @@ public struct PlayerCard: Sendable, Equatable {
 public struct ShareRequest: Sendable, Equatable {
     public var target: TuneTarget
     public var file: String
+    /// The tune has words.
+    public var sung: Bool = false
 }
 
 // MARK: - Footer and status item

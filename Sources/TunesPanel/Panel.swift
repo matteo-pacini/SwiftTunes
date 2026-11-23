@@ -5,7 +5,7 @@ import TunesContract
 /// holds besides the snapshot. A value; every change returns a new one.
 public struct Panel: Sendable, Equatable {
     public enum Mode: Sendable, Equatable {
-        case player, chooser, editor, share, queue
+        case player, chooser, editor, share, queue, words
     }
 
     public var mode: Mode = .player
@@ -14,8 +14,24 @@ public struct Panel: Sendable, Equatable {
     public var notice: Notice?
     /// The playing tune's name being edited in place.
     public var rename: Rename?
+    /// The file stem of the tune whose words are open.
+    public var lyricsOf: String?
+    /// The own-words sheet.
+    public var words: Words?
 
     public init() {}
+
+    /// The own-words sheet: the words, where the caret is (in characters),
+    /// the name, and how far it has got.
+    public struct Words: Sendable, Equatable {
+        public var text = ""
+        public var caret = 0
+        public var name: String
+        /// The words have been typed in, or Compose was tried.
+        public var touched = false
+        public var refused: String?
+        public var busy = false
+    }
 
     /// The playing tune's name as a text field.
     public struct Rename: Sendable, Equatable {
@@ -62,6 +78,8 @@ public struct Panel: Sendable, Equatable {
         /// The four colours as `#RRGGBB` once one is picked; nil while the
         /// genre keeps the colours made from its name.
         public var palette: [String]?
+        /// The Singing switch.
+        public var sung = false
     }
 
     /// The share sheet on one tune.
@@ -70,6 +88,8 @@ public struct Panel: Sendable, Equatable {
         public var target: TuneTarget
         /// Its file stem, to find it again once its name changes to the title.
         public var file: String
+        /// The tune has words.
+        public var sung: Bool = false
         public var info: ShareInfo?
         /// An export or a pin is out.
         public var busy = false
@@ -119,6 +139,7 @@ extension Panel {
         p.mode = .player
         p.editor = nil
         p.share = nil
+        p.words = nil
         p.notice = nil
         return p
     }
@@ -178,6 +199,7 @@ extension Panel {
             e.loading = false
             e.base = f
             e.palette = f.palette
+            e.sung = f.sung
             p.editor = e
         case .failure(let r):
             p.mode = .chooser
@@ -216,6 +238,16 @@ extension Panel {
         return p
     }
 
+    /// The Singing switch flipped.
+    public func togglingSung() -> Panel {
+        guard mode == .editor, var e = editor, !e.loading, !e.busy else { return self }
+        e.sung.toggle()
+        if let r = e.refused, r.field == nil { e.refused = nil }
+        var p = self
+        p.editor = e
+        return p
+    }
+
     /// What Save does now.
     public enum SaveStep: Sendable, Equatable {
         /// Nothing to send; the panel shows every error.
@@ -240,7 +272,7 @@ extension Panel {
         p.editor = e
         let turns = e.values.turns.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r" || $0 == "\r\n" }).map(String.init)
         let bpm = [GenreRules.wholeNumber(e.values.slowest), GenreRules.wholeNumber(e.values.fastest)].compactMap { $0 }
-        return .send(p, id: e.id, fields: GenreFields(name: e.values.name, caption: e.values.caption, turns: turns, bpm: bpm, palette: e.palette), base: e.base)
+        return .send(p, id: e.id, fields: GenreFields(name: e.values.name, caption: e.values.caption, turns: turns, bpm: bpm, palette: e.palette, sung: e.sung), base: e.base)
     }
 
     /// The answer to `saveGenre` for the editor of genre `id` (nil: new).
@@ -352,7 +384,7 @@ extension Panel {
             return (editor?.busy == true ? self : keepingGenre(), false)
         case .editor:
             return (discardingEdit(), false)
-        case .share, .queue:
+        case .share, .queue, .words:
             return (backToPlayer(), false)
         case .chooser:
             return snapshot.genre == nil ? (self, true) : (backToPlayer(), false)
@@ -371,7 +403,7 @@ extension Panel {
         var p = self
         p.mode = .share
         p.notice = nil
-        p.share = Share(target: request.target, file: request.file)
+        p.share = Share(target: request.target, file: request.file, sung: request.sung)
         return p
     }
 
@@ -532,10 +564,124 @@ extension Panel {
     /// A new snapshot: if another tune plays now, or none, the field closes
     /// without saving.
     public func following(_ snapshot: Snapshot) -> Panel {
-        guard let r = rename else { return self }
-        if snapshot.tune?.file == r.file { return self }
         var p = self
-        p.rename = nil
+        if let r = rename, snapshot.tune?.file != r.file { p.rename = nil }
+        if let l = lyricsOf, snapshot.tune?.file != l || snapshot.tune?.sung != true { p.lyricsOf = nil }
+        if p.words != nil, p.mode == .words, !Decide.sung(snapshot) { p = p.backToPlayer() }
         return p
+    }
+}
+
+// MARK: - Lyrics
+
+extension Panel {
+    /// The Lyrics button: the words open or close for the playing tune.
+    public func togglingLyrics(_ snapshot: Snapshot) -> Panel {
+        guard mode == .player, let t = snapshot.tune, t.sung else { return self }
+        var p = self
+        p.lyricsOf = lyricsOf == t.file ? nil : t.file
+        return p
+    }
+}
+
+// MARK: - Your own words
+
+extension Panel {
+    /// The marks the sheet's buttons insert, with their buttons' words.
+    public static let marks: [(button: String, mark: String)] = [
+        ("+ Verse", "[Verse]"), ("+ Chorus", "[Chorus]"), ("+ Bridge", "[Bridge]"), ("+ Instrumental break", "[Instrumental break]"),
+    ]
+
+    /// `mark` as a line of its own at `caret` (a count of characters): a
+    /// line break before it unless the caret starts a line, one after it,
+    /// and the caret on the line after the mark.
+    public static func inserting(_ mark: String, into text: String, at caret: Int) -> (text: String, caret: Int) {
+        let at = text.index(text.startIndex, offsetBy: min(max(0, caret), text.count))
+        let before = text[..<at]
+        let lead = before.isEmpty || before.hasSuffix("\n") ? "" : "\n"
+        let insert = lead + mark + "\n"
+        return (String(before) + insert + String(text[at...]), before.count + insert.count)
+    }
+
+    /// `Sing my words…`: the sheet, for a sung genre, its name field holding
+    /// `name` (the engine's offer).
+    public func openingWords(_ snapshot: Snapshot, name: String) -> Panel {
+        guard mode == .player, Decide.sung(snapshot), snapshot.job?.ownWords != true else { return self }
+        var p = self
+        p.mode = .words
+        p.rename = nil
+        p.notice = nil
+        p.words = Words(name: name)
+        return p
+    }
+
+    /// The words as typed, and the caret after the change.
+    public func typedWords(_ text: String, caret: Int) -> Panel {
+        guard mode == .words, var w = words, !w.busy else { return self }
+        if w.text != text {
+            w.text = text
+            w.touched = true
+            w.refused = nil
+        }
+        w.caret = min(max(0, caret), text.count)
+        var p = self
+        p.words = w
+        return p
+    }
+
+    /// One of the four buttons: its mark inserted at the caret.
+    public func insertingMark(_ index: Int) -> Panel {
+        guard mode == .words, var w = words, !w.busy, Panel.marks.indices.contains(index) else { return self }
+        let (text, caret) = Panel.inserting(Panel.marks[index].mark, into: w.text, at: w.caret)
+        w.text = text
+        w.caret = caret
+        w.touched = true
+        w.refused = nil
+        var p = self
+        p.words = w
+        return p
+    }
+
+    /// The name as typed.
+    public func typedWordsName(_ name: String) -> Panel {
+        guard mode == .words, var w = words, !w.busy, w.name != name else { return self }
+        w.name = name
+        w.refused = nil
+        var p = self
+        p.words = w
+        return p
+    }
+
+    /// Compose: the words and name to send to `composeWithWords`, or nil
+    /// while either breaks a rule or a request is out.
+    public func composingWords() -> (Panel, words: String?, name: String?) {
+        guard mode == .words, var w = words, !w.busy else { return (self, nil, nil) }
+        w.touched = true
+        guard WordsRules.wordsError(w.text) == nil, TuneRules.nameError(w.name) == nil else {
+            var p = self
+            p.words = w
+            return (p, nil, nil)
+        }
+        w.busy = true
+        w.refused = nil
+        var p = self
+        p.words = w
+        return (p, w.text, w.name)
+    }
+
+    /// The answer to `composeWithWords`: accepted closes the sheet; a
+    /// refusal shows in it and it stays open.
+    public func composedWords(_ result: Result<Void, Refusal>) -> Panel {
+        guard mode == .words, var w = words, w.busy else { return self }
+        switch result {
+        case .success:
+            return backToPlayer()
+        case .failure(let r):
+            w.busy = false
+            w.refused = r.text.isEmpty ? "The tune was not asked for." : r.text
+            var p = self
+            p.words = w
+            return p
+        }
     }
 }

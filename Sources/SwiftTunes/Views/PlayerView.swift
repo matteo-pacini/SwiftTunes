@@ -46,7 +46,21 @@ struct Hero: View {
             }
             if let wave = now.wave {
                 title
-                SeekableWave(wave: wave, seek: model.seek(fraction:))
+                if let lyrics = now.lyricsButton {
+                    Button(action: model.toggleLyrics) {
+                        HStack(spacing: 4) {
+                            Text(verbatim: lyrics.text)
+                            Image(systemName: lyrics.lit ? "chevron.up" : "chevron.down").font(.system(size: 9, weight: .bold))
+                        }
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .helped(lyrics)
+                }
+                SeekableWave(wave: wave, seek: model.seek(fraction:), height: now.lyrics == nil ? 92 : 22)
                 if let time = now.time {
                     HStack {
                         Text(verbatim: time.left).contentTransition(.numericText())
@@ -57,6 +71,9 @@ struct Hero: View {
                     .foregroundStyle(.secondary)
                     .padding(.top, -6)
                     .animation(reduceMotion ? nil : .default, value: time.left)
+                }
+                if let words = now.lyrics {
+                    LyricsBox(head: now.lyricsHead, words: words)
                 }
             } else if let stage = now.forming {
                 title
@@ -338,6 +355,17 @@ struct ComposerBar: View {
                     }
                 }
             }
+            if let words = composer.words {
+                HStack {
+                    Spacer()
+                    Button(action: model.openWords) { Text(verbatim: words.text) }
+                        .buttonStyle(.glass)
+                        .controlSize(.small)
+                        .disabled(!words.enabled)
+                        .helped(words)
+                }
+                .padding(.top, 4)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -380,5 +408,26 @@ struct RenameField: View {
             }
         }
         .onAppear { focused = true }
+    }
+}
+
+/// The playing tune's words, as written, in a scrolling glass box.
+struct LyricsBox: View {
+    let head: String
+    let words: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Caps(text: head)
+            ScrollView {
+                Text(verbatim: words)
+                    .font(.system(size: 13))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+            .frame(height: 150)
+        }
+        .padding(12)
+        .glassEffect(.regular, in: .rect(cornerRadius: 13))
     }
 }

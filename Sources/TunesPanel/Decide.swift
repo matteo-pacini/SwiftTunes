@@ -17,7 +17,8 @@ public enum Decide {
         if p.mode == .share, let sh = p.share { return .share(share(s, sh, home: home)) }
         if p.mode == .chooser || s.genre == nil { return .chooser(chooser(s)) }
         if p.mode == .queue { return .queue(queueCard(s, now: now)) }
-        return .player(player(s, rename: p.following(s).rename, now: now))
+        if p.mode == .words, let w = p.following(s).words { return .words(wordsCard(s, w)) }
+        return .player(player(s, p.following(s), now: now))
     }
 
     // MARK: Setup
@@ -108,6 +109,9 @@ public enum Decide {
             hint = "Changes apply to the next tune composed."
             if kept > 0 { hint += kept == 1 ? " The 1 kept tune stays as it is." : " The \(kept) kept tunes stay as they are." }
         }
+        if let saved = e.base?.sung, saved != e.sung {
+            hint = "Tunes already kept stay as they are; new ones will be \(e.sung ? "sung" : "instrumental")."
+        }
         let name = genre?.name ?? e.name
         let anyError = EditorField.allCases.map(\.group).contains { shown($0) && errors[$0] != nil }
         let blocked = e.loading || e.busy || anyError || e.refused?.field != nil
@@ -133,6 +137,7 @@ public enum Decide {
             tempoError: error(.bpm),
             colours: e.palette ?? Palette.made(from: e.values.name.isEmpty ? name : e.values.name).colors.map(\.hex),
             coloursLabel: "Colours",
+            singing: .init(label: "Singing", sub: "The model writes the words, in English. Say what the voice is like in the prompt.", on: e.sung),
             hint: hint,
             delete: e.id != nil && s.genres.count > 1 ? Control(enabled: !e.busy, text: "Delete genre…", help: "Delete genre…") : nil,
             cancel: Control(text: "Cancel", help: "Cancel"),
@@ -147,7 +152,7 @@ public enum Decide {
         let i = sh.info
         var meta = ""
         if let i {
-            meta = [metaOf(bpm: i.bpm, key: i.key), i.length.map { Format.clock($0) } ?? "", "AAC, \(Format.size(i.bytes))"]
+            meta = [metaOf(bpm: i.bpm, key: i.key, sung: sh.sung), i.length.map { Format.clock($0) } ?? "", "AAC, \(Format.size(i.bytes))"]
                 .filter { !$0.isEmpty }.joined(separator: " · ")
         }
         let ready = i != nil
@@ -181,11 +186,17 @@ public enum Decide {
         s.player == .none && s.genre != nil && (s.ready > 0 || !s.queue.isEmpty || keptCount(s) > 0)
     }
 
-    static func metaOf(bpm: Int?, key: String?) -> String {
-        [bpm.map { "\($0) BPM" } ?? "", key ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
+    /// `110 BPM · A minor`, with `· sung` for a tune that has words.
+    static func metaOf(bpm: Int?, key: String?, sung: Bool = false) -> String {
+        [bpm.map { "\($0) BPM" } ?? "", key ?? "", sung ? "sung" : ""].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
-    static func jobShown(_ s: Snapshot) -> Bool { s.composing && s.job != nil }
+    /// The job is drawn while the composer is on, and an own-words tune
+    /// whether or not it is.
+    static func jobShown(_ s: Snapshot) -> Bool {
+        guard let j = s.job else { return false }
+        return s.composing || j.ownWords
+    }
 
     static func undoActive(_ s: Snapshot, now: Double) -> Bool {
         guard let u = s.undo else { return false }
@@ -230,11 +241,11 @@ public enum Decide {
         Palette.of(name: g.name, hex: g.palette)
     }
 
-    static func player(_ s: Snapshot, rename: Panel.Rename? = nil, now: Double) -> PlayerCard {
-        PlayerCard(palette: palette(s), strip: s.error, now: nowSection(s, rename: rename, now: now), next: nextSection(s, now: now), making: making(s, now: now), composer: composer(s, now: now))
+    static func player(_ s: Snapshot, _ p: Panel = Panel(), now: Double) -> PlayerCard {
+        PlayerCard(palette: palette(s), strip: s.error, now: nowSection(s, rename: p.rename, lyricsOf: p.lyricsOf, now: now), next: nextSection(s, now: now), making: making(s, now: now), composer: composer(s, now: now))
     }
 
-    static func nowSection(_ s: Snapshot, rename: Panel.Rename? = nil, now: Double) -> PlayerCard.Now {
+    static func nowSection(_ s: Snapshot, rename: Panel.Rename? = nil, lyricsOf: String? = nil, now: Double) -> PlayerCard.Now {
         let t = s.tune
         let name = genreName(s)
         var suffix = ""
@@ -251,7 +262,7 @@ public enum Decide {
         if let t {
             title = t.name
             tone = s.player == .paused ? .soft : .normal
-            meta = [metaOf(bpm: t.bpm, key: t.key), s.player == .paused ? "paused" : ""].filter { !$0.isEmpty }.joined(separator: " · ")
+            meta = [metaOf(bpm: t.bpm, key: t.key, sung: t.sung), s.player == .paused ? "paused" : ""].filter { !$0.isEmpty }.joined(separator: " · ")
             let pos = position(s, now: now)
             let played = t.length.map { $0 > 0 ? max(0, min(waveBars, Int((pos / $0 * Double(waveBars)).rounded(.down)))) : 0 } ?? 0
             wave = PlayerCard.Wave(levels: waveLevels(t.wave), played: played, help: "Seek")
@@ -296,6 +307,9 @@ public enum Decide {
                     cancel: Control(enabled: !r.busy, help: "Cancel")
                 )
             },
+            lyricsButton: t?.sung == true ? Control(lit: lyricsOf == t?.file, text: "Lyrics", help: "Lyrics") : nil,
+            lyrics: t?.sung == true && lyricsOf == t?.file ? (t?.lyrics ?? "") : nil,
+            lyricsHead: "LYRICS AS WRITTEN",
             badge: t?.pinned == true ? "★ kept for good" : "",
             meta: meta,
             wave: wave,
@@ -309,7 +323,7 @@ public enum Decide {
             repeat: Control(lit: s.repeat != .off, text: s.repeat.rawValue, help: "Repeat \(nextMode.rawValue)"),
             share: Control(enabled: t != nil, help: "Share"),
             scrap: Control(enabled: t != nil, help: t.map { "Scrap \($0.name)" } ?? "Scrap"),
-            shareRequest: t.map { ShareRequest(target: TuneTarget(name: $0.name, index: nil), file: $0.file) },
+            shareRequest: t.map { ShareRequest(target: TuneTarget(name: $0.name, index: nil), file: $0.file, sung: $0.sung) },
             scrapCommand: t.map { .scrapPlaying(name: $0.name) }
         )
     }
@@ -333,12 +347,12 @@ public enum Decide {
             PlayerCard.Row(
                 id: "tune \(q.file) \(i)", kind: .tune, index: i, number: String(i + 1), name: q.name, nameTone: .normal,
                 tag: q.new ? "new" : "", star: q.pinned, dim: waits,
-                sub: metaOf(bpm: q.bpm, key: q.key), right: q.length.map { Format.clock($0) } ?? "", rightTone: .dim, bar: nil,
+                sub: metaOf(bpm: q.bpm, key: q.key, sung: q.sung), right: q.length.map { Format.clock($0) } ?? "", rightTone: .dim, bar: nil,
                 artwork: Artwork.recipe(name: q.name, bpm: q.bpm, key: q.key, palette: colours), stage: nil,
                 playNow: Control(help: "Play it now"), share: Control(help: "Share"), scrap: Control(help: "Scrap \(q.name)"),
                 playNowCommand: .playQueued(index: i, name: q.name),
                 scrapCommand: .scrapQueued(index: i, name: q.name),
-                shareRequest: ShareRequest(target: TuneTarget(name: q.name, index: i), file: q.file)
+                shareRequest: ShareRequest(target: TuneTarget(name: q.name, index: i), file: q.file, sung: q.sung)
             )
         }
     }
@@ -366,7 +380,7 @@ public enum Decide {
 
     /// BEING MADE: the job and the places not started, while the composer is on.
     static func making(_ s: Snapshot, now: Double) -> PlayerCard.Making? {
-        guard s.composing else { return nil }
+        guard s.composing || s.job?.ownWords == true else { return nil }
         var rows: [PlayerCard.Row] = []
         if let j = s.job {
             let spent = max(0, now - j.started)
@@ -380,15 +394,21 @@ public enum Decide {
             }
             if j.stage == .rendering, let w = j.writtenS { parts.append("written in \(Format.clock(w))") }
             let rendering = j.stage == .rendering
+            var name = rendering ? "Being rendered" : "Being written"
+            if j.ownWords {
+                name = j.name ?? name
+                parts.insert("with your words · \(rendering ? "being rendered" : "being written")", at: 0)
+            }
             rows.append(PlayerCard.Row(
-                id: "job", kind: .job, index: nil, number: "", name: rendering ? "Being rendered" : "Being written", nameTone: .soft,
+                id: "job", kind: .job, index: nil, number: "", name: name, nameTone: .soft,
                 tag: "", star: false, dim: false, sub: parts.joined(separator: " · "), right: "composing", rightTone: .cyan, bar: bar,
                 artwork: nil, stage: j.stage,
                 playNow: nil, share: nil, scrap: Control(help: rendering ? "Scrap the tune being rendered" : "Scrap the tune being written"),
                 playNowCommand: nil, scrapCommand: .scrapJob, shareRequest: nil
             ))
         }
-        let missing = s.ahead - s.ready - (s.job != nil ? 1 : 0)
+        // An own-words tune does not take one of the genre's places.
+        let missing = s.composing ? s.ahead - s.ready - (s.job != nil && s.job?.ownWords != true ? 1 : 0) : 0
         for n in 0..<max(0, missing) {
             rows.append(PlayerCard.Row(
                 id: "placeholder \(n)", kind: .placeholder, index: nil, number: "", name: "Not started", nameTone: .dim, tag: "", star: false, dim: false,
@@ -397,6 +417,31 @@ public enum Decide {
             ))
         }
         return PlayerCard.Making(head: "plays next when ready", rows: rows)
+    }
+
+    static func wordsCard(_ s: Snapshot, _ w: Panel.Words) -> WordsCard {
+        let sung = WordsRules.sungLines(w.text).count
+        let chars = w.text.unicodeScalars.count
+        let wordsError = WordsRules.wordsError(w.text)
+        let nameError = TuneRules.nameError(w.name)
+        return WordsCard(
+            back: Control(text: "Back", help: "Back"),
+            label: "SING MY WORDS",
+            title: "A tune in \(genreName(s))",
+            inserts: Panel.marks.map { Control(enabled: !w.busy, text: $0.button, help: $0.button) },
+            text: w.text,
+            caret: w.caret,
+            counter: "\(Format.plural(sung, "sung line", "sung lines")) · \(Format.grouped(chars)) of \(Format.grouped(WordsRules.max)) characters",
+            counterRight: "English sings best",
+            wordsError: w.touched ? wordsError ?? "" : "",
+            nameLabel: "Name",
+            name: w.name,
+            nameError: nameError ?? "",
+            note: "It is made once, with the genre's sound, and plays next when ready. The model may not sing every word as written.",
+            refused: w.refused ?? "",
+            cancel: Control(enabled: !w.busy, text: "Cancel", help: "Cancel"),
+            compose: Control(enabled: !w.busy && wordsError == nil && nameError == nil, text: "Compose", help: "Compose")
+        )
     }
 
     static func queueCard(_ s: Snapshot, now: Double) -> QueueCard {
@@ -413,6 +458,18 @@ public enum Decide {
             making: making(s, now: now),
             palette: palette(s)
         )
+    }
+
+    /// Whether the selected genre is sung.
+    static func sung(_ s: Snapshot) -> Bool {
+        s.genres.first { $0.id == s.genre }?.sung ?? false
+    }
+
+    /// `Sing my words…` on a sung genre's composer bar; off while a tune with
+    /// the user's words is being made.
+    static func wordsControl(_ s: Snapshot) -> Control? {
+        guard sung(s) else { return nil }
+        return Control(enabled: s.job?.ownWords != true, text: "Sing my words…", help: "Sing my words…")
     }
 
     static func composer(_ s: Snapshot, now: Double) -> PlayerCard.Composer {
@@ -435,7 +492,7 @@ public enum Decide {
                     lines.append(.init("A tune takes about \(memory) of memory while it is made."))
                 }
             }
-            return PlayerCard.Composer(on: false, label: "off", labelTone: .soft, pill: "off", pillTone: .soft, toggle: Control(help: "Composer on"), lines: lines, retry: nil)
+            return PlayerCard.Composer(on: false, label: "off", labelTone: .soft, pill: "off", pillTone: .soft, toggle: Control(help: "Composer on"), lines: lines, retry: nil, words: wordsControl(s))
         }
         var right = ""
         var rightTone = Tone.dim
@@ -455,6 +512,9 @@ public enum Decide {
         if let waiting { lines.append(waiting) }
         if m.state == .writing, let silence = m.silenceS {
             lines.append(.init("Writing again: the last plan had \(silence) s of silence."))
+        }
+        if m.state == .writing, m.thinWords {
+            lines.append(.init("Writing again: the last plan had too few sung lines."))
         }
         var label = "on"
         var labelTone = Tone.soft
@@ -495,7 +555,7 @@ public enum Decide {
         let pill: String? = label != "on" ? label : (right.isEmpty ? nil : right)
         return PlayerCard.Composer(on: true, label: label, labelTone: labelTone, pill: pill, pillTone: label != "on" ? labelTone : rightTone,
                                    toggle: Control(lit: true, help: "Composer off"),
-                                   lines: lines, retry: canRetry ? Control(text: "Try now", help: "Try now") : nil)
+                                   lines: lines, retry: canRetry ? Control(text: "Try now", help: "Try now") : nil, words: wordsControl(s))
     }
 
     // MARK: Footer, status item, tick
