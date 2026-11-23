@@ -30,7 +30,7 @@ let package = Package(
         .testTarget(name: "TunesRulesTests", dependencies: ["TunesRules"], swiftSettings: common),
         .testTarget(
             name: "TunesEngineTests",
-            dependencies: ["TunesEngine", "TunesContract", "TunesFakes"],
+            dependencies: ["TunesEngine", "TunesContract", "TunesFakes", "TunesPanel"],
             swiftSettings: mainActor
         ),
         .testTarget(
