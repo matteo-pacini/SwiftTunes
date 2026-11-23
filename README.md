@@ -10,7 +10,7 @@ interface are still being written, so the app built today is a placeholder.
 
 ## Requirements
 
-- A Mac with Apple silicon, macOS 14 or later.
+- A Mac with Apple silicon, macOS 26 or later.
 - About 8 GiB of memory free while a tune is being composed.
 - 7.57 GiB of disk for the model, downloaded from Hugging Face on first use.
 

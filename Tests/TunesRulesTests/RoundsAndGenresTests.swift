@@ -181,6 +181,46 @@ private func playRounds(
         #expect(parsed.skipped.isEmpty)
     }
 
+    @Test func theRepositorysGenresHaveTheirPalettes() throws {
+        let genres = try GenresFile.parse(Self.repoGenres).genres
+        #expect(genres.allSatisfy { $0.palette?.count == 4 && GenresFile.isPalette($0.palette) })
+        #expect(genres.first { $0.id == "lofi" }?.palette == ["#241a2c", "#c97b8f", "#d9a15e", "#5d4a9c"])
+        #expect(genres.first { $0.id == "acoustic" }?.palette == ["#1d1610", "#b5793f", "#5c8a4a", "#7a4a26"])
+    }
+
+    @Test func paletteIsOptional() throws {
+        let none = try #require(try GenresFile.parse(Self.doc(Self.good)).genres.first)
+        #expect(none.palette == nil && none.fields.palette == nil)
+        let null = try GenresFile.parse(Self.doc(#"{"id": "a", "name": "A", "caption": "c", "turns": [], "bpm": [90, 100], "palette": null}"#))
+        #expect(null.genres.first?.palette == nil)
+        let upper = try GenresFile.parse(Self.doc(##"{"id": "a", "name": "A", "caption": "c", "turns": [], "bpm": [90, 100], "palette": ["#ABCDEF", "#abcdef", "#012345", "#6789aB"]}"##))
+        #expect(upper.genres.first?.palette == ["#ABCDEF", "#abcdef", "#012345", "#6789aB"])
+    }
+
+    @Test(arguments: [
+        (nil, true), (["#000000", "#111111", "#222222", "#333333"], true),
+        (["#000000", "#111111", "#222222"], false), (["#000000", "#111111", "#222222", "#333333", "#444444"], false),
+        (["#000000", "#111111", "#222222", "#33333"], false), (["#000000", "#111111", "#222222", "red"], false),
+        ([String](), false),
+    ] as [([String]?, Bool)])
+    func palettesASaveMayCarry(_ palette: [String]?, _ ok: Bool) {
+        #expect(GenresFile.isPalette(palette) == ok)
+    }
+
+    @Test func aPaletteIsWrittenAfterBpmAndDroppedWhenNil() throws {
+        let doc = try JSONValue.parse(#"{"genres": [{"id": "j", "name": "J", "caption": "c", "turns": [], "bpm": [90, 100], "moods": ["M"]}]}"#)
+        let p = ["#000000", "#111111", "#222222", "#333333"]
+        let added = GenresFile.updating(doc, id: "j", with: GenreFields(name: "J", caption: "c", turns: [], bpm: [90, 100], palette: p))
+        #expect(added.dumps() == ##"{"genres": [{"id": "j", "name": "J", "caption": "c", "turns": [], "bpm": [90, 100], "palette": ["#000000", "#111111", "#222222", "#333333"], "moods": ["M"]}]}"##)
+        let changed = GenresFile.updating(added, id: "j", with: GenreFields(name: "J", caption: "c", turns: [], bpm: [90, 100], palette: ["#ffffff"] + p.dropFirst()))
+        #expect(changed.dumps().contains(##""bpm": [90, 100], "palette": ["#ffffff", "#111111""##))
+        let dropped = GenresFile.updating(added, id: "j", with: GenreFields(name: "J", caption: "c", turns: [], bpm: [90, 100], palette: nil))
+        #expect(dropped == doc)
+        #expect(GenresFile.object(id: "n", GenreFields(name: "N", caption: "c", turns: [], bpm: [90, 100], palette: p)).dumps()
+            == ##"{"id": "n", "name": "N", "caption": "c", "turns": [], "bpm": [90, 100], "palette": ["#000000", "#111111", "#222222", "#333333"]}"##)
+        #expect(GenresFile.object(id: "n", GenreFields(name: "N", caption: "c", turns: [], bpm: [90, 100])).dumps().contains("palette") == false)
+    }
+
     @Test func theRepositorysFileRoundTripsByteForByte() throws {
         #expect(GenresFile.format(try JSONValue.parse(Self.repoGenres)) == Self.repoGenres)
     }
@@ -228,6 +268,11 @@ private func playRounds(
         (doc(#"{"id": "a", "name": "A", "caption": "c", "turns": [], "bpm": [91, 90]}"#), "genre 1: bpm must be [low, high] between 30 and 300"),
         (doc(#"{"id": "a", "name": "A", "caption": "c", "turns": [], "bpm": [29, 90]}"#), "genre 1: bpm must be [low, high] between 30 and 300"),
         (doc(#"{"id": "a", "name": "A", "caption": "c", "turns": [], "bpm": [90.0, 100]}"#), "genre 1: bpm must be [low, high] between 30 and 300"),
+        (doc(##"{"id": "a", "name": "A", "caption": "c", "turns": [], "bpm": [90, 100], "palette": ["#000000", "#111111", "#222222"]}"##), "genre 1: palette must be four colours as #RRGGBB"),
+        (doc(##"{"id": "a", "name": "A", "caption": "c", "turns": [], "bpm": [90, 100], "palette": ["#000000", "#111111", "#222222", "#33333g"]}"##), "genre 1: palette must be four colours as #RRGGBB"),
+        (doc(##"{"id": "a", "name": "A", "caption": "c", "turns": [], "bpm": [90, 100], "palette": ["#000000", "#111111", "#222222", "333333"]}"##), "genre 1: palette must be four colours as #RRGGBB"),
+        (doc(##"{"id": "a", "name": "A", "caption": "c", "turns": [], "bpm": [90, 100], "palette": "#000000"}"##), "genre 1: palette must be four colours as #RRGGBB"),
+        (doc(#"{"id": "a", "name": "A", "caption": "c", "turns": [], "bpm": [90, 100], "palette": [1, 2, 3, 4]}"#), "genre 1: palette must be four colours as #RRGGBB"),
     ])
     func mistakes(_ text: String, _ reason: String) {
         #expect(throws: GenresFile.Mistake(reason)) { try GenresFile.parse(text) }

@@ -261,11 +261,26 @@ public struct GenreSummary: Codable, Equatable, Sendable {
     public var id: String
     public var name: String
     public var kept: Int
+    /// Four colours as `#RRGGBB`; nil when the genres file gives none.
+    public var palette: [String]?
 
-    public init(id: String, name: String, kept: Int) {
+    public init(id: String, name: String, kept: Int, palette: [String]? = nil) {
         self.id = id
         self.name = name
         self.kept = kept
+        self.palette = palette
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, kept, palette
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(kept, forKey: .kept)
+        try c.encode(palette, forKey: .palette)
     }
 }
 

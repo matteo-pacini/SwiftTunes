@@ -9,7 +9,7 @@ let mainActor: [SwiftSetting] = common + [.defaultIsolation(MainActor.self)]
 
 let package = Package(
     name: "SwiftTunes",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v26)],
     products: [
         .executable(name: "SwiftTunes", targets: ["SwiftTunes"]),
         .executable(name: "tunes-lifeline", targets: ["tunes-lifeline"]),

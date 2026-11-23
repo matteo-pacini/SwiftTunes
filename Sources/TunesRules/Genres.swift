@@ -11,8 +11,11 @@ public struct Genre: Equatable, Sendable {
     /// Words for tune names; the shared list when the file gives none.
     public var moods: [String]
     public var things: [String]
+    /// Four colours as `#RRGGBB`, nil when the file gives none.
+    public var palette: [String]?
 
-    public init(id: String, name: String, caption: String, turns: [String], bpm: [Int], moods: [String] = Rules.defaultMoods, things: [String] = Rules.defaultThings) {
+    public init(id: String, name: String, caption: String, turns: [String], bpm: [Int], moods: [String] = Rules.defaultMoods,
+                things: [String] = Rules.defaultThings, palette: [String]? = nil) {
         self.id = id
         self.name = name
         self.caption = caption
@@ -20,11 +23,12 @@ public struct Genre: Equatable, Sendable {
         self.bpm = bpm
         self.moods = moods
         self.things = things
+        self.palette = palette
     }
 
     /// The fields the editor shows, as stored.
     public var fields: GenreFields {
-        GenreFields(name: name, caption: caption, turns: turns, bpm: bpm)
+        GenreFields(name: name, caption: caption, turns: turns, bpm: bpm, palette: palette)
     }
 }
 
@@ -86,14 +90,40 @@ public enum GenresFile {
             else {
                 throw Mistake("\(place): bpm must be [low, high] between \(GenreRules.bpmRange.lowerBound) and \(GenreRules.bpmRange.upperBound)")
             }
+            var palette: [String]?
+            if let raw = g["palette"], raw != .null {
+                guard case .array(let items) = raw, items.count == 4 else { throw Mistake("\(place): palette must be four colours as #RRGGBB") }
+                var colours: [String] = []
+                for item in items {
+                    guard case .string(let c) = item, isColour(c) else { throw Mistake("\(place): palette must be four colours as #RRGGBB") }
+                    colours.append(c)
+                }
+                palette = colours
+            }
             ids.insert(id)
             // Without case, as the editor compares, and as a volume that
             // ignores case would give two such genres one folder.
             names.insert(name.lowercased())
-            out.append(Genre(id: id, name: name, caption: caption, turns: turns, bpm: [lo, hi], moods: moods, things: things))
+            out.append(Genre(id: id, name: name, caption: caption, turns: turns, bpm: [lo, hi], moods: moods, things: things, palette: palette))
         }
         return (out, skipped)
     }
+
+    /// `#` and six hex digits.
+    public static func isColour(_ s: String) -> Bool {
+        let u = Array(s.unicodeScalars)
+        return u.count == 7 && u[0] == "#" && u.dropFirst().allSatisfy {
+            ("0"..."9").contains($0) || ("a"..."f").contains($0) || ("A"..."F").contains($0)
+        }
+    }
+
+    /// A palette a save may carry: none, or four colours.
+    public static func isPalette(_ p: [String]?) -> Bool {
+        guard let p else { return true }
+        return p.count == 4 && p.allSatisfy(isColour)
+    }
+
+    public static let paletteRefusal = "A palette is four colours."
 
     /// Lower-case letters, digits and dashes, not starting with a dash.
     public static func isGenreID(_ id: String) -> Bool {
@@ -134,7 +164,8 @@ public enum GenresFile {
             let s = GenreRules.trim(t)
             if !s.isEmpty && !turns.contains(s) { turns.append(s) }
         }
-        return GenreFields(name: GenreRules.trim(fields.name), caption: GenreRules.trim(fields.caption), turns: turns, bpm: fields.bpm)
+        return GenreFields(name: GenreRules.trim(fields.name), caption: GenreRules.trim(fields.caption), turns: turns, bpm: fields.bpm,
+                           palette: fields.palette)
     }
 
     /// The first rule the fields break, through the shared rules. Pass the
@@ -178,13 +209,15 @@ public enum GenresFile {
 
     /// A genre's fields as stored in the file.
     public static func object(id: String, _ fields: GenreFields) -> JSONValue {
-        .object([
+        var f: [(key: String, value: JSONValue)] = [
             ("id", .string(id)),
             ("name", .string(fields.name)),
             ("caption", .string(fields.caption)),
             ("turns", .array(fields.turns.map(JSONValue.string))),
             ("bpm", .array(fields.bpm.map(JSONValue.int))),
-        ])
+        ]
+        if let p = fields.palette { f.append(("palette", .array(p.map(JSONValue.string)))) }
+        return .object(f)
     }
 
     /// `doc`'s genre `id` with the editor's fields written over its own,
@@ -200,6 +233,18 @@ public enum GenresFile {
             ]
             for (k, v) in new {
                 if let i = f.firstIndex(where: { $0.key == k }) { f[i].value = v } else { f.append((k, v)) }
+            }
+            if let p = fields.palette {
+                let v = JSONValue.array(p.map(JSONValue.string))
+                if let i = f.firstIndex(where: { $0.key == "palette" }) {
+                    f[i].value = v
+                } else {
+                    // A new palette goes right after bpm, where the file keeps it.
+                    let at = (f.firstIndex(where: { $0.key == "bpm" }) ?? (f.count - 1)) + 1
+                    f.insert(("palette", v), at: at)
+                }
+            } else {
+                f.removeAll { $0.key == "palette" }
             }
             gs[n] = .object(f)
         }

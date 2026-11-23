@@ -15,6 +15,7 @@
         "music box melody"
       ],
       "bpm": [70, 92],
+      "palette": ["#241a2c", "#c97b8f", "#d9a15e", "#5d4a9c"],
       "moods": ["Dusty", "Sleepy", "Faded", "Quiet", "Rainy", "Late", "Soft", "Hazy", "Worn"],
       "things": ["Notebook", "Window", "Tea", "Bus Stop", "Cassette", "Lamp", "Sweater", "Corner Shop", "Rooftop"]
     },
@@ -33,6 +34,7 @@
         "slow filter sweeps"
       ],
       "bpm": [60, 80],
+      "palette": ["#0c1f2b", "#1f9c9c", "#3b4fb8", "#0f6e7a"],
       "moods": ["Still", "Pale", "Endless", "Drifting", "Frozen", "Hollow", "Silver", "Slow", "Open"],
       "things": ["Tide", "Fog", "Glacier", "Horizon", "Orbit", "Meadow", "Lantern", "Cathedral", "Dune"]
     },
@@ -51,6 +53,7 @@
         "breakdown with only the arpeggio"
       ],
       "bpm": [90, 118],
+      "palette": ["#170a2e", "#ff3d9a", "#2bd4ff", "#6a2bd9"],
       "moods": ["Neon", "Chrome", "Midnight", "Electric", "Velvet", "Burning", "Distant", "Golden", "Restless"],
       "things": ["Highway", "Skyline", "Arcade", "Sunset", "Motel", "Coupe", "Pier", "Tower", "Signal"]
     },
@@ -69,6 +72,7 @@
         "plucked marimba hook"
       ],
       "bpm": [118, 124],
+      "palette": ["#0a1330", "#2456d6", "#e0782b", "#16306e"],
       "moods": ["Warm", "Deep", "Low", "Smooth", "Humid", "After", "Blue", "Gentle", "Slow-burning"],
       "things": ["Basement", "Harbour", "Terrace", "Lights", "Groove", "Summer", "Avenue", "Club", "Pulse"]
     },
@@ -87,6 +91,7 @@
         "bass solo with sparse comping"
       ],
       "bpm": [80, 160],
+      "palette": ["#1a1230", "#b8562b", "#7a2848", "#23408f"],
       "moods": ["Smoky", "Blue", "Easy", "Crooked", "Velvet", "Midnight", "Lazy", "Bright", "Tender"],
       "things": ["Lounge", "Avenue", "Martini", "Streetlight", "Taxi", "Hotel", "Piano", "Doorway", "Train"]
     },
@@ -105,6 +110,7 @@
         "a quiet piano coda"
       ],
       "bpm": [60, 120],
+      "palette": ["#1c1a14", "#b89445", "#3e6b4a", "#6b4a2a"],
       "moods": ["Autumn", "Gentle", "Solemn", "Bright", "Wistful", "Noble", "Quiet", "Silver", "Spring"],
       "things": ["Garden", "Letter", "River", "Palace", "Courtyard", "Mirror", "Harbour", "Orchard", "Chapel"]
     },
@@ -123,6 +129,7 @@
         "flute loop"
       ],
       "bpm": [85, 105],
+      "palette": ["#151c14", "#6f8a3a", "#1f8f86", "#3a4a22"],
       "moods": ["Hazy", "Sunken", "Amber", "Velvet", "Murky", "Slow", "Shaded", "Warm", "Dim"],
       "things": ["Lagoon", "Balcony", "Smoke", "Garden", "Canal", "Ferry", "Lantern", "Courtyard", "Shore"]
     },
@@ -141,6 +148,7 @@
         "a final huge crescendo"
       ],
       "bpm": [70, 130],
+      "palette": ["#12161d", "#6f8fb5", "#a9c4d6", "#39465c"],
       "moods": ["Northern", "Endless", "Broken", "Rising", "Grey", "Burning", "Lonely", "Vast", "Brave"],
       "things": ["Lighthouse", "Glacier", "Signal", "Coast", "Bridge", "Forest", "Satellite", "Harbour", "Storm"]
     },
@@ -159,6 +167,7 @@
         "cajon groove"
       ],
       "bpm": [80, 120],
+      "palette": ["#1d1610", "#b5793f", "#5c8a4a", "#7a4a26"],
       "moods": ["Sunny", "Simple", "Homeward", "Golden", "Easy", "Green", "Morning", "Kind", "Open"],
       "things": ["Porch", "Field", "Kitchen", "Valley", "Road", "Orchard", "Cabin", "Creek", "Hillside"]
     }

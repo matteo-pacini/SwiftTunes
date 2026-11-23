@@ -257,6 +257,7 @@ extension Engine {
         }
         let others = disk.genres.filter { $0.id != id }.map(\.name)
         if let bad = GenresFile.fieldError(fields, others: others) { return .failure(bad) }
+        if !GenresFile.isPalette(fields.palette) { return .failure(Refusal(field: nil, text: GenresFile.paletteRefusal)) }
         let edited = GenresFile.edited(fields)
         var doc = disk.doc
         var gid = id ?? ""

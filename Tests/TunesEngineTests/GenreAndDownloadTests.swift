@@ -121,6 +121,50 @@ import TunesRules
         await rig.close()
     }
 
+    @Test func palettes() async throws {
+        let rig = try await Rig()
+        let file = rig.paths.support.appending(path: "genres.json")
+        // A file without palettes keeps working untouched.
+        #expect(rig.snap.genres.allSatisfy { $0.palette == nil })
+        let jazz = try await rig.engine.genre(id: "jazz").get()
+        #expect(jazz.palette == nil)
+
+        let p = ["#1a1230", "#b8562b", "#7a2848", "#23408f"]
+        var f = jazz
+        f.palette = p
+        #expect(await rig.engine.saveGenre(id: "jazz", fields: f, base: jazz) == .success(GenreSaved(id: "jazz", renamed: nil)))
+        await rig.settle()
+        #expect(rig.snap.genres.first { $0.id == "jazz" }?.palette == p)
+        #expect(try await rig.engine.genre(id: "jazz").get().palette == p)
+        let text = try #require(Files.read(file))
+        #expect(text.contains("      \"bpm\": [90, 140],\n      \"palette\": [\"#1a1230\", \"#b8562b\", \"#7a2848\", \"#23408f\"],\n      \"moods\""))
+        // The base carries the palette: one opened before the change is stale.
+        var other = jazz
+        other.caption = "a new caption"
+        #expect(await rig.engine.saveGenre(id: "jazz", fields: other, base: jazz)
+            == .failure(Refusal(field: nil, text: "Jazz was changed in the file since you opened it.")))
+
+        for bad in [["#1a1230"], ["#1a1230", "#b8562b", "#7a2848", "23408f"], [String]()] {
+            var g = f
+            g.palette = bad
+            #expect(await rig.engine.saveGenre(id: "jazz", fields: g, base: f) == .failure(Refusal(field: nil, text: "A palette is four colours.")))
+        }
+        var none = f
+        none.palette = nil
+        #expect(await rig.engine.saveGenre(id: "jazz", fields: none, base: f) == .success(GenreSaved(id: "jazz", renamed: nil)))
+        #expect(Files.read(file) == Rig.genresText)
+
+        let added = await rig.engine.saveGenre(id: nil, fields: GenreFields(name: "Bossa", caption: "nylon guitar", turns: [], bpm: [80, 110], palette: p), base: nil)
+        #expect(added == .success(GenreSaved(id: "bossa", renamed: nil)))
+        await rig.settle()
+        #expect(rig.snap.genres.last == GenreSummary(id: "bossa", name: "Bossa", kept: 0, palette: p))
+
+        try Data(Rig.genresText.replacingOccurrences(of: "\"bpm\": [70, 92]", with: "\"bpm\": [70, 92],\n      \"palette\": [\"#123456\"]").utf8).write(to: file)
+        await rig.send(.refresh)
+        #expect(rig.snap.error == "genres.json: genre 2: palette must be four colours as #RRGGBB")
+        await rig.close()
+    }
+
     @Test func pickingAnUnknownOrTheSameGenreDoesNothing() async throws {
         let rig = try await Rig()
         await rig.send(.selectGenre(id: "jazz"))

@@ -7,12 +7,15 @@ public struct GenreFields: Sendable, Equatable {
     public var turns: [String]
     /// Exactly two: slowest, fastest.
     public var bpm: [Int]
+    /// Four colours as `#RRGGBB`, or nil for none.
+    public var palette: [String]?
 
-    public init(name: String, caption: String, turns: [String], bpm: [Int]) {
+    public init(name: String, caption: String, turns: [String], bpm: [Int], palette: [String]? = nil) {
         self.name = name
         self.caption = caption
         self.turns = turns
         self.bpm = bpm
+        self.palette = palette
     }
 }
 

@@ -484,7 +484,7 @@ final class Engine: EngineAPI {
             need: Need(downloadBytes: TuneFiles.needBytes(files, present: present),
                        diskFreeBytes: env.probe.diskFree(near: env.paths.models),
                        ramBytes: pins?.ramBytes ?? Rules.ramBytes),
-            genres: genres.map { GenreSummary(id: $0.id, name: $0.name, kept: listTunes($0).count) },
+            genres: genres.map { GenreSummary(id: $0.id, name: $0.name, kept: listTunes($0).count, palette: $0.palette) },
             genre: genre?.id,
             keptTotal: order.count,
             composing: composing,
