@@ -280,7 +280,9 @@ public enum Decide {
             shuffle: Control(lit: s.shuffle, help: "Shuffle"),
             repeat: Control(lit: s.repeat != .off, text: s.repeat.rawValue, help: "Repeat \(nextMode.rawValue)"),
             share: Control(enabled: t != nil, help: "Share"),
-            scrap: Control(enabled: t != nil, help: t.map { "Scrap \($0.name)" } ?? "Scrap")
+            scrap: Control(enabled: t != nil, help: t.map { "Scrap \($0.name)" } ?? "Scrap"),
+            shareRequest: t.map { ShareRequest(target: TuneTarget(name: $0.name, index: nil), file: $0.file) },
+            scrapCommand: t.map { .scrapPlaying(name: $0.name) }
         )
     }
 
@@ -302,10 +304,13 @@ public enum Decide {
                 number = String(q.pos ?? keptRows)
             }
             return PlayerCard.Row(
-                kind: .tune, index: i, number: number, name: q.name, nameTone: .normal,
+                id: "tune \(q.file) \(i)", kind: .tune, index: i, number: number, name: q.name, nameTone: .normal,
                 tag: q.new ? "new" : "", star: q.pinned, dim: waits,
                 sub: metaOf(bpm: q.bpm, key: q.key), right: q.length.map { Format.clock($0) } ?? "", rightTone: .dim, bar: nil,
-                playNow: Control(help: "Play it now"), share: Control(help: "Share"), scrap: Control(help: "Scrap \(q.name)")
+                playNow: Control(help: "Play it now"), share: Control(help: "Share"), scrap: Control(help: "Scrap \(q.name)"),
+                playNowCommand: .playQueued(index: i, name: q.name),
+                scrapCommand: .scrapQueued(index: i, name: q.name),
+                shareRequest: ShareRequest(target: TuneTarget(name: q.name, index: i), file: q.file)
             )
         }
         if jobShown(s), let j = s.job {
@@ -321,17 +326,19 @@ public enum Decide {
             if j.stage == .rendering, let w = j.writtenS { parts.append("written in \(Format.clock(w))") }
             let rendering = j.stage == .rendering
             rows.append(PlayerCard.Row(
-                kind: .job, index: nil, number: "", name: rendering ? "Being rendered" : "Being written", nameTone: .soft,
+                id: "job", kind: .job, index: nil, number: "", name: rendering ? "Being rendered" : "Being written", nameTone: .soft,
                 tag: "", star: false, dim: false, sub: parts.joined(separator: " · "), right: "composing", rightTone: .cyan, bar: bar,
-                playNow: nil, share: nil, scrap: Control(help: rendering ? "Scrap the tune being rendered" : "Scrap the tune being written")
+                playNow: nil, share: nil, scrap: Control(help: rendering ? "Scrap the tune being rendered" : "Scrap the tune being written"),
+                playNowCommand: nil, scrapCommand: .scrapJob, shareRequest: nil
             ))
         }
         if s.composing {
             let missing = s.ahead - s.ready - (s.job != nil ? 1 : 0)
-            for _ in 0..<max(0, missing) {
+            for n in 0..<max(0, missing) {
                 rows.append(PlayerCard.Row(
-                    kind: .placeholder, index: nil, number: "", name: "Not started", nameTone: .dim, tag: "", star: false, dim: false,
-                    sub: s.job != nil ? "after the one above" : "", right: "", rightTone: .dim, bar: nil, playNow: nil, share: nil, scrap: nil
+                    id: "placeholder \(n)", kind: .placeholder, index: nil, number: "", name: "Not started", nameTone: .dim, tag: "", star: false, dim: false,
+                    sub: s.job != nil ? "after the one above" : "", right: "", rightTone: .dim, bar: nil, playNow: nil, share: nil, scrap: nil,
+                    playNowCommand: nil, scrapCommand: nil, shareRequest: nil
                 ))
             }
         }

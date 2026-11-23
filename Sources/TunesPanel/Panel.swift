@@ -295,25 +295,41 @@ extension GenreFieldsText {
     }
 }
 
+// MARK: - Esc
+
+extension Panel {
+    /// What Esc does on the card showing: the setup cards and the player
+    /// close the popover (`close` true); the chooser goes back to the player,
+    /// or closes when no genre is picked; the share sheet goes back to the
+    /// player; the editor discards, and its delete question keeps the genre.
+    public func escaping(_ snapshot: Snapshot) -> (panel: Panel, close: Bool) {
+        if snapshot.setup != .ready { return (self, true) }
+        switch mode {
+        case .editor where editor?.asking == true:
+            return (editor?.busy == true ? self : keepingGenre(), false)
+        case .editor:
+            return (discardingEdit(), false)
+        case .share:
+            return (backToPlayer(), false)
+        case .chooser:
+            return snapshot.genre == nil ? (self, true) : (backToPlayer(), false)
+        case .player:
+            return (self, true)
+        }
+    }
+}
+
 // MARK: - The share sheet
 
 extension Panel {
-    /// The share control on the playing tune (`index` nil) or on queue row
-    /// `index`: the sheet, and the target to ask `shareInfo(for:)` about.
-    public func openingShare(_ snapshot: Snapshot, index: Int?) -> (Panel, TuneTarget?) {
-        let found: (name: String, file: String)?
-        if let i = index {
-            found = snapshot.queue.indices.contains(i) ? (snapshot.queue[i].name, snapshot.queue[i].file) : nil
-        } else {
-            found = snapshot.tune.map { ($0.name, $0.file) }
-        }
-        guard let found else { return (self, nil) }
-        let target = TuneTarget(name: found.name, index: index)
+    /// A share control clicked: the sheet on the tune as it was drawn. Ask
+    /// `shareInfo(for: request.target)` about it.
+    public func openingShare(_ request: ShareRequest) -> Panel {
         var p = self
         p.mode = .share
         p.notice = nil
-        p.share = Share(target: target, file: found.file)
-        return (p, target)
+        p.share = Share(target: request.target, file: request.file)
+        return p
     }
 
     /// The answer to `shareInfo(for: target)`. A refusal closes the sheet
@@ -384,10 +400,17 @@ extension Panel {
         case copyFile, copyPath, showInFinder
     }
 
-    /// One of the app's own actions on the described tune: the sheet closes
-    /// and the footer says what was done.
-    public func didFileAction(_ action: FileAction, now: Double) -> Panel {
+    /// One of the app's own actions on the described tune, and whether the
+    /// system says it was done: the sheet closes, and the footer says what
+    /// was done only when it was.
+    public func didFileAction(_ action: FileAction, done: Bool, now: Double) -> Panel {
         guard mode == .share, let s = share, s.info != nil else { return self }
+        guard done else {
+            var p = self
+            p.mode = .player
+            p.share = nil
+            return p
+        }
         let n = s.displayName
         switch action {
         case .copyFile: return sheetClosed("Copied \(n) as a file. Paste it anywhere.", now: now)

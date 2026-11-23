@@ -34,6 +34,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         host.sizingOptions = .preferredContentSize
         popover.contentViewController = host
         menu.delegate = self
+        model.close = { [weak self] in self?.popover.performClose(nil) }
     }
 
     func update(_ s: Snapshot) {
@@ -133,7 +134,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         guard let open = demo.open else { return }
         openOnLaunch { [weak self] in
             guard let self else { return }
-            open.apply(to: model)
+            await open.apply(to: model)
             if demo.inactive {
                 try? await Task.sleep(for: .milliseconds(300))
                 NSApp.deactivate()

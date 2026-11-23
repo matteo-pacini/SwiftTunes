@@ -20,6 +20,7 @@ struct PopoverView: View {
             }
         }
         .frame(width: 380)
+        .onExitCommand(perform: model.escape)
         .font(.system(size: 13))
         .monospacedDigit()
     }

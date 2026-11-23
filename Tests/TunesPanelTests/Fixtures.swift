@@ -93,6 +93,15 @@ func setup(_ s: Snapshot) throws -> SetupCard {
     return c
 }
 
+/// The share sheet opened as a click opens it: from the request the player
+/// card drew for the playing tune (`index` nil) or for queue row `index`.
+func openShare(_ s: Snapshot, index: Int?) throws -> (Panel, TuneTarget?) {
+    let p = try player(s)
+    let request = index == nil ? p.now.shareRequest : p.next.rows.first { $0.index == index }?.shareRequest
+    guard let request else { return (Panel(), nil) }
+    return (Panel().openingShare(request), request.target)
+}
+
 /// Rows as [number, name, sub, right].
 func rows(_ p: PlayerCard) -> [[String]] {
     p.next.rows.map { [$0.number, $0.name, $0.sub, $0.right] }

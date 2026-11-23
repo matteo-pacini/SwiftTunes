@@ -502,22 +502,47 @@ struct StatusItemTests {
 
 @Suite("Actions and Now Playing")
 struct ActionTests {
-    @Test("commands aimed at a tune carry its name; nothing to aim at, nothing sent")
+    @Test("commands aimed at a tune are drawn with it and carry its name; nothing to aim at, nothing sent")
     func names() throws {
         let s = try Fixture.load("05-queue-full")
-        #expect(Actions.scrapPlaying(s) == .scrapPlaying(name: "Lazy Avenue"))
-        #expect(Actions.scrapQueued(s, index: 1) == .scrapQueued(index: 1, name: "Quiet Ledger"))
-        #expect(Actions.playQueued(s, index: 0) == .playQueued(index: 0, name: "Brass Lantern"))
-        #expect(Actions.scrapQueued(s, index: 2) == nil)
-        #expect(Actions.playQueued(s, index: -1) == nil)
+        let p = try player(s)
+        #expect(p.now.scrapCommand == .scrapPlaying(name: "Lazy Avenue"))
+        #expect(p.now.shareRequest == ShareRequest(target: TuneTarget(name: "Lazy Avenue", index: nil), file: s.tune!.file))
+        #expect(p.next.rows.map(\.scrapCommand) == [.scrapQueued(index: 0, name: "Brass Lantern"), .scrapQueued(index: 1, name: "Quiet Ledger")])
+        #expect(p.next.rows.map(\.playNowCommand) == [.playQueued(index: 0, name: "Brass Lantern"), .playQueued(index: 1, name: "Quiet Ledger")])
+        #expect(p.next.rows.map { $0.shareRequest?.target } == [TuneTarget(name: "Brass Lantern", index: 0), TuneTarget(name: "Quiet Ledger", index: 1)])
         #expect(Actions.next(s) == .next)
-        #expect(Actions.scrapJob(s) == nil)
-        let first = try Fixture.load("06-first-tune")
-        #expect(Actions.scrapPlaying(first) == nil)
-        #expect(Actions.playPause(first) == nil)
-        #expect(Actions.next(first) == nil)
-        #expect(Actions.scrapJob(first) == .scrapJob)
+        let first = try player(Fixture.load("06-first-tune"))
+        #expect(first.now.scrapCommand == nil && first.now.shareRequest == nil)
+        #expect(first.next.rows.map(\.scrapCommand) == [.scrapJob, nil])
+        #expect(first.next.rows.map(\.playNowCommand) == [nil, nil])
+        #expect(Actions.playPause(try Fixture.load("06-first-tune")) == nil)
+        #expect(Actions.next(try Fixture.load("06-first-tune")) == nil)
         #expect(Actions.playPause(try Fixture.load("33-ended")) == .toggle)
+    }
+
+    @Test("a click made from a row drawn from one snapshot carries that row's name after the queue has moved")
+    func renderedName() throws {
+        let a = try Fixture.load("05-queue-full")
+        let drawn = try player(a)
+        // B: the first queued tune started playing and a new one was made, so
+        // the queue moved up by one and index 1 holds another tune.
+        var b = a
+        b.queue.removeFirst()
+        b.queue.append(QueuedTune(name: "Paper Kite", file: "20261101-090000-92bpm-E-minor", bpm: 92, key: "E minor", length: 171.2, kept: false, new: true, pinned: false, pos: nil))
+        let now = try player(b)
+        let row = drawn.next.rows[1]
+        #expect(row.scrapCommand == .scrapQueued(index: 1, name: "Quiet Ledger"))
+        #expect(row.playNowCommand == .playQueued(index: 1, name: "Quiet Ledger"))
+        #expect(row.shareRequest?.target == TuneTarget(name: "Quiet Ledger", index: 1))
+        // Under B the index points elsewhere, so the engine's name check
+        // refuses the click instead of acting on another tune.
+        #expect(b.queue[1].name == "Paper Kite")
+        #expect(now.next.rows.first { $0.index == 1 }?.scrapCommand == .scrapQueued(index: 1, name: "Paper Kite"))
+        // The share sheet opened from A's row asks about A's tune.
+        let opened = Panel().openingShare(try #require(row.shareRequest))
+        #expect(opened.share?.target == TuneTarget(name: "Quiet Ledger", index: 1))
+        #expect(opened.shareTargetNow(b) == TuneTarget(name: "Quiet Ledger", index: 0))
     }
 
     @Test("Now Playing follows the player")

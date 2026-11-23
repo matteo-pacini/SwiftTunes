@@ -174,6 +174,10 @@ public struct PlayerCard: Sendable, Equatable {
         public var `repeat`: Control
         public var share: Control
         public var scrap: Control
+        /// What the share control opens: the playing tune as drawn.
+        public var shareRequest: ShareRequest?
+        /// What the scrap control sends: the playing tune's name as drawn.
+        public var scrapCommand: Command?
 
         public static func == (a: Now, b: Now) -> Bool {
             a.suffix == b.suffix && a.genre == b.genre && a.title == b.title && a.titleTone == b.titleTone
@@ -199,6 +203,8 @@ public struct PlayerCard: Sendable, Equatable {
 
     public struct Row: Sendable, Equatable {
         public enum Kind: Sendable, Equatable { case tune, job, placeholder }
+        /// Stable while the row shows the same tune.
+        public var id: String
         public var kind: Kind
         /// A queue index for a tune row.
         public var index: Int?
@@ -218,6 +224,12 @@ public struct PlayerCard: Sendable, Equatable {
         public var playNow: Control?
         public var share: Control?
         public var scrap: Control?
+        /// The commands and the share target, built from this row as drawn,
+        /// so a click carries the name the user saw at this row's index
+        /// even if a newer snapshot has moved the queue meanwhile.
+        public var playNowCommand: Command?
+        public var scrapCommand: Command?
+        public var shareRequest: ShareRequest?
     }
 
     public struct Composer: Sendable, Equatable {
@@ -251,6 +263,13 @@ public struct PlayerCard: Sendable, Equatable {
         /// The line's text as read.
         public var text: String { pre + em + post }
     }
+}
+
+/// A share sheet to open: the tune as it was drawn, and its file stem to
+/// find it again once its name changes to the title.
+public struct ShareRequest: Sendable, Equatable {
+    public var target: TuneTarget
+    public var file: String
 }
 
 // MARK: - Footer and status item
