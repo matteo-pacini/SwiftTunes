@@ -153,6 +153,7 @@ extension Panel {
             )
             e.loading = false
             e.base = f
+            e.palette = f.palette
             p.editor = e
         case .failure(let r):
             p.mode = .chooser
@@ -215,7 +216,7 @@ extension Panel {
         p.editor = e
         let turns = e.values.turns.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r" || $0 == "\r\n" }).map(String.init)
         let bpm = [GenreRules.wholeNumber(e.values.slowest), GenreRules.wholeNumber(e.values.fastest)].compactMap { $0 }
-        return .send(p, id: e.id, fields: GenreFields(name: e.values.name, caption: e.values.caption, turns: turns, bpm: bpm), base: e.base)
+        return .send(p, id: e.id, fields: GenreFields(name: e.values.name, caption: e.values.caption, turns: turns, bpm: bpm, palette: e.palette), base: e.base)
     }
 
     /// The answer to `saveGenre` for the editor of genre `id` (nil: new).

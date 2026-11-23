@@ -77,7 +77,8 @@ struct PaletteTests {
     @Test("the player's backdrop is the selected genre's palette")
     func backdrop() throws {
         let s = try Fixture.load("05-queue-full")
-        #expect(try player(s).palette == Palette.made(from: "Jazz"))
+        #expect(try player(s).palette == Palette.of(name: "Jazz", hex: s.genres[4].palette))
+        #expect(s.genres[4].palette?.count == 4)
     }
 }
 
@@ -186,5 +187,27 @@ struct LayoutTests {
         #expect(p.pickingColour(0, hex: "blue", shown: e.colours) == p)
         let new = Panel().addingGenre().typed(.name, "Bossa nova")
         #expect(try editor(s, new).colours == Palette.made(from: "Bossa nova").colors.map(\.hex))
+    }
+
+    @Test("a genre's own palette: the backdrop, the editor's row after loading, and Save sends it")
+    func ownPalette() throws {
+        var s = try Fixture.load("05-queue-full")
+        let hex = ["#1A1230", "#B8562B", "#7A2848", "#23408F"]
+        s.genres[4].palette = hex
+        #expect(try player(s).palette.colors.map(\.hex) == hex)
+        let loaded = Panel().editingGenre(s.genres[4])
+            .loaded(.success(GenreFields(name: "Jazz", caption: "c", turns: [], bpm: [80, 120], palette: hex)), id: "jazz", now: NOW)
+        let e = try editor(s, loaded)
+        #expect(e.colours == hex)
+        guard case .send(_, _, let fields, _) = loaded.saving(s) else { Issue.record("not sent"); return }
+        #expect(fields.palette == hex)
+        let picked = loaded.pickingColour(0, hex: "#000000", shown: e.colours)
+        guard case .send(_, _, let changed, _) = picked.saving(s) else { Issue.record("not sent"); return }
+        #expect(changed.palette == ["#000000"] + hex.dropFirst())
+        // A genre with no palette keeps none unless a colour is picked.
+        let plain = Panel().editingGenre(s.genres[0])
+            .loaded(.success(GenreFields(name: "Lo-fi", caption: "c", turns: [], bpm: [70, 92])), id: "lofi", now: NOW)
+        guard case .send(_, _, let untouched, _) = plain.saving(s) else { Issue.record("not sent"); return }
+        #expect(untouched.palette == nil)
     }
 }

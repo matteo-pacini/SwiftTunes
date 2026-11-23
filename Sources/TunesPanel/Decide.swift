@@ -226,7 +226,7 @@ public enum Decide {
 
     /// A genre's palette for its chooser tile and backdrop.
     public static func palette(of g: GenreSummary) -> Palette {
-        Palette.of(name: g.name, hex: nil)
+        Palette.of(name: g.name, hex: g.palette)
     }
 
     static func player(_ s: Snapshot, now: Double) -> PlayerCard {
