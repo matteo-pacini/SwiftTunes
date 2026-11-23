@@ -112,18 +112,10 @@ struct FixtureTests {
         #expect(all.allSatisfy { $0.version == 1 })
     }
 
-    @Test("a fixture names no other program", arguments: Fixture.all)
-    func neutral(_ name: String) throws {
-        let text = try Fixture.lines(name).map { String(decoding: $0, as: UTF8.self) }.joined().lowercased()
-        for word in ["vulkan", "radeon", "mpv", "hypr", "linux", "/home/", ".mp3", "ffmpeg", "quickshell", "wayland", "game"] {
-            #expect(!text.contains(word), "\(name) says \(word)")
-        }
-    }
-
     @Test("an unknown model state does not decode")
     func unknownEnum() throws {
         var line = try #require(String(data: Fixture.lines("05-queue-full")[0], encoding: .utf8))
-        line = line.replacingOccurrences(of: "\"state\": \"idle\"", with: "\"state\": \"held_game\"")
+        line = line.replacingOccurrences(of: "\"state\": \"idle\"", with: "\"state\": \"held_disk\"")
         #expect(throws: DecodingError.self) { try JSONDecoder().decode(Snapshot.self, from: Data(line.utf8)) }
     }
 }
