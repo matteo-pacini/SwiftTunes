@@ -573,7 +573,6 @@ extension Engine {
         retryAt = nil
         if self.genre?.id == g.id {
             ready.append(tune)
-            if let nk = nextKept, appended?.path == nk.path { nextKept = nil }
         }
         syncPlaylist()
         changed()
@@ -587,8 +586,10 @@ extension Engine {
         // A deleted genre's folder is the user's now: its tunes stay.
         guard genreByID(g.id) != nil else { return }
         let dir = genreDir(g).standardizedFileURL
-        var protected = Set((queueNow() + [current].compactMap { $0 })
+        // What plays, the new tunes, and the kept tunes the player shows next.
+        var protected = Set((ready + [current].compactMap { $0 })
             .filter { $0.path.deletingLastPathComponent().standardizedFileURL == dir }.map(\.file))
+        protected.formUnion(roundOrder.prefix(Rules.keptShown))
         if let fresh { protected.insert(fresh.lastPathComponent) }
         let names = listTunes(g)
         let pinnedNames = Set(names.filter { Files.exists(dir.appending(path: TuneFiles.pinMark($0))) })

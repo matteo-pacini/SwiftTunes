@@ -272,6 +272,7 @@ final class Rig {
     var snapshots: [Snapshot] = []
     var token: (any SnapshotObservation)?
     var modelFiles: [String: Data] = [:]
+    let seed: UInt64
     /// Replaces the fake launcher when set.
     var realLauncher: (any ServerLauncher)?
 
@@ -309,7 +310,8 @@ final class Rig {
     /// - Parameters:
     ///   - ready: whether the model files are in place already.
     ///   - keep: the newest-N rule's N.
-    init(ready: Bool = true, keep: Int = 50, ahead: Int = 2, root: URL? = nil, genres: String = Rig.genresText) async throws {
+    init(ready: Bool = true, keep: Int = 50, ahead: Int = 2, root: URL? = nil, genres: String = Rig.genresText, seed: UInt64 = 11) async throws {
+        self.seed = seed
         self.root = root ?? FileManager.default.temporaryDirectory.appending(path: "tunes-engine-\(UUID().uuidString)", directoryHint: .isDirectory)
         paths = EnginePaths(
             support: self.root.appending(path: "support", directoryHint: .isDirectory),
@@ -359,7 +361,7 @@ final class Rig {
         return EngineEnvironment(
             paths: paths, aceServer: URL(filePath: "/nonexistent/ace-server"),
             defaultGenres: root.appending(path: "genres-default.json"), pins: root.appending(path: "pins.json"),
-            clock: clock, random: SplitMix64(seed: 11), player: player, launcher: realLauncher ?? launcher, holds: holds, probe: probe,
+            clock: clock, random: SplitMix64(seed: seed), player: player, launcher: realLauncher ?? launcher, holds: holds, probe: probe,
             timeZone: TimeZone(identifier: "UTC")!, freePort: { port }
         )
     }

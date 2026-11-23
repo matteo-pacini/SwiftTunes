@@ -5,139 +5,55 @@ import TunesContract
 
 private let K = (1...6).map { "2026010\($0)-000000-90bpm-C-major.m4a" }
 
-/// Tunes in the order they would play, `n` of them: choose, start (a wrap
-/// empties what was played), the next chosen while it plays.
-private func playRounds(
-    _ kept: [String], shuffle: Bool, repeat mode: RepeatMode, _ n: Int, seed: UInt64 = 5,
-    anchor: String? = nil, played: Set<String> = []
-) -> [String] {
-    var rng = SplitMix64(seed: seed)
-    var out: [String] = []
-    var played = played
-    var anchor = anchor
-    var current: String?
-    for _ in 0..<n {
-        let (next, wraps) = Rounds.choose(
-            kept: kept, played: played, busy: current.map { [$0] } ?? [], shuffle: shuffle, anchor: anchor,
-            repeat: mode, rng: &rng
-        )
-        guard let next else { break }
-        if wraps { played = [] }
-        played.insert(next)
-        anchor = next
-        current = next
-        out.append(next)
-    }
-    return out
-}
-
 @Suite struct RoundTests {
-    @Test func allLeftAtTheStartOldestFirst() {
-        #expect(Rounds.left(kept: K.reversed(), played: [], shuffle: false, anchor: nil) == K)
+    @Test func theOrderMadeGoesRoundFromTheAnchor() {
+        #expect(Rounds.made(K.reversed(), after: nil) == K)
+        #expect(Rounds.made(K, after: K[2]) == Array(K[3...]) + Array(K[...2]))
+        // An anchor whose file is gone still places the order.
+        #expect(Rounds.made(Array(K[..<2]) + Array(K[3...]), after: K[2]) == Array(K[3...]) + Array(K[..<2]))
     }
 
-    @Test func playedAndBusyAreNotLeft() {
-        #expect(Rounds.left(kept: K, played: [K[0], K[3]], shuffle: true, anchor: nil, busy: [K[5]]) == [K[1], K[2], K[4]])
+    @Test(arguments: [1, 2, 3, 5, 8, 13] as [UInt64])
+    func aShuffledDrawHoldsEachTuneOnce(seed: UInt64) {
+        var rng = SplitMix64(seed: seed)
+        let order = Rounds.draw(K, shuffle: true, anchor: nil, avoid: nil, rng: &rng)
+        #expect(order.sorted() == K)
     }
 
-    @Test func shuffleOffGoesOnFromTheAnchor() {
-        #expect(Rounds.left(kept: K, played: [K[2]], shuffle: false, anchor: K[2]) == Array(K[3...]) + Array(K[..<2]))
+    @Test func shuffledDrawsDiffer() {
+        var rng = SplitMix64(seed: 4)
+        let draws = Set((0..<10).map { _ in Rounds.draw(K, shuffle: true, anchor: nil, avoid: nil, rng: &rng).joined() })
+        #expect(draws.count > 1)
     }
 
-    @Test func shuffleOnIgnoresTheAnchor() {
-        #expect(Rounds.left(kept: K, played: [K[2]], shuffle: true, anchor: K[2]) == [K[0], K[1]] + Array(K[3...]))
-    }
-
-    @Test func anAnchorWhoseFileIsGoneStillPlacesTheOrder() {
-        #expect(Rounds.left(kept: Array(K[..<2]) + Array(K[3...]), played: [K[1]], shuffle: false, anchor: K[2])
-            == Array(K[3...]) + [K[0]])
-    }
-
-    @Test func orderMadeThenRoundAgain() {
-        #expect(playRounds(K.reversed(), shuffle: false, repeat: .all, 14) == Array((K + K + K).prefix(14)))
-    }
-
-    @Test(arguments: [1, 5, 9, 42] as [UInt64])
-    func shufflePlaysEachTuneOnceARoundAndNeverTwiceInARow(seed: UInt64) {
-        let got = playRounds(K, shuffle: true, repeat: .all, 60, seed: seed)
-        #expect(got.count == 60)
-        for i in stride(from: 0, to: 60, by: 6) {
-            #expect(Array(got[i..<(i + 6)]).sorted() == K)
+    @Test(arguments: [true, false])
+    func aDrawNeverStartsWithTheTuneToAvoid(shuffle: Bool) {
+        var rng = SplitMix64(seed: 9)
+        for _ in 0..<200 {
+            for avoid in K {
+                let order = Rounds.draw(K, shuffle: shuffle, anchor: avoid, avoid: avoid, rng: &rng)
+                #expect(order.first != avoid && order.sorted() == K)
+            }
         }
-        #expect(Set(stride(from: 0, to: 60, by: 6).map { got[$0..<($0 + 6)].joined() }).count > 1)
-        #expect(zip(got, got.dropFirst()).allSatisfy { $0 != $1 })
     }
 
-    @Test func repeatOffPlaysOneRound() {
-        #expect(playRounds(K, shuffle: true, repeat: .off, 20, seed: 9).count == 6)
-        #expect(playRounds(K, shuffle: false, repeat: .off, 20) == K)
-    }
-
-    @Test func repeatOffWithTheRoundOverChoosesNothing() {
+    @Test func aSingleTuneIsDrawnEvenIfItIsTheOneToAvoid() {
         var rng = SplitMix64(seed: 1)
-        let r = Rounds.choose(kept: K, played: Set(K), busy: [], shuffle: true, anchor: nil, repeat: .off, rng: &rng)
-        #expect(r.tune == nil && !r.wraps)
+        #expect(Rounds.draw([K[0]], shuffle: true, anchor: nil, avoid: K[0], rng: &rng) == [K[0]])
+        #expect(Rounds.draw([], shuffle: true, anchor: nil, avoid: nil, rng: &rng).isEmpty)
     }
 
-    @Test func repeatOneWrapsAsRepeatAllDoes() {
+    @Test func shuffleOffIsTheOrderMadeFromTheAnchor() {
         var rng = SplitMix64(seed: 1)
-        let r = Rounds.choose(kept: K, played: Set(K), busy: [K[5]], shuffle: false, anchor: K[5], repeat: .one, rng: &rng)
-        #expect(r.tune == K[0] && r.wraps)
+        #expect(Rounds.draw([K[5], K[1], K[3]], shuffle: false, anchor: K[2], avoid: nil, rng: &rng) == [K[3], K[5], K[1]])
     }
 
-    @Test func aNewRoundDoesNotStartWithThePlayingTune() {
-        var rng = SplitMix64(seed: 1)
-        let r = Rounds.choose(kept: Array(K[..<2]), played: Set(K[..<2]), busy: [K[0]], shuffle: true, anchor: nil, repeat: .all, rng: &rng)
-        #expect(r.tune == K[1] && r.wraps)
-    }
-
-    @Test func oneKeptTunePlayingLeavesNothing() {
-        var rng = SplitMix64(seed: 1)
-        let r = Rounds.choose(kept: [K[0]], played: [K[0]], busy: [K[0]], shuffle: true, anchor: nil, repeat: .all, rng: &rng)
-        #expect(r.tune == nil && !r.wraps)
-        let none = Rounds.choose(kept: [], played: [], busy: [], shuffle: true, anchor: nil, repeat: .all, rng: &rng)
-        #expect(none.tune == nil && !none.wraps)
-    }
-
-    @Test func shuffleSwitchedOffMidRound() {
-        #expect(playRounds(K, shuffle: false, repeat: .off, 10, anchor: K[2], played: [K[2], K[4]]) == [K[3], K[5], K[0], K[1]])
-        #expect(playRounds(K, shuffle: false, repeat: .off, 10, anchor: K[4], played: [K[2], K[4]]) == [K[5], K[0], K[1], K[3]])
-    }
-
-    @Test func shuffleSwitchedOnMidRoundPlaysTheRestOnce() {
-        #expect(playRounds(K, shuffle: true, repeat: .off, 10, anchor: K[2], played: [K[2], K[4]]).sorted() == [K[0], K[1], K[3], K[5]])
-    }
-
-    @Test func aNewTuneJoinsTheEndOfTheOrder() {
-        let new = "20260201-000000-90bpm-C-major.m4a"
-        #expect(playRounds(K + [new], shuffle: false, repeat: .all, 12, anchor: K[1], played: [K[0], K[1], new])
-            == Array(K[2...]) + K + [new, K[0]])
-    }
-
-    struct QueueCase: Sendable, CustomTestStringConvertible {
-        var what: String
-        var kept: [String]
-        var played: Set<String>
-        var busy: Set<String>
-        var anchor: String
-        var mode: RepeatMode
-        var first: String
-        var wraps: Bool
-        var want: [String]
-        var testDescription: String { what }
-    }
-
-    static let queueCases: [QueueCase] = [
-        QueueCase(what: "the three in order after the next", kept: K, played: [K[0]], busy: [K[0]], anchor: K[0], mode: .all, first: K[1], wraps: false, want: [K[2], K[3]]),
-        QueueCase(what: "repeat off stops at the end of the round", kept: K, played: Set(K[..<4]), busy: [K[3]], anchor: K[3], mode: .off, first: K[4], wraps: false, want: [K[5]]),
-        QueueCase(what: "repeat all wraps to the start", kept: K, played: Set(K[..<4]), busy: [K[3]], anchor: K[3], mode: .all, first: K[4], wraps: false, want: [K[5], K[0]]),
-        QueueCase(what: "after a wrapping next, the new round's order", kept: K, played: Set(K), busy: [K[5]], anchor: K[5], mode: .all, first: K[0], wraps: true, want: [K[1], K[2]]),
-        QueueCase(what: "never the next twice, nor the playing one", kept: Array(K[..<2]), played: [K[0]], busy: [K[0]], anchor: K[0], mode: .all, first: K[1], wraps: false, want: []),
-    ]
-
-    @Test(arguments: queueCases)
-    func queueShowsTheKeptAfterTheNext(_ c: QueueCase) {
-        #expect(Rounds.after(kept: c.kept, played: c.played, busy: c.busy, anchor: c.anchor, repeat: c.mode, first: c.first, wraps: c.wraps, count: 2) == c.want)
+    @Test func reconciledDropsTheGoneAndAddsTheNewAtTheEnd() {
+        let order = [K[3], K[0], K[5]]
+        // K[5] is gone; K[1] and K[4] are new; K[2] played this round.
+        let kept = [K[0], K[1], K[2], K[3], K[4]]
+        #expect(Rounds.reconciled(order, kept: kept, excluded: [K[2]]) == [K[3], K[0], K[1], K[4]])
+        #expect(Rounds.reconciled([], kept: [], excluded: []) == [])
     }
 }
 

@@ -68,9 +68,9 @@ extension Engine {
         guard i >= 0, i < q.count, q[i].named(name), setAside(q[i]) else { return }
         if i < ready.count {
             ready.remove(at: i)
-        } else if q[i] === nextKept {
-            nextKept = nil
-            nextWraps = false
+        } else {
+            roundOrder.removeAll { $0 == q[i].file }
+            nextKeptCache = nil
         }
         syncPlaylist()
         changed()

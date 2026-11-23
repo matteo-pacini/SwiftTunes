@@ -21,8 +21,9 @@ import TunesRules
         let (rig, k) = try await keptRig(5)
         let s = rig.snap
         #expect(s.player == .playing && s.tune?.file == TuneFiles.stem(k[0]) && s.tune?.kept == true && s.tune?.pos == 1)
-        #expect(s.queue.map(\.file) == k[1...3].map(TuneFiles.stem))
-        #expect(s.queue.map(\.pos) == [2, 3, 4])
+        // The whole rest of the round, in play order.
+        #expect(s.queue.map(\.file) == k[1...].map(TuneFiles.stem))
+        #expect(s.queue.map(\.pos) == [2, 3, 4, 5])
         #expect(s.keptPlaying && s.canNext && s.keptTotal == 5 && s.roundLeft == 4)
         #expect(rig.player.queuedNext == k[1])
         await rig.close()
@@ -190,10 +191,12 @@ import TunesRules
 
     @Test func shuffleRepeatAndTheQueue() async throws {
         let (rig, k) = try await keptRig(6, shuffle: true)
-        #expect(rig.snap.shuffle && rig.snap.queue.count == 1)
+        #expect(rig.snap.shuffle && rig.snap.queue.count == 5 && rig.snap.roundLeft == 5)
         #expect(rig.snap.queue.allSatisfy { $0.pos == nil })
         await rig.send(.setShuffle(on: false))
-        #expect(rig.snap.queue.count == 3)
+        // What is left, back in the order made going round from the playing tune.
+        let playing = try #require(rig.snap.tune?.file)
+        #expect(rig.snap.queue.map(\.file) == Rounds.made(k.map(TuneFiles.stem).filter { $0 != playing }, after: playing))
         #expect(rig.snap.queue.allSatisfy { $0.pos != nil })
         await rig.send(.setRepeat(.one))
         #expect(rig.player.repeatOne && rig.snap.repeat == .one)

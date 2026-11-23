@@ -177,8 +177,14 @@ final class Engine: EngineAPI {
     var ready: [Tune] = []
     var current: Tune?
     var currentToken: Int?
-    var nextKept: Tune?
-    var nextWraps = false
+    /// The kept tunes the round has still to play, in play order, drawn once.
+    var roundOrder: [String] = []
+    /// `roundOrder` is the next round's, drawn while the last tune of this
+    /// one plays.
+    var roundAhead = false
+    /// The tune that started last: a new round never starts with it.
+    var lastStarted: String?
+    var nextKeptCache: Tune?
     var played: Set<String> = []
     var anchor: String?
     var appended: Ask?
@@ -382,32 +388,60 @@ final class Engine: EngineAPI {
         listTunes(genre).sorted()
     }
 
-    func busy() -> Set<String> {
-        Set((ready + [current].compactMap { $0 }).map(\.file))
-    }
-
-    /// What next would play, in order; command indexes refer to it.
-    func queueNow() -> [Tune] {
-        var q = ready
-        if let nk = nextKept, let g = genre {
-            q.append(nk)
-            if !shuffle {
-                let after = Rounds.after(
-                    kept: keptNames(), played: played, busy: busy(), anchor: anchor, repeat: repeatMode,
-                    first: nk.file, wraps: nextWraps, count: Rules.keptShown - 1
-                )
-                q += after.map { keptTune(genreDir(g).appending(path: $0), decode: false) }
-            }
+    /// The first kept tune of the order, kept as one object while it stays first.
+    var nextKept: Tune? {
+        guard let g = genre, let first = roundOrder.first else { return nil }
+        if let c = nextKeptCache, c.file == first,
+           c.path.deletingLastPathComponent().standardizedFileURL == genreDir(g).standardizedFileURL {
+            return c
         }
-        return q
+        let t = keptTune(genreDir(g).appending(path: first))
+        nextKeptCache = t
+        return t
     }
 
+    /// Brings the order up to date with the folder: tunes gone are dropped,
+    /// kept tunes the round has not met join its end. With the round's last
+    /// tune playing and repeat on, the next round is drawn now, so what
+    /// plays next is always in the queue.
+    func syncRound() {
+        guard genre != nil else {
+            roundOrder = []
+            return
+        }
+        let kept = keptNames()
+        let readyNames = Set(ready.map(\.file))
+        var excluded = readyNames
+        if !roundAhead {
+            excluded.formUnion(played)
+            if let c = current { excluded.insert(c.file) }
+        }
+        roundOrder = Rounds.reconciled(roundOrder, kept: kept, excluded: excluded).filter { !readyNames.contains($0) }
+        guard roundOrder.isEmpty, !roundAhead, repeatMode != .off else { return }
+        let tunes = kept.filter { !readyNames.contains($0) }
+        if let c = current {
+            // A lone tune cannot open a round after itself: nothing is next,
+            // and the round starts again once it ends.
+            guard tunes != [c.file] else { return }
+            roundOrder = Rounds.draw(tunes, shuffle: shuffle, anchor: nil, avoid: c.file, rng: &rng)
+            roundAhead = !roundOrder.isEmpty
+        } else if wantsPlay && loading == nil && !tunes.isEmpty && !played.isEmpty {
+            newRound(avoid: lastStarted)
+        }
+    }
+
+    /// What will play, in order: the finished new tunes, then the round's
+    /// kept tunes. Command indexes refer to it.
+    func queueNow() -> [Tune] {
+        syncRound()
+        guard let g = genre, let first = nextKept else { return ready }
+        return ready + [first] + roundOrder.dropFirst().map { keptTune(genreDir(g).appending(path: $0), decode: false) }
+    }
+
+    /// The kept tunes in the queue.
     func roundLeft() -> [String] {
-        // A kept tune queued by undo has still to play, unless it played
-        // this round before its scrap.
-        let new = Set(ready.filter { !$0.kept }.map(\.file))
-        let cur = current.map { Set([$0.file]) } ?? []
-        return Rounds.left(kept: keptNames(), played: played, shuffle: shuffle, anchor: anchor, busy: new.union(cur))
+        syncRound()
+        return roundOrder
     }
 
     func ended() -> Bool {
@@ -604,7 +638,8 @@ final class Engine: EngineAPI {
         if let cand = nextCandidate() {
             // Shown as playing at once: no snapshot may put the old genre's
             // tune or pause under the new genre.
-            nextKept = nil
+            if roundOrder.first == cand.file { roundOrder.removeFirst() }
+            played.insert(cand.file)
             current = cand
             paused = false
             setPosition(0)
@@ -615,11 +650,20 @@ final class Engine: EngineAPI {
         changed()
     }
 
-    func newRound() {
-        nextKept = nil
-        nextWraps = false
+    /// Starts a round: its order drawn over the kept tunes not queued as
+    /// ready, never starting with `avoid`.
+    func newRound(avoid: String? = nil) {
         played = []
+        roundAhead = false
+        nextKeptCache = nil
         anchor = nil
+        guard genre != nil else {
+            roundOrder = []
+            return
+        }
+        let readyNames = Set(ready.map(\.file))
+        roundOrder = Rounds.draw(keptNames().filter { !readyNames.contains($0) }, shuffle: shuffle, anchor: nil,
+                                 avoid: avoid, rng: &rng)
     }
 
     func toggle() {
@@ -628,7 +672,7 @@ final class Engine: EngineAPI {
             player.setPaused(paused)
             changed()
         } else if genre != nil {
-            if ended() { newRound() }
+            if ended() { newRound(avoid: lastStarted) }
             wantsPlay = true
             startIfIdle()
             changed()
@@ -670,9 +714,15 @@ final class Engine: EngineAPI {
     func setModes(shuffle newShuffle: Bool, repeat newRepeat: RepeatMode) {
         guard newShuffle != shuffle || newRepeat != repeatMode else { return }
         let wasEnded = ended()
-        if newShuffle != shuffle || (newRepeat == .off && nextWraps) {
-            nextKept = nil
-            nextWraps = false
+        if newShuffle != shuffle {
+            // What is left is redrawn: shuffled, or back in the order made
+            // going round from the last kept tune started.
+            roundOrder = Rounds.draw(roundOrder, shuffle: newShuffle, anchor: anchor, avoid: nil, rng: &rng)
+            nextKeptCache = nil
+        }
+        if newRepeat == .off && roundAhead {
+            roundOrder = []
+            roundAhead = false
         }
         shuffle = newShuffle
         repeatMode = newRepeat
@@ -680,7 +730,7 @@ final class Engine: EngineAPI {
         saveState()
         changed()
         if wasEnded && newRepeat != .off {
-            newRound()
+            newRound(avoid: lastStarted)
             startIfIdle()
         } else {
             syncPlaylist()
@@ -698,19 +748,9 @@ final class Engine: EngineAPI {
 
     // MARK: - The player
 
-    func fillNextKept() {
-        guard let g = genre else { return }
-        if let nk = nextKept, Files.exists(nk.path) { return }
-        let (name, wraps) = Rounds.choose(
-            kept: keptNames(), played: played, busy: busy(), shuffle: shuffle, anchor: anchor, repeat: repeatMode, rng: &rng
-        )
-        nextWraps = wraps
-        nextKept = name.map { keptTune(genreDir(g).appending(path: $0)) }
-    }
-
     func nextCandidate() -> Tune? {
         guard genre != nil else { return nil }
-        fillNextKept()
+        syncRound()
         return ready.first ?? nextKept
     }
 
@@ -778,23 +818,30 @@ final class Engine: EngineAPI {
     func onTrack(_ ask: Ask, token: Int) {
         let path = ask.path
         let queued = ready.first?.path == path
+        let name = path.lastPathComponent
         if queued {
             current = ready.removeFirst()
-        } else if let nk = nextKept, nk.path == path {
-            current = nk
-            if nextWraps { played = [] }
-            nextKept = nil
-            nextWraps = false
+        } else if let i = roundOrder.firstIndex(of: name) {
+            let tune = nextKept?.path == path ? nextKept! : (current?.path == path ? current! : keptTune(path))
+            if roundAhead {
+                // The next round's first tune: that round begins.
+                played = []
+                roundAhead = false
+            }
+            roundOrder.remove(at: i)
+            // A kept tune picked out of turn: with shuffle off the rest
+            // follow it in the order made.
+            if i > 0 && !shuffle { roundOrder = Rounds.made(roundOrder, after: name) }
+            nextKeptCache = nil
+            current = tune
         } else if current?.path != path {
-            // A kept tune picked out of turn: the next one follows it.
             current = keptTune(path)
-            nextKept = nil
-            nextWraps = false
         }
         currentToken = token
-        if !queued, current?.kept == true { anchor = path.lastPathComponent }
+        if !queued, current?.kept == true { anchor = name }
+        lastStarted = name
         loading = nil
-        played.insert(path.lastPathComponent)
+        played.insert(name)
         appended = nil
         playError = nil
         setPosition(0)

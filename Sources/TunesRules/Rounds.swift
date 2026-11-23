@@ -1,53 +1,37 @@
 import TunesContract
 
-/// Which kept tune plays next. Tunes are file names; they sort in the order
-/// made because they begin with when the tune was made.
+/// The order a round plays its kept tunes in. Tunes are file names; they
+/// sort in the order made because they begin with when the tune was made.
 public enum Rounds {
-    /// The kept tunes this round has still to play: not played this round
-    /// and not busy (playing or queued). Oldest first; with shuffle off,
-    /// those made after `anchor` (the last kept tune started) come first,
-    /// then those before it, so the order goes round and skips none.
-    public static func left(kept: [String], played: Set<String>, shuffle: Bool, anchor: String?, busy: Set<String> = []) -> [String] {
-        let left = kept.sorted().filter { !played.contains($0) && !busy.contains($0) }
-        guard !shuffle, let anchor else { return left }
-        return left.filter { $0 > anchor } + left.filter { $0 <= anchor }
+    /// The order made, going round from `anchor`: those made after it, then
+    /// those made before it or it.
+    public static func made(_ tunes: [String], after anchor: String?) -> [String] {
+        let sorted = tunes.sorted()
+        guard let anchor else { return sorted }
+        return sorted.filter { $0 > anchor } + sorted.filter { $0 <= anchor }
     }
 
-    /// The next kept tune, or nil, and whether it starts a new round. At
-    /// random with shuffle on, else the first of the round; a round over
-    /// starts another unless repeat is off.
-    public static func choose<R: RandomNumberGenerator>(
-        kept: [String], played: Set<String>, busy: Set<String>, shuffle: Bool, anchor: String?,
-        repeat mode: RepeatMode, rng: inout R
-    ) -> (tune: String?, wraps: Bool) {
-        var remaining = left(kept: kept, played: played, shuffle: shuffle, anchor: anchor, busy: busy)
-        var wraps = false
-        if remaining.isEmpty && mode != .off {
-            remaining = left(kept: kept, played: [], shuffle: shuffle, anchor: nil, busy: busy)
-            wraps = true
-        }
-        guard !remaining.isEmpty else { return (nil, false) }
-        return (shuffle ? remaining.randomElement(using: &rng) : remaining.first, wraps)
-    }
-
-    /// With shuffle off, up to `count` kept tunes that play after `first`
-    /// (the next kept tune, which starts a new round when `wraps`), in order.
-    public static func after(
-        kept: [String], played: Set<String>, busy: Set<String>, anchor: String?, repeat mode: RepeatMode,
-        first: String, wraps: Bool, count: Int
+    /// A round's order over `tunes`, drawn once: shuffled with shuffle on,
+    /// else the order made going round from `anchor`. It never starts with
+    /// `avoid` (the tune that ended the last round) when there is another.
+    public static func draw<R: RandomNumberGenerator>(
+        _ tunes: [String], shuffle: Bool, anchor: String?, avoid: String?, rng: inout R
     ) -> [String] {
-        var played = wraps ? [first] : played.union([first])
-        var anchor = first
-        var out: [String] = []
-        var unused = SplitMix64(seed: 0)
-        while out.count < count {
-            let (next, wrap) = choose(kept: kept, played: played, busy: busy, shuffle: false, anchor: anchor, repeat: mode, rng: &unused)
-            guard let next, next != first, !out.contains(next) else { break }
-            played = wrap ? [next] : played.union([next])
-            anchor = next
-            out.append(next)
+        var order = shuffle ? tunes.shuffled(using: &rng) : made(tunes, after: anchor)
+        if let avoid, order.count > 1, order.first == avoid {
+            let other = shuffle ? Int.random(in: 1..<order.count, using: &rng) : 1
+            order.swapAt(0, other)
         }
-        return out
+        return order
+    }
+
+    /// The order with tunes that are gone dropped, and kept tunes it lacks
+    /// (not in `excluded`: played this round, playing, queued) added at the
+    /// end in the order made.
+    public static func reconciled(_ order: [String], kept: [String], excluded: Set<String>) -> [String] {
+        let present = Set(kept)
+        let staying = order.filter(present.contains)
+        return staying + present.subtracting(staying).subtracting(excluded).sorted()
     }
 }
 
