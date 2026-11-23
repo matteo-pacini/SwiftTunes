@@ -124,12 +124,14 @@ public enum Decide {
             chip: e.id == nil ? "" : (kept > 0 ? "\(kept) kept" : "none yet"),
             values: e.values,
             loading: e.loading,
-            name: field("NAME", for: .name),
-            caption: field("PROMPT", "what every tune has", "instruments, mood, style, in a few phrases", for: .caption),
-            turns: field("VARIATIONS", e.id == nil ? "optional" : "one per line, two are picked per tune", "one per line", for: .turns),
-            slowest: EditorCard.Field(label: "SLOWEST", side: "", placeholder: "", error: "", bad: bpmRefused || (shown(.bpm) && tempoBoxes.contains(.slowest))),
-            fastest: EditorCard.Field(label: "FASTEST", side: "", placeholder: "", error: "", bad: bpmRefused || (shown(.bpm) && tempoBoxes.contains(.fastest))),
+            name: field("Name", for: .name),
+            caption: field("Prompt", "what every tune has", "instruments, mood, style, in a few phrases", for: .caption),
+            turns: field("Variations", e.id == nil ? "optional" : "one per line, two are picked per tune", "one per line", for: .turns),
+            slowest: EditorCard.Field(label: "Slowest", side: "", placeholder: "", error: "", bad: bpmRefused || (shown(.bpm) && tempoBoxes.contains(.slowest))),
+            fastest: EditorCard.Field(label: "Fastest", side: "", placeholder: "", error: "", bad: bpmRefused || (shown(.bpm) && tempoBoxes.contains(.fastest))),
             tempoError: error(.bpm),
+            colours: e.palette ?? Palette.made(from: e.values.name.isEmpty ? name : e.values.name).colors.map(\.hex),
+            coloursLabel: "Colours",
             hint: hint,
             delete: e.id != nil && s.genres.count > 1 ? Control(enabled: !e.busy, text: "Delete genre…", help: "Delete genre…") : nil,
             cancel: Control(text: "Cancel", help: "Cancel"),
@@ -151,14 +153,16 @@ public enum Decide {
         let rowEnabled = ready && !sh.busy
         let rule = "never removed by the newest-\(s.keep) rule"
         let rows: [ShareCard.Row] = [
-            .init(action: .copyFile, title: "Copy the file", sub: "paste it into a chat, a mail or a folder", on: nil, control: Control(enabled: rowEnabled, help: "Copy the file")),
+            .init(action: .share, title: "Share…", sub: "Mail, Messages, AirDrop and the rest", on: nil, control: Control(enabled: rowEnabled, help: "Share…")),
             .init(action: .copyPath, title: "Copy its path", sub: i.map { Format.tilde($0.path.path, home: home) } ?? "", on: nil, control: Control(enabled: rowEnabled, help: "Copy its path")),
             .init(action: .showInFinder, title: "Show it in Finder", sub: "", on: nil, control: Control(enabled: rowEnabled, help: "Show it in Finder")),
             .init(action: .export, title: "Export a copy", sub: i.map { "to \(Format.tilde($0.exportPath.path, home: home))" } ?? "", on: nil, control: Control(enabled: rowEnabled, help: "Export a copy")),
             .init(action: .keep, title: "Keep it for good", sub: rule, on: i?.pinned, control: Control(enabled: rowEnabled, lit: i?.pinned ?? false, help: "Keep it for good")),
         ]
         let genreName = s.genres.first { $0.id == s.genre }?.name ?? ""
-        return ShareCard(back: Control(text: "Back", help: "Back"), head: i?.genre ?? genreName, name: i?.name ?? sh.target.name, meta: meta, rows: rows)
+        let artwork = i.map { Artwork.recipe(name: $0.name, bpm: $0.bpm, key: $0.key, palette: palette(s)) }
+        return ShareCard(back: Control(text: "Back", help: "Back"), head: i?.genre ?? genreName, name: i?.name ?? sh.target.name, meta: meta,
+                         hint: "Drag the picture to drop the tune anywhere", artwork: artwork, file: i?.path, rows: rows)
     }
 
     // MARK: Player
@@ -214,8 +218,19 @@ public enum Decide {
         return .seek(to: (f * l * 10).rounded() / 10)
     }
 
+    /// The selected genre's palette, or one made from its name.
+    public static func palette(_ s: Snapshot) -> Palette {
+        guard let g = s.genres.first(where: { $0.id == s.genre }) else { return Palette.made(from: s.genre ?? "") }
+        return palette(of: g)
+    }
+
+    /// A genre's palette for its chooser tile and backdrop.
+    public static func palette(of g: GenreSummary) -> Palette {
+        Palette.of(name: g.name, hex: nil)
+    }
+
     static func player(_ s: Snapshot, now: Double) -> PlayerCard {
-        PlayerCard(strip: s.error, now: nowSection(s, now: now), next: nextSection(s, now: now), composer: composer(s, now: now))
+        PlayerCard(palette: palette(s), strip: s.error, now: nowSection(s, now: now), next: nextSection(s, now: now), composer: composer(s, now: now))
     }
 
     static func nowSection(_ s: Snapshot, now: Double) -> PlayerCard.Now {
@@ -266,6 +281,7 @@ public enum Decide {
         case .off: .all
         }
         return PlayerCard.Now(
+            label: suffix.isEmpty ? "NOW PLAYING" : "NOW PLAYING · \(suffix.uppercased())",
             suffix: suffix,
             genre: Control(text: name, help: "Genre"),
             title: title,
@@ -273,6 +289,8 @@ public enum Decide {
             badge: t?.pinned == true ? "★ kept for good" : "",
             meta: meta,
             wave: wave,
+            forming: t == nil && jobShown(s) ? s.job?.stage : nil,
+            repeatsOne: s.repeat == .one,
             time: time,
             playPause: Control(enabled: t != nil || canPlay(s) || s.ended, help: playing ? "Pause" : "Play"),
             showsPause: playing,
@@ -297,6 +315,7 @@ public enum Decide {
     static func nextSection(_ s: Snapshot, now: Double) -> PlayerCard.Next {
         let waits = s.repeat == .one
         var keptRows = 0
+        let colours = palette(s)
         var rows: [PlayerCard.Row] = s.queue.enumerated().map { i, q in
             var number = ""
             if q.kept {
@@ -307,6 +326,7 @@ public enum Decide {
                 id: "tune \(q.file) \(i)", kind: .tune, index: i, number: number, name: q.name, nameTone: .normal,
                 tag: q.new ? "new" : "", star: q.pinned, dim: waits,
                 sub: metaOf(bpm: q.bpm, key: q.key), right: q.length.map { Format.clock($0) } ?? "", rightTone: .dim, bar: nil,
+                artwork: Artwork.recipe(name: q.name, bpm: q.bpm, key: q.key, palette: colours), stage: nil,
                 playNow: Control(help: "Play it now"), share: Control(help: "Share"), scrap: Control(help: "Scrap \(q.name)"),
                 playNowCommand: .playQueued(index: i, name: q.name),
                 scrapCommand: .scrapQueued(index: i, name: q.name),
@@ -328,6 +348,7 @@ public enum Decide {
             rows.append(PlayerCard.Row(
                 id: "job", kind: .job, index: nil, number: "", name: rendering ? "Being rendered" : "Being written", nameTone: .soft,
                 tag: "", star: false, dim: false, sub: parts.joined(separator: " · "), right: "composing", rightTone: .cyan, bar: bar,
+                artwork: nil, stage: j.stage,
                 playNow: nil, share: nil, scrap: Control(help: rendering ? "Scrap the tune being rendered" : "Scrap the tune being written"),
                 playNowCommand: nil, scrapCommand: .scrapJob, shareRequest: nil
             ))
@@ -337,7 +358,7 @@ public enum Decide {
             for n in 0..<max(0, missing) {
                 rows.append(PlayerCard.Row(
                     id: "placeholder \(n)", kind: .placeholder, index: nil, number: "", name: "Not started", nameTone: .dim, tag: "", star: false, dim: false,
-                    sub: s.job != nil ? "after the one above" : "", right: "", rightTone: .dim, bar: nil, playNow: nil, share: nil, scrap: nil,
+                    sub: s.job != nil ? "after the one above" : "", right: "", rightTone: .dim, bar: nil, artwork: nil, stage: nil, playNow: nil, share: nil, scrap: nil,
                     playNowCommand: nil, scrapCommand: nil, shareRequest: nil
                 ))
             }
@@ -354,7 +375,9 @@ public enum Decide {
         } else {
             head = "nothing"
         }
-        return PlayerCard.Next(head: head, rows: rows)
+        // The shelf holds three cards: what is queued, then the job, then
+        // what has not started.
+        return PlayerCard.Next(head: head, rows: Array(rows.prefix(3)))
     }
 
     static func composer(_ s: Snapshot, now: Double) -> PlayerCard.Composer {
@@ -377,7 +400,7 @@ public enum Decide {
                     lines.append(.init("A tune takes about \(memory) of memory while it is made."))
                 }
             }
-            return PlayerCard.Composer(on: false, label: "off", labelTone: .soft, toggle: Control(help: "Composer on"), lines: lines, retry: nil)
+            return PlayerCard.Composer(on: false, label: "off", labelTone: .soft, pill: "off", pillTone: .soft, toggle: Control(help: "Composer on"), lines: lines, retry: nil)
         }
         var right = ""
         var rightTone = Tone.dim
@@ -434,7 +457,9 @@ public enum Decide {
             lines.append(.init([m.name, m.variant, m.device].filter { !$0.isEmpty }.joined(separator: " · ")))
         }
         let canRetry = m.state == .failed || m.state == .noDevice
-        return PlayerCard.Composer(on: true, label: label, labelTone: labelTone, toggle: Control(lit: true, help: "Composer off"),
+        let pill: String? = label != "on" ? label : (right.isEmpty ? nil : right)
+        return PlayerCard.Composer(on: true, label: label, labelTone: labelTone, pill: pill, pillTone: label != "on" ? labelTone : rightTone,
+                                   toggle: Control(lit: true, help: "Composer off"),
                                    lines: lines, retry: canRetry ? Control(text: "Try now", help: "Try now") : nil)
     }
 

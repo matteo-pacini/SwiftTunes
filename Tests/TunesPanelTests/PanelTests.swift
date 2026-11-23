@@ -117,7 +117,7 @@ struct EditorTests {
             turns: "smoky club\nlate set, slow and close\nmuted trumpet takes the lead\npiano trio, no horns\nvibraphone solo\nrainy evening\nbossa feel\na slow ballad",
             slowest: "90", fastest: "150"))
         #expect(e.save.enabled)
-        #expect([e.name.label, e.caption.label, e.turns.label, e.slowest.label, e.fastest.label] == ["NAME", "PROMPT", "VARIATIONS", "SLOWEST", "FASTEST"])
+        #expect([e.name.label, e.caption.label, e.turns.label, e.slowest.label, e.fastest.label] == ["Name", "Prompt", "Variations", "Slowest", "Fastest"])
         #expect([e.caption.side, e.turns.side, e.caption.placeholder, e.turns.placeholder] == ["what every tune has", "one per line, two are picked per tune", "instruments, mood, style, in a few phrases", "one per line"])
         #expect(e.back.text == "Genres" && e.cancel.text == "Cancel" && e.save.text == "Save" && e.delete?.text == "Delete genre…")
         // An answer for another genre, or a second one: nothing changes.
@@ -400,8 +400,9 @@ struct ModeTests {
         #expect(p.next.head == head)
         let tunes = p.next.rows.filter { $0.kind == .tune }
         #expect(tunes.allSatisfy { $0.dim == (c.mode == .one) })
-        #expect(tunes.map(\.tag) == s.queue.map { $0.new ? "new" : "" })
-        #expect(tunes.map(\.number) == (c.ended ? [] : (c.fresh ? [""] : []) + (c.shuffle ? ["1"] : ["5", "6", "7"])))
+        // The shelf holds three cards.
+        #expect(tunes.map(\.tag) == s.queue.prefix(3).map { $0.new ? "new" : "" })
+        #expect(tunes.map(\.number) == Array((c.ended ? [] : (c.fresh ? [""] : []) + (c.shuffle ? ["1"] : ["5", "6", "7"])).prefix(3)))
         #expect(lines(p).filter { $0.contains("until the repeat ends") } == (c.mode == .one && c.fresh ? ["1 new tune waits until the repeat ends."] : []))
         #expect([p.now.title, p.now.meta] == (c.ended ? ["Played all 14 Jazz tunes", "Play starts over. Repeat is off."] : ["Lazy Avenue", "139 BPM · C major"]))
         #expect(p.now.playPause.help == (c.ended ? "Play" : "Pause"))
@@ -458,7 +459,9 @@ struct ShareTests {
         #expect(target == TuneTarget(name: "Lazy Avenue", index: nil))
         let c = try share(s, p)
         #expect([c.head, c.name, c.meta] == ["Jazz", "Lazy Avenue", ""])
-        #expect(c.rows.map(\.title) == ["Copy the file", "Copy its path", "Show it in Finder", "Export a copy", "Keep it for good"])
+        #expect(c.rows.map(\.title) == ["Share…", "Copy its path", "Show it in Finder", "Export a copy", "Keep it for good"])
+        #expect(c.hint == "Drag the picture to drop the tune anywhere")
+        #expect(c.artwork == nil && c.file == nil)
         #expect(c.rows.allSatisfy { !$0.control.enabled })
         #expect(c.back.text == "Back")
         #expect(try openShare(Fixture.load("06-first-tune"), index: nil).1 == nil)
@@ -471,7 +474,7 @@ struct ShareTests {
         let c = try share(s, p)
         #expect(c.meta == "139 BPM · C major · 2:57 · AAC, 4.1 MB")
         #expect(c.rows.map(\.sub) == [
-            "paste it into a chat, a mail or a folder",
+            "Mail, Messages, AirDrop and the rest",
             "~/Music/Tunes/Jazz/20261123-070612-139bpm-C-major.m4a",
             "",
             "to ~/Music/Tunes/Exports/Jazz - Lazy Avenue.m4a",
@@ -479,7 +482,9 @@ struct ShareTests {
         ])
         #expect(c.rows.map(\.on) == [nil, nil, nil, nil, false])
         #expect(c.rows.allSatisfy { $0.control.enabled })
-        #expect(c.rows.map(\.control.help) == ["Copy the file", "Copy its path", "Show it in Finder", "Export a copy", "Keep it for good"])
+        #expect(c.rows.map(\.control.help) == ["Share…", "Copy its path", "Show it in Finder", "Export a copy", "Keep it for good"])
+        #expect(c.file?.path == "/Users/someone/Music/Tunes/Jazz/20261123-070612-139bpm-C-major.m4a")
+        #expect(c.artwork == Artwork.recipe(name: "Lazy Avenue", bpm: 139, key: "C major", palette: Decide.palette(s)))
     }
 
     @Test("an answer for another tune, or a second one, changes nothing")
@@ -539,7 +544,7 @@ struct ShareTests {
         let s = try Fixture.load("30-modes-default")
         let (p, _) = try openShare(s, index: nil)
         #expect(p.sharing(s).1 == nil)
-        #expect(p.didFileAction(.copyFile, done: true, now: NOW) == p)
+        #expect(p.didFileAction(.copyPath, done: true, now: NOW) == p)
     }
 
     @Test("each result closes the sheet with its line in the footer")
@@ -553,7 +558,7 @@ struct ShareTests {
         #expect(Decide.footer(s, busy.pinned(.success(PinResult(on: false, name: "Lazy Avenue")), now: NOW), now: NOW) == .notice("Lazy Avenue is no longer kept for good."))
         #expect(Decide.footer(s, busy.exported(.failure(Answers.refusal(lines[4])), home: HOME, now: NOW), now: NOW) == .notice("Lazy Avenue is no longer there."))
         #expect(p.exported(.success(URL(fileURLWithPath: "/x/y")), home: HOME, now: NOW) == p)
-        for (action, text) in [(Panel.FileAction.copyFile, "Copied Lazy Avenue as a file. Paste it anywhere."), (.copyPath, "Copied the path of Lazy Avenue."), (.showInFinder, "Showed Lazy Avenue in Finder.")] {
+        for (action, text) in [(Panel.FileAction.copyPath, "Copied the path of Lazy Avenue."), (.showInFinder, "Showed Lazy Avenue in Finder.")] {
             let done = p.didFileAction(action, done: true, now: NOW)
             #expect(done.mode == .player && done.share == nil)
             #expect(Decide.footer(s, done, now: NOW) == .notice(text))
@@ -561,7 +566,7 @@ struct ShareTests {
         }
     }
 
-    @Test("a file action the system did not do: the sheet closes with no line", arguments: [Panel.FileAction.copyFile, .copyPath, .showInFinder])
+    @Test("a file action the system did not do: the sheet closes with no line", arguments: [Panel.FileAction.copyPath, .showInFinder])
     func fileActionFailed(_ action: Panel.FileAction) throws {
         let (s, p) = try described()
         let closed = p.didFileAction(action, done: false, now: NOW)

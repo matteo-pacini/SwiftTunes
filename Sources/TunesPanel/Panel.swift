@@ -44,6 +44,9 @@ public struct Panel: Sendable, Equatable {
         public var asking = false
         /// Why the last delete was refused.
         public var deleteError: String?
+        /// The four colours as `#RRGGBB` once one is picked; nil while the
+        /// genre keeps the colours made from its name.
+        public var palette: [String]?
     }
 
     /// The share sheet on one tune.
@@ -169,6 +172,20 @@ extension Panel {
         if let r = e.refused, r.field == nil || r.field == field.group {
             e.refused = nil
         }
+        var p = self
+        p.editor = e
+        return p
+    }
+
+    /// A colour picked in swatch `index` of the Colours row. The other three
+    /// keep what the row showed.
+    public func pickingColour(_ index: Int, hex: String, shown: [String]) -> Panel {
+        guard mode == .editor, var e = editor, !e.loading, shown.indices.contains(index), RGB(hex: hex) != nil else { return self }
+        var colours = e.palette ?? shown
+        guard colours.count == 4, colours[index] != hex.uppercased() else { return self }
+        colours[index] = hex.uppercased()
+        e.palette = colours
+        if let r = e.refused, r.field == nil { e.refused = nil }
         var p = self
         p.editor = e
         return p
@@ -397,7 +414,7 @@ extension Panel {
 
     /// What the app did itself with the file.
     public enum FileAction: Sendable, Equatable {
-        case copyFile, copyPath, showInFinder
+        case copyPath, showInFinder
     }
 
     /// One of the app's own actions on the described tune, and whether the
@@ -413,7 +430,6 @@ extension Panel {
         }
         let n = s.displayName
         switch action {
-        case .copyFile: return sheetClosed("Copied \(n) as a file. Paste it anywhere.", now: now)
         case .copyPath: return sheetClosed("Copied the path of \(n).", now: now)
         case .showInFinder: return sheetClosed("Showed \(n) in Finder.", now: now)
         }

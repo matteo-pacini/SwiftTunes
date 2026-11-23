@@ -94,6 +94,9 @@ public struct EditorCard: Sendable, Equatable {
     public var fastest: Field
     /// Under the two tempo boxes.
     public var tempoError: String
+    /// The Colours row: the four colours as `#RRGGBB`.
+    public var colours: [String]
+    public var coloursLabel: String
     public var hint: String
     /// Absent for a new genre and for the last genre.
     public var delete: Control?
@@ -130,10 +133,16 @@ public struct ShareCard: Sendable, Equatable {
     public var head: String
     public var name: String
     public var meta: String
+    /// Under the meta line: the picture can be dragged out.
+    public var hint: String
+    /// The tune's picture, once the tune is described.
+    public var artwork: Artwork?
+    /// The file the picture drags out and `Share…` offers, once described.
+    public var file: URL?
     public var rows: [Row]
 
     public enum Action: Sendable, Equatable {
-        case copyFile, copyPath, showInFinder, export, keep
+        case share, copyPath, showInFinder, export, keep
     }
 
     public struct Row: Sendable, Equatable {
@@ -149,12 +158,16 @@ public struct ShareCard: Sendable, Equatable {
 // MARK: - Player
 
 public struct PlayerCard: Sendable, Equatable {
+    /// The selected genre's colours, for the backdrop.
+    public var palette: Palette
     public var strip: String?
     public var now: Now
     public var next: Next
     public var composer: Composer
 
     public struct Now: Sendable, Equatable {
+        /// "NOW PLAYING", with " · KEPT TUNES" or " · REPEATING".
+        public var label: String
         /// "repeating", "kept tunes" or "".
         public var suffix: String
         /// The genre button.
@@ -165,6 +178,10 @@ public struct PlayerCard: Sendable, Equatable {
         public var badge: String
         public var meta: String
         public var wave: Wave?
+        /// With no tune and a tune being made: the forming wave's stage.
+        public var forming: JobStage?
+        /// Repeat is on one tune.
+        public var repeatsOne: Bool
         public var time: (left: String, right: String)?
         public var playPause: Control
         /// Whether the main button shows pause.
@@ -220,6 +237,10 @@ public struct PlayerCard: Sendable, Equatable {
         public var right: String
         public var rightTone: Tone
         public var bar: Double?
+        /// A tune's picture.
+        public var artwork: Artwork?
+        /// The job's stage, for its small forming wave.
+        public var stage: JobStage?
         /// What the pointer over the row offers.
         public var playNow: Control?
         public var share: Control?
@@ -236,6 +257,10 @@ public struct PlayerCard: Sendable, Equatable {
         public var on: Bool
         public var label: String
         public var labelTone: Tone
+        /// The state as a pill beside the switch: the label when it is
+        /// not plain "on", else the first line's right-hand words.
+        public var pill: String?
+        public var pillTone: Tone
         public var toggle: Control
         public var lines: [Line]
         /// "Try now", when failed or no device.

@@ -219,14 +219,13 @@ final class PanelModel {
 
     func shareAction(_ action: ShareCard.Action) {
         switch action {
-        case .copyFile, .copyPath, .showInFinder:
+        case .share:
+            // ShareLink presents the system's share sheet itself.
+            return
+        case .copyPath, .showInFinder:
             guard let info = panel.share?.info else { return }
             let pasteboard = NSPasteboard.general
             switch action {
-            case .copyFile:
-                pasteboard.clearContents()
-                let done = pasteboard.writeObjects([info.path as NSURL])
-                set(panel.didFileAction(.copyFile, done: done, now: Self.clock()))
             case .copyPath:
                 pasteboard.clearContents()
                 let done = pasteboard.setString(info.path.path, forType: .string)

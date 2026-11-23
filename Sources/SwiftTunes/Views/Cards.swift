@@ -321,7 +321,7 @@ struct ShareRow: View {
 
     private var symbol: String {
         switch row.action {
-        case .copyFile: "doc.on.doc"
+        case .share: "square.and.arrow.up.on.square"
         case .copyPath: "link"
         case .showInFinder: "folder"
         case .export: "square.and.arrow.up"
