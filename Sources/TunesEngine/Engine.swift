@@ -48,6 +48,8 @@ final class ServerRecord {
     var up = false
     var stopping = false
     var exitStatus: Int32?
+    /// The id of a job asked to cancel, while the server may still be ending it.
+    var cancelling: String?
 
     init(port: Int, client: ServerClient) {
         self.port = port

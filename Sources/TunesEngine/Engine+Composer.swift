@@ -188,7 +188,6 @@ extension Engine {
     func serverExited(_ record: ServerRecord, _ status: Int32) {
         record.exitStatus = status
         exiting[ObjectIdentifier(record)] = nil
-        record.client.invalidate()
         guard record === server else { return }
         server = nil
         if record.stopping { return }
@@ -207,9 +206,31 @@ extension Engine {
         cancelTimer("server_health")
         guard let s = server, !s.stopping else { return }
         s.stopping = true
-        s.process?.stop()
         server = nil
         changed()
+        if s.cancelling == nil {
+            s.process?.stop()
+        } else {
+            // A job is being cancelled: the server ends it within a second,
+            // where SIGTERM mid-job would wait out the kill grace.
+            setTimer("drain:\(s.port)", Rules.drainMax) { s.process?.stop() }
+        }
+    }
+
+    /// Asks the server whether the cancelled job has ended; closes its
+    /// lifeline once it has, or once the wait is over.
+    func drain(_ s: ServerRecord) {
+        guard s.stopping, let id = s.cancelling else { return }
+        spawn { [weak self] in
+            let reply = try? await s.client.json("GET", "/job?id=\(id)")
+            guard let self else { return }
+            if reply?["status"] == .string("running") {
+                self.setTimer("drain-poll:\(s.port)", Rules.drainPoll) { [weak self] in self?.drain(s) }
+            } else {
+                self.cancelTimer("drain:\(s.port)")
+                s.process?.stop()
+            }
+        }
     }
 
     // MARK: - Jobs
@@ -220,8 +241,23 @@ extension Engine {
         cancelTimer("poll")
         cancelTimer("lost")
         if !held { cancelTimer("hold_check") }
-        if let j, let id = j.id, let s = server, s.up, !shuttingDown {
-            spawn { _ = try? await s.client.call("POST", "/job?id=\(id)&cancel=1") }
+        if let j, let id = j.id, let s = server, s.up {
+            s.cancelling = id
+            spawn { [weak self] in
+                let sent = (try? await s.client.call("POST", "/job?id=\(id)&cancel=1")) != nil
+                guard let self else { return }
+                guard s.stopping else {
+                    // The server stays: nothing waits on this job's end.
+                    if s.cancelling == id { s.cancelling = nil }
+                    return
+                }
+                if sent {
+                    self.drain(s)
+                } else {
+                    self.cancelTimer("drain:\(s.port)")
+                    s.process?.stop()
+                }
+            }
         }
         if state == .writing || state == .rendering {
             setState(server?.up == true ? .idle : .unloaded)
@@ -613,9 +649,9 @@ extension Engine {
         dlTask?.cancel()
         dlPrevious?.cancel()
         let downloads = [dlTask, dlPrevious].compactMap { $0 }
+        for name in Array(timers.keys) { cancelTimer(name) }
         cancelJob()
         stopServer()
-        for name in Array(timers.keys) { cancelTimer(name) }
         current = nil
         loading = nil
         appended = nil

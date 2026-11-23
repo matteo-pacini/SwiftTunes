@@ -218,14 +218,20 @@ final class FakeProcess: ServerProcess {
         }
     }
 
+    private var exitWaiters: [CheckedContinuation<Void, Never>] = []
+
     func exit(_ status: Int32) {
         guard alive else { return }
         alive = false
         onExit(status)
+        let w = exitWaiters
+        exitWaiters = []
+        w.forEach { $0.resume() }
     }
 
     func waitForExit() async {
-        while alive, await launcher.deliver() {}
+        if !alive { return }
+        await withCheckedContinuation { exitWaiters.append($0) }
     }
 }
 
@@ -402,8 +408,23 @@ final class Rig {
         ((try? FileManager.default.contentsOfDirectory(atPath: genreDir(genre).path)) ?? []).filter(TuneFiles.isTune).sorted()
     }
 
+    /// Shuts the engine down while time passes, as it does in the app.
+    func shutdown() async {
+        var done = false
+        let engine = engine!
+        let task = Task {
+            await engine.shutdown()
+            done = true
+        }
+        for _ in 0..<10_000 where !done {
+            await settle()
+            if !done && !clock.fireNext() { await Task.yield() }
+        }
+        await task.value
+    }
+
     func close() async {
-        await engine.shutdown()
+        await shutdown()
         token?.cancel()
         aceHTTP.stop()
         hostHTTP.stop()

@@ -229,7 +229,7 @@ import TunesRules
         await rig.send(.setComposer(on: true))
         #expect(await rig.run { rig.snap.expect != nil })
         let expect = rig.snap.expect
-        await rig.engine.shutdown()
+        await rig.shutdown()
         #expect(rig.launcher.running == 0)
 
         let calls = rig.player.calls.count

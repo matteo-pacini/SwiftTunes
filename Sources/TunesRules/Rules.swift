@@ -27,6 +27,10 @@ public enum Rules {
     public static let downloadGap = 0.5
     /// Seconds the engine waits for the server to exit after a failed poll.
     public static let lostGrace = 2.0
+    /// Longest wait for a cancelled job to end before the server is stopped.
+    public static let drainMax = 1.0
+    /// How often that wait asks whether it has ended.
+    public static let drainPoll = 0.1
     /// Kept tunes the queue shows with shuffle off.
     public static let keptShown = 3
     public static let gone = "That tune is no longer there."

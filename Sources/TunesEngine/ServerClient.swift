@@ -10,12 +10,18 @@ nonisolated struct ServerClient: Sendable {
         var description: String
     }
 
-    init(host: String, port: Int) {
-        base = URL(string: "http://\(host):\(port)")!
+    /// One session for every server the engine starts; it is never
+    /// invalidated, since a late request on an invalidated session traps.
+    static let sharedSession: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.httpMaximumConnectionsPerHost = 4
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        session = URLSession(configuration: config)
+        return URLSession(configuration: config)
+    }()
+
+    init(host: String, port: Int) {
+        base = URL(string: "http://\(host):\(port)")!
+        session = Self.sharedSession
     }
 
     /// The raw body of a request; `body` is sent as JSON.
@@ -50,10 +56,6 @@ nonisolated struct ServerClient: Sendable {
         case .string(let s)? where !s.isEmpty: return s
         default: throw Failure(description: "the answer has no job id")
         }
-    }
-
-    func invalidate() {
-        session.invalidateAndCancel()
     }
 }
 

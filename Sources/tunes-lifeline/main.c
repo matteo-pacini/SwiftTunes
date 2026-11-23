@@ -9,7 +9,8 @@
  * however the app ends, even on SIGKILL, so end of file on the pipe means
  * the app is gone. The command runs in its own process group; on end of
  * file, or on SIGTERM, SIGINT or SIGHUP to this shim, the group gets SIGTERM
- * and, if it has not exited 5 s later, SIGKILL.
+ * and, if it has not exited 5 s later, SIGKILL. The command runs at nice 10,
+ * so composing yields to what the person is doing.
  *
  * The first line on stderr is "tunes-lifeline: started <pid>". The shim
  * exits with the command's status, or 128 + the signal that ended it; 125
@@ -22,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/event.h>
+#include <sys/resource.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -29,6 +31,7 @@
 #include <unistd.h>
 
 #define KILL_GRACE_S 5
+#define SERVER_NICE 10
 
 static int status_code(int status) {
     if (WIFEXITED(status)) return WEXITSTATUS(status);
@@ -119,6 +122,8 @@ int main(int argc, char **argv) {
     }
     if (child == 0) {
         setpgid(0, 0);
+        /* Failing to lower the priority is no reason not to run. */
+        setpriority(PRIO_PROCESS, 0, SERVER_NICE);
         for (size_t i = 0; i < sizeof sigs / sizeof sigs[0]; i++) signal(sigs[i], SIG_DFL);
         sigset_t none;
         sigemptyset(&none);

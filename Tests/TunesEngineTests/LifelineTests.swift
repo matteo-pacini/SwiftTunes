@@ -67,7 +67,7 @@ final class TapLauncher: ServerLauncher {
         let script = """
         #!/bin/sh
         sleep 1000 &
-        echo "$$ $!" > "$2/pids"
+        echo "$$ $! $(ps -o nice= -p $$)" > "$2/pids"
         echo "ggml_metal_device_init: GPU name:   MTL0 (Stand-in)" >&2
         echo "[Server] Listening on 127.0.0.1:0" >&2
         wait
@@ -92,8 +92,10 @@ final class TapLauncher: ServerLauncher {
         await tap.until { tap.lines.contains { $0.hasPrefix("[Server] Listening") } }
         #expect(tap.lines.first?.hasPrefix("tunes-lifeline: started ") == true)
         let text = try #require(Files.read(rig.paths.models.appending(path: "pids")))
-        let pids = text.split(whereSeparator: \.isWhitespace).compactMap { Int32($0) }
+        let fields = text.split(whereSeparator: \.isWhitespace).compactMap { Int32($0) }
+        let pids = Array(fields.prefix(2))
         #expect(pids.count == 2 && pids.allSatisfy(Self.alive))
+        #expect(fields.last == 10, "the server's nice")
         #expect(rig.engine.server?.process?.serverPID == pids.first)
         return (rig, tap, pids)
     }

@@ -65,6 +65,9 @@ public actor FakeAceServer {
     /// Health checks answered "loading" before "ok".
     public var loadingHealth = 0
     public var rate = 48000
+    /// Polls a cancelled job still answers "running" before "cancelled".
+    public var cancelPolls = 0
+    public func set(cancelPolls: Int) { self.cancelPolls = cancelPolls }
     /// Called when a job of kind `exit` is polled, before the connection drops.
     public var onCrash: (@Sendable () async -> Void)?
 
@@ -134,9 +137,16 @@ public actor FakeAceServer {
             guard let id = Int(r.query["id"] ?? ""), var job = jobs[id] else { return .json(#"{"error":"no such job"}"#, status: 404) }
             if r.query["cancel"] == "1" {
                 cancelled.append(id)
-                job.status = "cancelled"
+                job.status = "cancelling"
+                job.polls = 0
                 jobs[id] = job
                 return .json(#"{"status":"cancelled"}"#)
+            }
+            if job.status == "cancelling" {
+                job.polls += 1
+                if job.polls > cancelPolls { job.status = "cancelled" }
+                jobs[id] = job
+                return .json(job.status == "cancelled" ? #"{"status":"cancelled"}"# : #"{"status":"running"}"#)
             }
             if r.query["result"] == "1" {
                 return HTTPResponse(status: 200, headers: [("Content-Type", job.stage == "lm" ? "application/json" : "multipart/mixed; boundary=\(Self.boundary)")], body: job.result)
