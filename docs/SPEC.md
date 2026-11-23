@@ -121,14 +121,10 @@ is working material the lead hands to the app role; in words:
     old name back. The rule it breaks, or the engine's refusal, shows under
     it and the field stays open. The name's tooltip is `Rename`. With nothing to play the hero shows the empty-state
     sentences and, while a tune is being made, the forming wave.
-  - UP NEXT: the label with its right-hand text, then a vertical list read
-    top to bottom in the order things will play, at most three rows on
-    glass: queued tunes (a small square of artwork, the name with a NEW
-    badge, `N BPM · <key>`, the length at the right), then the job (a small
-    forming wave in the artwork's place, `Being written` / `Being
-    rendered`, the time line), then `Not started` placeholders. Hover on a
-    tune row shows play it now, share and scrap at the right in place of
-    the length; on the job row, scrap.
+  - UP NEXT and BEING MADE: see "The queue". Rows are glass: a small square
+    of artwork, the name with a NEW badge, `N BPM · <key>`, the length at
+    the right; hover shows play it now, share and scrap in place of the
+    length (job row: scrap).
   - COMPOSER: one glass bar: the label, the state as a pill, the switch;
     the `Makes <g>, keeps N ahead` line; the hold or failure sentence and
     the model line when they apply; `Try now` when failed or no device.
@@ -160,6 +156,76 @@ is working material the lead hands to the app role; in words:
 - **Motion and power.** Everything animated stops when the popover closes.
   Reduce Motion: still fields, no forming motion, no morphs. Low Power
   Mode: still backdrop. Reduce Transparency is left to the system's glass.
+
+## The queue
+
+- **Order.** `queue` is everything that will play, in order, for the rest of
+  the round: the finished new tunes first (a new tune always plays next),
+  then the kept tunes in the round's order. The round's order is drawn once:
+  with shuffle on, a shuffled order of the kept tunes not yet played, drawn
+  when the round starts and redrawn for what is left when shuffle is turned
+  on; with shuffle off, the order made. Every kept tune plays once a round,
+  and the first tune of a new round is never the last of the one before. A
+  tune that becomes kept joins the end of the order. `roundLeft` is the
+  number of kept tunes in `queue`.
+- **UP NEXT** lists finished tunes only, numbered from 1, three rows in the
+  player. Under them: `then N more this round · Show all` when there are
+  more, which opens the queue card. Its right-hand text: `N new, then kept`
+  when new tunes wait, else `from N kept, shuffled` or `N kept, in the order
+  made`.
+- **BEING MADE**, a separate block under UP NEXT with the right-hand text
+  `plays next when ready`: the job row and the `Not started` placeholders.
+  It is absent when the composer is off and no own-words tune is waiting.
+- **The queue card.** Back link to the player, `QUEUE · N THIS ROUND`, the
+  title `Up next`, the same right-hand text, then every row numbered in play
+  order in a scrolling list; BEING MADE stays under the list. Last line:
+  `after these, the round starts over`, or with repeat off `The round ends
+  after <t>.` Rows offer play it now, share and scrap on hover, as in the
+  player.
+
+## Singing
+
+- **Per genre.** A genre has a Singing switch (the genres file's optional
+  `sung` key). A sung genre's prompt describes the voice. Flipping the
+  switch changes only tunes made from then on; kept tunes stay and keep
+  playing. The editor's hint says `Tunes already kept stay as they are; new
+  ones will be sung.` or `…new ones will be instrumental.` when the switch
+  differs from the saved value. Editor row: `Singing`, sub line `The model
+  writes the words, in English. Say what the voice is like in the prompt.`
+- **The request.** For a sung genre the caption is the prompt and two
+  variations with no `instrumental` appended, `lyrics` is empty, and
+  `vocal_language` is `en`. The model writes the words; the plan goes to the
+  renderer unchanged.
+- **Thin words.** A plan with fewer than 6 sung lines, or fewer than 4
+  different sung lines compared without case, is written again; the third
+  such plan for one tune is the failure `3 plans in a row had too few sung
+  lines`. While writing again the composer shows `Writing again: the last
+  plan had too few sung lines.` A sung line is a non-empty line that does
+  not start with `[`. The silence rule applies as for any tune and has its
+  own count.
+- **The words are kept** in the file's lyrics tag. A tune is `sung` when its
+  file has words. `sung` joins the tempo and key wherever they show: `110
+  BPM · A minor · sung`.
+- **Showing them.** A sung playing tune has a `Lyrics` button under its meta
+  line. Open, the wave becomes a thin strip that still seeks, and the words
+  show under the heading `LYRICS AS WRITTEN`, scrolling, as plain text.
+- **Names** stay the two-word kind. Nothing filters the words.
+- **Your own words.** A sung genre's composer bar has `Sing my words…`. It
+  opens a sheet: back link, `SING MY WORDS`, the title `A tune in <g>`, four
+  buttons (`+ Verse`, `+ Chorus`, `+ Bridge`, `+ Instrumental break`) that
+  insert `[Verse]` and so on as a line of its own at the caret, a plain text
+  editor, the line `N sung lines · N of 2,000 characters` with `English
+  sings best` at the right, a Name field offering a two-word name, the note
+  `It is made once, with the genre's sound, and plays next when ready. The
+  model may not sing every word as written.`, then `Cancel` and `Compose`.
+  Refusals: `A tune needs at least one sung line.`, `The words are at most
+  2,000 characters; these have N.`, the tune-name rules, and `A tune with
+  your words is already being made.`
+- An own-words tune is made once, before the genre's own, whether or not the
+  composer switch is on (setup must be ready and the holds apply). Its words
+  are sent as given, with no thin-words check. Its row in BEING MADE shows
+  its name and `with your words · being written` (or `being rendered`) and
+  the time line. Scrapping the row cancels it.
 
 ## Ownership
 
