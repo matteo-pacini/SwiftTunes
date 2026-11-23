@@ -143,6 +143,12 @@ final class LifelineProcess: ServerProcess {
         }
     }
 
+    func kill() {
+        // The shim made the server's pid its process group.
+        if let pid = serverPID, pid > 0 { Darwin.kill(-pid, SIGKILL) }
+        stop()
+    }
+
     func waitForExit() async {
         await reader?.value
     }

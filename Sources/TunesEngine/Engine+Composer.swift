@@ -212,8 +212,13 @@ extension Engine {
             s.process?.stop()
         } else {
             // A job is being cancelled: the server ends it within a second,
-            // where SIGTERM mid-job would wait out the kill grace.
-            setTimer("drain:\(s.port)", Rules.drainMax) { s.process?.stop() }
+            // where SIGTERM mid-job would wait out the kill grace. One still
+            // running then (a cancel waits for a model load to finish) is
+            // killed: the server ignores SIGTERM for the whole job.
+            setTimer("drain:\(s.port)", Rules.drainMax) { [weak self] in
+                self?.cancelTimer("drain-poll:\(s.port)")
+                s.process?.kill()
+            }
         }
     }
 

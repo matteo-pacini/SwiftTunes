@@ -22,6 +22,7 @@ import TunesRules
         #expect(await rig.ace.cancelled.count == 1)
         #expect(rig.launcher.running == 0)
         #expect(rig.clock.now == t)
+        #expect(rig.launcher.processes.last?.killed == false)
         await rig.close()
     }
 
@@ -37,6 +38,8 @@ import TunesRules
         #expect(await rig.run { rig.launcher.running == 0 })
         #expect(abs(rig.clock.now - t - seconds) < 1e-6)
         #expect(await rig.ace.cancelled.count == 1)
+        // A job still running after the second is killed, not asked to stop.
+        #expect(rig.launcher.processes.last?.killed == (seconds == 1.0))
         await rig.close()
     }
 

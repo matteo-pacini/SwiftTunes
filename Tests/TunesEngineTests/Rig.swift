@@ -199,6 +199,7 @@ final class FakeProcess: ServerProcess {
     let onExit: @MainActor (Int32) -> Void
     var alive = true
     var stopped = false
+    var killed = false
 
     init(launcher: FakeLauncher, onLine: @escaping @MainActor (String) -> Void, onExit: @escaping @MainActor (Int32) -> Void) {
         self.launcher = launcher
@@ -215,6 +216,17 @@ final class FakeProcess: ServerProcess {
         launcher.pending.append { [self] in
             await ace.set(up: false)
             exit(143)
+        }
+    }
+
+    func kill() {
+        guard alive, !killed else { return }
+        killed = true
+        stopped = true
+        let ace = launcher.ace
+        launcher.pending.append { [self] in
+            await ace.set(up: false)
+            exit(137)
         }
     }
 

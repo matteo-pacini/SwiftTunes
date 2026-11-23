@@ -84,6 +84,8 @@ public protocol ServerLauncher: AnyObject {
 public protocol ServerProcess: AnyObject {
     /// Asks the server to end: SIGTERM, then SIGKILL after 5 s.
     func stop()
+    /// Ends the server now: SIGKILL to its process group, then as `stop`.
+    func kill()
     /// Returns once the process and everything it started have exited.
     func waitForExit() async
     /// The server's own pid, once known.
