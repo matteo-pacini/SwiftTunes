@@ -135,7 +135,7 @@ final class FakePlayer: TunePlayer {
 
 final class FakeHolds: HoldSource {
     var hold: Hold?
-    func current() -> Hold? { hold }
+    func current(memory: Bool) -> Hold? { hold == .memory && !memory ? nil : hold }
 }
 
 final class FakeProbe: SystemProbe {

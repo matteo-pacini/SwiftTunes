@@ -96,8 +96,9 @@ nonisolated public enum Hold: Sendable, Equatable {
 
 /// The system signals that hold composing.
 public protocol HoldSource: AnyObject {
-    /// The first hold that applies now, in the order memory, power, heat.
-    func current() -> Hold?
+    /// The first hold that applies now, in the order memory, power, heat;
+    /// memory pressure only when `memory`.
+    func current(memory: Bool) -> Hold?
 }
 
 /// Figures read from the system.

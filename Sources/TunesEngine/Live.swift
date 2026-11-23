@@ -24,12 +24,12 @@ final class LiveTimer: EngineTimer {
 
 /// Memory pressure, Low Power Mode and the thermal state, read when asked.
 final class LiveHolds: HoldSource {
-    func current() -> Hold? {
+    func current(memory: Bool) -> Hold? {
         // 1 normal, 2 warn, 4 critical: the levels of the dispatch memory
         // pressure source, readable without one.
         var level: Int32 = 0
         var size = MemoryLayout<Int32>.size
-        if sysctlbyname("kern.memorystatus_vm_pressure_level", &level, &size, nil, 0) == 0, level >= 2 {
+        if memory, sysctlbyname("kern.memorystatus_vm_pressure_level", &level, &size, nil, 0) == 0, level >= 2 {
             return .memory
         }
         let info = ProcessInfo.processInfo
@@ -174,7 +174,8 @@ final class QueuePlayer: TunePlayer {
         didSet { player.actionAtItemEnd = repeatOne ? .none : .advance }
     }
 
-    init() {
+    init(muted: Bool = false) {
+        player.isMuted = muted
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: nil, queue: .main) { [weak self] note in
             let id = (note.object as AnyObject?).map(ObjectIdentifier.init)

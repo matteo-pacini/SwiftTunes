@@ -147,11 +147,23 @@ import TunesRules
         await rig.ace.set(runningPolls: 100)
         await composing(rig)
         #expect(await rig.run { rig.snap.model.state == .writing })
-        rig.holds.hold = .memory
-        #expect(await rig.run { rig.snap.model.state == .heldMemory })
+        rig.holds.hold = .heat
+        #expect(await rig.run { rig.snap.model.state == .heldHeat })
         #expect(rig.clock.now == Rig.start + 10)
         #expect(rig.snap.job == nil && rig.launcher.running == 0)
         #expect(await rig.ace.cancelled.count == 1)
+        await rig.close()
+    }
+
+    @Test func memoryPressureDuringAJobDoesNotHoldIt() async throws {
+        let rig = try await Rig()
+        await composing(rig)
+        #expect(await rig.run { rig.snap.model.state == .writing })
+        rig.holds.hold = .memory
+        // The job finishes; the next one waits for memory.
+        #expect(await rig.run { rig.snap.model.state == .heldMemory })
+        #expect(rig.tunes("Jazz").count == 1 && rig.snap.tune != nil)
+        #expect(await rig.ace.cancelled.isEmpty)
         await rig.close()
     }
 

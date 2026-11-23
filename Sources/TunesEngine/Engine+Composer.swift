@@ -61,7 +61,7 @@ extension Engine {
             setState(.idle)
             return
         }
-        if let h = env.holds.current() {
+        if let h = env.holds.current(memory: true) {
             enterHold(h)
             return
         }
@@ -93,7 +93,7 @@ extension Engine {
 
     func holdTick() {
         guard genre != nil, composing, held else { return }
-        if let h = env.holds.current() {
+        if let h = env.holds.current(memory: true) {
             setState(Self.state(for: h))
             setTimer("hold_check", Rules.holdWaiting) { [weak self] in self?.holdTick() }
         } else {
@@ -102,9 +102,11 @@ extension Engine {
         }
     }
 
+    /// While a job runs memory pressure is not checked: the server's own
+    /// load raises it, and would hold every tune.
     func runningHoldTick() {
         guard job != nil else { return }
-        if let h = env.holds.current() {
+        if let h = env.holds.current(memory: false) {
             enterHold(h)
         } else {
             setTimer("hold_check", Rules.holdRunning) { [weak self] in self?.runningHoldTick() }
