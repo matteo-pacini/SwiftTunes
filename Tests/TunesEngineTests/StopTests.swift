@@ -59,4 +59,24 @@ import TunesRules
         #expect(rig.engine.server?.cancelling == nil)
         await rig.close()
     }
+
+    @Test func aStopWhileTheSongRequestIsInFlightCancelsItsJob() async throws {
+        let rig = try await Rig()
+        await rig.ace.set(runningPolls: 100)
+        await rig.ace.set(holdLM: true)
+        await rig.send(.selectGenre(id: "jazz"))
+        rig.engine.send(.setComposer(on: true))
+        _ = await rig.launcher.deliver()
+        await rig.ace.untilLMHeld()
+        let t = rig.clock.now
+        rig.engine.send(.setComposer(on: false))
+        #expect(rig.engine.timers["drain:\(rig.aceHTTP.port)"] != nil)
+        #expect(rig.launcher.processes.last?.stopped == false)
+        await rig.ace.releaseLM()
+        await rig.settle()
+        #expect(await rig.ace.cancelled == [1])
+        #expect(rig.launcher.running == 0)
+        #expect(rig.clock.now == t)
+        await rig.close()
+    }
 }

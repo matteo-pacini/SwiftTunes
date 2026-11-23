@@ -50,6 +50,8 @@ final class ServerRecord {
     var exitStatus: Int32?
     /// The id of a job asked to cancel, while the server may still be ending it.
     var cancelling: String?
+    /// A job was cancelled while its POST was in flight; its id is awaited.
+    var cancelPending = false
 
     init(port: Int, client: ServerClient) {
         self.port = port
@@ -75,6 +77,10 @@ final class JobRecord {
     let writeAt: Double
     var renderAt: Double = 0
     var writtenS: Double?
+    /// A POST for this job is waiting for its answer.
+    var posting = false
+    /// The job was cancelled during that POST; its id is cancelled on arrival.
+    var cancelWhenPosted = false
 
     init(token: Int, genre: Genre, bpm: Int, caption: String, name: String, writeAt: Double) {
         self.token = token

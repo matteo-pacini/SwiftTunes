@@ -208,7 +208,7 @@ extension Engine {
         s.stopping = true
         server = nil
         changed()
-        if s.cancelling == nil {
+        if s.cancelling == nil && !s.cancelPending {
             s.process?.stop()
         } else {
             // A job is being cancelled: the server ends it within a second,
@@ -241,28 +241,54 @@ extension Engine {
         cancelTimer("poll")
         cancelTimer("lost")
         if !held { cancelTimer("hold_check") }
-        if let j, let id = j.id, let s = server, s.up {
-            s.cancelling = id
-            spawn { [weak self] in
-                let sent = (try? await s.client.call("POST", "/job?id=\(id)&cancel=1")) != nil
-                guard let self else { return }
-                guard s.stopping else {
-                    // The server stays: nothing waits on this job's end.
-                    if s.cancelling == id { s.cancelling = nil }
-                    return
-                }
-                if sent {
-                    self.drain(s)
-                } else {
-                    self.cancelTimer("drain:\(s.port)")
-                    s.process?.stop()
-                }
+        if let j, let s = server, s.up {
+            if j.posting {
+                // The job's id is still on its way: it is cancelled when it comes.
+                j.cancelWhenPosted = true
+                s.cancelPending = true
+            } else if let id = j.id {
+                sendCancel(id, s)
             }
         }
         if state == .writing || state == .rendering {
             setState(server?.up == true ? .idle : .unloaded)
         }
         if j != nil { changed() }
+    }
+
+    func sendCancel(_ id: String, _ s: ServerRecord) {
+        s.cancelling = id
+        spawn { [weak self] in
+            let sent = (try? await s.client.call("POST", "/job?id=\(id)&cancel=1")) != nil
+            guard let self else { return }
+            guard s.stopping else {
+                // The server stays: nothing waits on this job's end.
+                if s.cancelling == id { s.cancelling = nil }
+                return
+            }
+            if sent {
+                self.drain(s)
+            } else {
+                self.cancelTimer("drain:\(s.port)")
+                s.process?.stop()
+            }
+        }
+    }
+
+    /// After a job's POST answers: false when the job was cancelled while it
+    /// was in flight, and its new id is cancelled now.
+    func posted(_ j: JobRecord, _ s: ServerRecord, _ result: Result<String, any Error>) -> Bool {
+        j.posting = false
+        guard j.cancelWhenPosted else { return true }
+        j.cancelWhenPosted = false
+        s.cancelPending = false
+        if case .success(let id) = result {
+            sendCancel(id, s)
+        } else if s.stopping {
+            cancelTimer("drain:\(s.port)")
+            s.process?.stop()
+        }
+        return false
     }
 
     func startJob() {
@@ -283,6 +309,7 @@ extension Engine {
             ("caption", .string(j.caption)), ("lyrics", .string(Rules.lyrics)),
             ("duration", .int(pins?.duration ?? 180)), ("bpm", .int(j.bpm)),
         ])
+        j.posting = true
         spawn { [weak self] in
             let result: Result<String, any Error>
             do {
@@ -290,7 +317,7 @@ extension Engine {
             } catch {
                 result = .failure(error)
             }
-            guard let self, self.job === j, self.server === s else { return }
+            guard let self, self.posted(j, s, result), self.job === j, self.server === s else { return }
             switch result {
             case .failure(let e):
                 self.failure("the model server refused the song request: \(describe(e))")
@@ -396,6 +423,7 @@ extension Engine {
         guard case .object(var fields) = plan else { return }
         fields.removeAll { $0.key == "output_format" }
         fields.append(("output_format", .string("wav16")))
+        j.posting = true
         spawn { [weak self] in
             let result: Result<String, any Error>
             do {
@@ -403,7 +431,7 @@ extension Engine {
             } catch {
                 result = .failure(error)
             }
-            guard let self, self.job === j, self.server === s else { return }
+            guard let self, self.posted(j, s, result), self.job === j, self.server === s else { return }
             switch result {
             case .failure(let e):
                 self.failure("the model server refused the audio request: \(describe(e))")

@@ -65,6 +65,25 @@ public actor FakeAceServer {
     /// Health checks answered "loading" before "ok".
     public var loadingHealth = 0
     public var rate = 48000
+    /// Hold the reply to /lm until `releaseLM()`.
+    public var holdLM = false
+    private var lmHeld: [CheckedContinuation<Void, Never>] = []
+    private var lmHeldWaiters: [CheckedContinuation<Void, Never>] = []
+    public func set(holdLM: Bool) { self.holdLM = holdLM }
+
+    /// Returns once a reply to /lm is being held.
+    public func untilLMHeld() async {
+        if !lmHeld.isEmpty { return }
+        await withCheckedContinuation { lmHeldWaiters.append($0) }
+    }
+
+    public func releaseLM() {
+        holdLM = false
+        let h = lmHeld
+        lmHeld = []
+        h.forEach { $0.resume() }
+    }
+
     /// Polls a cancelled job still answers "running" before "cancelled".
     public var cancelPolls = 0
     public func set(cancelPolls: Int) { self.cancelPolls = cancelPolls }
@@ -114,6 +133,14 @@ public actor FakeAceServer {
             let duration = body["duration"] as? Int ?? 180
             let bpm = body["bpm"] as? Int ?? 90
             let plan = Self.plan(kind: kind, duration: duration, bpm: bpm, key: lmBodies.count % 2 == 1 ? "C# minor" : "F major")
+            if holdLM {
+                await withCheckedContinuation { cont in
+                    lmHeld.append(cont)
+                    let w = lmHeldWaiters
+                    lmHeldWaiters = []
+                    w.forEach { $0.resume() }
+                }
+            }
             return start(kind: kind, stage: "lm", result: Data(plan.utf8))
         case ("POST", "/synth"):
             let body = (try? JSONSerialization.jsonObject(with: r.body)) as? [String: Any] ?? [:]
