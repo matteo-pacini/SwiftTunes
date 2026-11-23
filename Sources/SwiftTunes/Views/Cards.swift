@@ -205,6 +205,11 @@ struct EditorView: View {
                         }
                         if !card.tempoError.isEmpty { error(card.tempoError) }
                     }
+                    Toggle(isOn: Binding(get: { card.singing.on }, set: { _ in model.toggleSung() })) {
+                        Text(verbatim: card.singing.label)
+                        Text(verbatim: card.singing.sub)
+                    }
+                    .toggleStyle(.switch)
                     LabeledContent {
                         HStack(spacing: 6) {
                             ForEach(0..<card.colours.count, id: \.self) { i in

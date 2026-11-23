@@ -82,6 +82,8 @@ final class PanelModel {
     }
 
     private func cancelCalls() {
+        wordsCall?.cancel()
+        wordsCall = nil
         renameCall?.cancel()
         renameCall = nil
         editorCall?.cancel()
@@ -168,9 +170,39 @@ final class PanelModel {
         }
     }
 
+    // MARK: Lyrics and your own words
+
+    @ObservationIgnored private var wordsCall: Task<Void, Never>?
+
+    func toggleLyrics() { set(panel.togglingLyrics(snapshot)) }
+
+    /// `Sing my words…`: the sheet, its name field holding the engine's offer.
+    func openWords() { set(panel.openingWords(snapshot, name: engine.suggestTuneName())) }
+    func typeWords(_ text: String, caret: Int) { set(panel.typedWords(text, caret: caret)) }
+    func insertMark(_ index: Int) { set(panel.insertingMark(index)) }
+    func typeWordsName(_ name: String) { set(panel.typedWordsName(name)) }
+
+    func closeWords() {
+        wordsCall?.cancel()
+        wordsCall = nil
+        set(panel.backToPlayer())
+    }
+
+    func composeWords() {
+        let (p, words, name) = panel.composingWords()
+        set(p)
+        guard let words, let name else { return }
+        wordsCall = Task { [weak self, engine] in
+            let result = await engine.composeWithWords(words, name: name)
+            guard let self, !Task.isCancelled else { return }
+            set(panel.composedWords(result))
+        }
+    }
+
     // MARK: Chooser
 
     func openChooser() { set(panel.openingChooser()) }
+    func openQueue() { set(panel.openingQueue()) }
     func backToPlayer() { set(panel.backToPlayer()) }
 
     func pick(_ id: String) {
@@ -200,6 +232,7 @@ final class PanelModel {
     func type(_ field: EditorField, _ text: String) { set(panel.typed(field, text)) }
 
     func pickColour(_ index: Int, hex: String, shown: [String]) { set(panel.pickingColour(index, hex: hex, shown: shown)) }
+    func toggleSung() { set(panel.togglingSung()) }
 
     /// A genre's palette for its chooser tile.
     func palette(ofGenre id: String) -> Palette {

@@ -43,6 +43,8 @@ struct Seen {
         case .chooser(let c): out += ["chooser", c.title, c.chip, c.strip ?? "-"] + c.cells.map { "\($0.name) · \($0.sub)" }
         case .editor(let e): out += ["editor", e.title]
         case .share(let c): out += ["share", c.head, c.name, c.meta] + c.rows.map { "\($0.title) / \($0.sub) \($0.on.map { "\($0)" } ?? "")" }
+        case .queue(let c): out += ["queue", c.label, c.head] + c.rows.map { "\($0.number) \($0.name)" }
+        case .words(let c): out += ["words", c.title, c.counter]
         case .player(let p):
             out += ["player", "strip: \(p.strip ?? "-")", "now: \(p.now.genre.text) \(p.now.suffix) | \(p.now.title) | \(p.now.meta) | \(p.now.badge)"]
             out += ["controls: play \(p.now.playPause.enabled)/\(p.now.showsPause) next \(p.now.next.enabled) shuffle \(p.now.shuffle.lit) repeat \(p.now.repeat.lit) '\(p.now.repeat.text)' share \(p.now.share.enabled) scrap \(p.now.scrap.enabled) '\(p.now.scrap.help)'"]

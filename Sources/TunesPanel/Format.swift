@@ -48,6 +48,17 @@ public enum Format {
         return path
     }
 
+    /// A count with a comma every three digits: "2,000".
+    public static func grouped(_ n: Int) -> String {
+        let digits = Array(String(abs(n)))
+        var out = n < 0 ? "-" : ""
+        for (i, d) in digits.enumerated() {
+            if i > 0 && (digits.count - i) % 3 == 0 { out.append(",") }
+            out.append(d)
+        }
+        return out
+    }
+
     /// "1 kept tune", "14 kept tunes".
     static func plural(_ n: Int, _ one: String, _ many: String) -> String {
         "\(n) \(n == 1 ? one : many)"

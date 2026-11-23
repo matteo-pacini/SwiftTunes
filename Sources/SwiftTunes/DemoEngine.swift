@@ -228,5 +228,21 @@ final class DemoEngine: EngineAPI {
         return .success(saved)
     }
 
+    /// Accepts the words and shows them as the job being written; nothing
+    /// is composed.
+    func composeWithWords(_ words: String, name: String) async -> Result<Void, Refusal> {
+        guard snapshot.genres.first(where: { $0.id == snapshot.genre })?.sung == true else {
+            return .failure(Refusal(field: nil, text: "That genre is not sung."))
+        }
+        if let error = WordsRules.wordsError(words) ?? TuneRules.nameError(name) { return .failure(Refusal(field: nil, text: error)) }
+        if snapshot.job?.ownWords == true { return .failure(Refusal(field: nil, text: "A tune with your words is already being made.")) }
+        snapshot.job = Job(stage: .writing, started: Date().timeIntervalSince1970, expectS: nil, writtenS: nil, sung: true, ownWords: true, name: GenreRules.trim(name))
+        changed()
+        return .success(())
+    }
+
+    /// The same two words every time.
+    func suggestTuneName() -> String { snapshot.genre == nil ? "" : "Long Way Home" }
+
     func shutdown() async {}
 }

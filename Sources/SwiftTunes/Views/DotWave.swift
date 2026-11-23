@@ -53,6 +53,7 @@ struct DotWave: View {
 struct SeekableWave: View {
     let wave: PlayerCard.Wave
     let seek: (Double) -> Void
+    var height: Double = 92
     @State private var scrub: Double?
 
     var body: some View {
@@ -69,7 +70,7 @@ struct SeekableWave: View {
                         }
                 )
         }
-        .frame(height: 92)
+        .frame(height: height)
         .helped(Control(help: wave.help))
         .accessibilityAddTraits(.isButton)
     }

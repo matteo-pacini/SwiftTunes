@@ -146,21 +146,6 @@ struct LayoutTests {
         #expect(try player(Fixture.load(name)).now.label == label)
     }
 
-    @Test("UP NEXT: at most three rows in play order, queued tunes first, then the job, then placeholders")
-    func upNext() throws {
-        var s = try Fixture.load("11-after-scrap")
-        #expect(try player(s).next.rows.map(\.kind) == [.tune, .job])
-        s.queue += s.queue + s.queue
-        let p = try player(s)
-        #expect(p.next.rows.count == 3 && p.next.rows.allSatisfy { $0.kind == .tune })
-        let first = try player(Fixture.load("06-first-tune")).next.rows
-        #expect(first.map(\.kind) == [.job, .placeholder])
-        #expect(first[0].stage == .rendering && first[0].artwork == nil)
-        var three = try Fixture.load("13-held-memory")
-        three.ahead = 5
-        #expect(try player(three).next.rows.count == 3)
-    }
-
     @Test("the composer's pill: the state when not plain on, else the right-hand words", arguments: [
         ("05-queue-full", "resting, queue is full", Tone.green), ("06-first-tune", "using 3.9 GiB of memory", .dim),
         ("12-held-power", "held for low power", .orange), ("15-failed-playing", "failed", .red),

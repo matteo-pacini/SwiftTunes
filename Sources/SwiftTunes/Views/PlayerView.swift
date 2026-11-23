@@ -13,6 +13,7 @@ struct PlayerView: View {
                 if let strip = card.strip { Strip(text: strip) }
                 Hero(now: card.now, model: model)
                 UpNext(next: card.next, palette: card.palette, model: model)
+                if let making = card.making { MakingBlock(making: making, palette: card.palette, model: model) }
                 ComposerBar(composer: card.composer, model: model)
             }
         }
@@ -45,7 +46,21 @@ struct Hero: View {
             }
             if let wave = now.wave {
                 title
-                SeekableWave(wave: wave, seek: model.seek(fraction:))
+                if let lyrics = now.lyricsButton {
+                    Button(action: model.toggleLyrics) {
+                        HStack(spacing: 4) {
+                            Text(verbatim: lyrics.text)
+                            Image(systemName: lyrics.lit ? "chevron.up" : "chevron.down").font(.system(size: 9, weight: .bold))
+                        }
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .helped(lyrics)
+                }
+                SeekableWave(wave: wave, seek: model.seek(fraction:), height: now.lyrics == nil ? 92 : 22)
                 if let time = now.time {
                     HStack {
                         Text(verbatim: time.left).contentTransition(.numericText())
@@ -56,6 +71,9 @@ struct Hero: View {
                     .foregroundStyle(.secondary)
                     .padding(.top, -6)
                     .animation(reduceMotion ? nil : .default, value: time.left)
+                }
+                if let words = now.lyrics {
+                    LyricsBox(head: now.lyricsHead, words: words)
                 }
             } else if let stage = now.forming {
                 title
@@ -153,8 +171,79 @@ struct UpNext: View {
                 UpNextRow(row: row, palette: palette, model: model)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
+            if let more = next.more {
+                Button(action: model.openQueue) {
+                    Text(verbatim: more.text)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 3)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .helped(more)
+            }
         }
         .animation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.2), value: next.rows.map(\.id))
+    }
+}
+
+/// BEING MADE: the job and the places not started.
+struct MakingBlock: View {
+    let making: PlayerCard.Making
+    let palette: Palette
+    let model: PanelModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Caps(text: "BEING MADE")
+                Spacer()
+                Text(verbatim: making.head).font(.system(size: 11.5)).foregroundStyle(.secondary)
+            }
+            ForEach(making.rows, id: \.id) { row in
+                UpNextRow(row: row, palette: palette, model: model)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.2), value: making.rows.map(\.id))
+    }
+}
+
+/// Everything that will play this round, numbered, in a scrolling list,
+/// with BEING MADE under it.
+struct QueueView: View {
+    let card: QueueCard
+    let model: PanelModel
+
+    var body: some View {
+        GlassEffectContainer(spacing: 6) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    BackLink(control: card.back, action: model.backToPlayer)
+                    Spacer()
+                    Caps(text: card.label)
+                }
+                HStack(alignment: .firstTextBaseline) {
+                    Text(verbatim: card.title).font(.system(size: 20, weight: .bold, design: .rounded))
+                    Spacer()
+                    Text(verbatim: card.head).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                }
+                ScrollView {
+                    VStack(spacing: 6) {
+                        ForEach(card.rows, id: \.id) { row in
+                            UpNextRow(row: row, palette: card.palette, model: model)
+                        }
+                        if let last = card.last {
+                            Text(verbatim: last).font(.system(size: 11.5)).foregroundStyle(.secondary).padding(.top, 4)
+                        }
+                    }
+                }
+                .frame(maxHeight: 340)
+                .fixedSize(horizontal: false, vertical: true)
+                if let making = card.making { MakingBlock(making: making, palette: card.palette, model: model) }
+            }
+        }
     }
 }
 
@@ -166,6 +255,12 @@ struct UpNextRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
+            if row.kind == .tune {
+                Text(verbatim: row.number)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 14)
+            }
             art.frame(width: 36, height: 36)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
@@ -260,6 +355,17 @@ struct ComposerBar: View {
                     }
                 }
             }
+            if let words = composer.words {
+                HStack {
+                    Spacer()
+                    Button(action: model.openWords) { Text(verbatim: words.text) }
+                        .buttonStyle(.glass)
+                        .controlSize(.small)
+                        .disabled(!words.enabled)
+                        .helped(words)
+                }
+                .padding(.top, 4)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -302,5 +408,26 @@ struct RenameField: View {
             }
         }
         .onAppear { focused = true }
+    }
+}
+
+/// The playing tune's words, as written, in a scrolling glass box.
+struct LyricsBox: View {
+    let head: String
+    let words: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Caps(text: head)
+            ScrollView {
+                Text(verbatim: words)
+                    .font(.system(size: 13))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+            .frame(height: 150)
+        }
+        .padding(12)
+        .glassEffect(.regular, in: .rect(cornerRadius: 13))
     }
 }
