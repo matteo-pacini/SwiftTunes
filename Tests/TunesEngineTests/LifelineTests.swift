@@ -132,4 +132,57 @@ final class TapLauncher: ServerLauncher {
         #expect(rig.snap.model.detail?.hasPrefix("the model server exited (status 127): tunes-lifeline: failed to run ") == true)
         await rig.close()
     }
+
+    /// A stand-in that, like the real server mid-job, ignores SIGTERM.
+    static func deafStandIn(in dir: URL) throws -> URL {
+        let url = dir.appending(path: "deaf-server")
+        let script = """
+        #!/bin/sh
+        trap '' TERM
+        sleep 1000 &
+        echo "$$ $!" > "$2/pids"
+        echo "ggml_metal_device_init: GPU name:   MTL0 (Stand-in)" >&2
+        echo "[Server] Listening on 127.0.0.1:0" >&2
+        wait
+
+        """
+        try Data(script.utf8).write(to: url)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        return url
+    }
+
+    @Test func aStopMidJobKillsAServerThatIgnoresTerm() async throws {
+        let lifeline = try #require(Self.lifeline)
+        let rig = try await Rig()
+        let tap = TapLauncher(LivePieces.launcher(lifeline: lifeline, server: try Self.deafStandIn(in: rig.root)))
+        rig.realLauncher = tap
+        rig.make()
+        // The stand-in speaks no HTTP; the fake server answers for it, and
+        // never lets the cancelled job end.
+        await rig.ace.set(up: true)
+        await rig.ace.set(runningPolls: 100)
+        await rig.ace.set(cancelPolls: 100_000)
+        await rig.send(.selectGenre(id: "jazz"))
+        rig.engine.send(.setComposer(on: true))
+        await tap.until { tap.lines.contains { $0.hasPrefix("[Server] Listening") } }
+        #expect(await rig.run { rig.snap.model.state == .writing })
+        let text = try #require(Files.read(rig.paths.models.appending(path: "pids")))
+        let pids = text.split(whereSeparator: \.isWhitespace).compactMap { Int32($0) }
+        #expect(pids.count == 2 && pids.allSatisfy(Self.alive))
+
+        let port = rig.aceHTTP.port
+        let wall = Date()
+        let t = rig.clock.now
+        rig.engine.send(.setComposer(on: false))
+        #expect(await rig.run { rig.engine.timers["drain:\(port)"] == nil })
+        await tap.until { !tap.exits.isEmpty }
+        let took = Date().timeIntervalSince(wall)
+        #expect(abs(rig.clock.now - t - 1) < 1e-6, "the wait is one second")
+        // Without the kill the shim's grace alone is 5 s of wall time.
+        #expect(took < 3, "stopped after \(took) s")
+        #expect(tap.exits == [137])
+        #expect(pids.allSatisfy { !Self.alive($0) })
+        #expect(await rig.ace.cancelled.count == 1)
+        await rig.close()
+    }
 }
