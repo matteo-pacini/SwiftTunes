@@ -38,6 +38,10 @@ public protocol EngineAPI: AnyObject {
     func exportCopy(of target: TuneTarget) async -> Result<URL, Refusal>
     func renameTune(_ target: TuneTarget, to name: String) async -> Result<String, Refusal>
     func composeWithWords(_ words: String, name: String) async -> Result<Void, Refusal>
+    /// A two-word name drawn from the selected genre's own lists, as the
+    /// composer names its tunes; a fresh pick on each call. Empty when no
+    /// genre is selected.
+    func suggestTuneName() -> String
 
     /// Stops the player, cancels the job, stops the server and waits until no
     /// child process remains. Called once, while the app is terminating: the app
