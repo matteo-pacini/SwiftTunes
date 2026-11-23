@@ -27,8 +27,9 @@ Read, in this order, before any work:
   Accelerate, MediaPlayer, CryptoKit, Network, ServiceManagement, IOKit;
   SwiftPM, Swift Testing, `codesign`, `plutil`, `taskpolicy`. No third-party
   package, library or runtime, in the app or in the tests (fakes are written
-  in Swift). The one exception is building `ace-server`, which needs `cmake`;
-  it uses the Makefile generator, so nothing else.
+  in Swift). The one exception is building `ace-server`, which needs `cmake`,
+  supplied by the Nix dev shell (`flake.nix`); it uses the Makefile
+  generator, so nothing else.
 - Mouse first: every action is a visible control. No single-letter shortcuts.
 - Say only what is true in the interface: no progress the server does not
   report, no number the system does not give.
@@ -93,8 +94,9 @@ swift test --filter <Suite>
 Scripts/make-app.sh    # builds ace-server and assembles SwiftTunes.app
 ```
 
-`cmake` is not installed system-wide. `Scripts/build-ace-server.sh` says how
-it finds it; do not install anything globally.
+`cmake` is not installed system-wide: run the scripts inside the dev shell
+(`nix develop -c Scripts/make-app.sh`), which supplies it; do not install
+anything globally. No script calls `nix` itself.
 
 ## Working here
 
