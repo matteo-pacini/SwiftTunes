@@ -24,7 +24,7 @@ public protocol EngineAPI: AnyObject {
     /// Calls `handler` once now with the current snapshot, then after every
     /// change, at most once per main run loop pass. Returns a token; the
     /// observation ends when the token is cancelled or released.
-    func observe(_ handler: @escaping @MainActor (Snapshot) -> Void) -> Observation
+    func observe(_ handler: @escaping @MainActor (Snapshot) -> Void) -> SnapshotObservation
 
     /// Fire and forget. A command that does not apply is ignored silently and
     /// produces no snapshot. Never throws, never blocks.
@@ -42,7 +42,7 @@ public protocol EngineAPI: AnyObject {
     func shutdown() async
 }
 
-public protocol Observation: AnyObject { func cancel() }
+public protocol SnapshotObservation: AnyObject { func cancel() }
 ```
 
 A result that causes a state change is delivered before the snapshot it
@@ -123,7 +123,7 @@ values in 0…1, empty until read).
 
 `QueuedTune`: as `PlayingTune` without `wave`.
 
-`Job`: `stage` (`writing` or `rendering`), `started` (`Double`), `expectS` /
+`Job`: `stage` (`JobStage`: `writing`, `rendering`), `started` (`Double`), `expectS` /
 `expect_s` (`Double?`: the median for this stage), `writtenS` / `written_s`
 (`Double?`: how long writing took, set while rendering).
 
@@ -204,7 +204,7 @@ is nil for a new genre [R55].
 `GenreSaved`: `id` (`String`), `renamed` (`Renamed?`: `from`, `to`, the
 genre names, when the folder moved).
 
-`Refusal`: `field` (`GenreField?`: `name`, `caption`, `turns`, `bpm`; nil
+`Refusal` (an `Error`, `Sendable`, `Equatable`): `field` (`GenreField?`: `name`, `caption`, `turns`, `bpm`; nil
 when the refusal names no field) and `text` (`String`, a full sentence,
 plain). The texts are those of the notes' section (c), "Genre editor" and
 "Share sheet", with the changes in `docs/SPEC.md`, "Wording".
@@ -216,6 +216,10 @@ file), `exportPath` (`URL`, where an export would go), `pinned` (`Bool`).
 `PinResult`: `on` (`Bool`), `name` (`String`).
 
 `exportCopy` returns the URL written.
+
+Result types are `Sendable` and `Equatable`; they are not coded. Enum cases
+are camel case in Swift with the snake-case raw values given here.
+`TunesRules` may use the contract's types; `TunesFakes` uses none.
 
 ## Who decides what
 

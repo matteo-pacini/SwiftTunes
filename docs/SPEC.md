@@ -142,7 +142,8 @@ layout and `docs/CONTRACT.md` each have a single owner.
 Targets:
 
 - `TunesContract`: types and the engine protocol. No logic beyond coding.
-- `TunesRules`: the pure rules of the service [R1 to R59 where pure]. No I/O.
+- `TunesRules`: the pure rules of the engine [R1 to R59 where pure]. No I/O.
+  Depends on `TunesContract`.
 - `TunesEngine`: the live engine. Depends on `TunesContract`, `TunesRules`.
 - `tunes-lifeline`: the C shim, an executable.
 - `TunesPanel`: the pure panel decisions: from a
