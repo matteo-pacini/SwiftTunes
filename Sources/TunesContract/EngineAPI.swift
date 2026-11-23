@@ -26,6 +26,10 @@ public protocol EngineAPI: AnyObject {
     func setPinned(_ on: Bool, for target: TuneTarget) async -> Result<PinResult, Refusal>
     /// Returns the URL written.
     func exportCopy(of target: TuneTarget) async -> Result<URL, Refusal>
+    /// Gives a tune a new name (its title tag; the file keeps its name) and
+    /// returns the name as saved. A name equal to the current one succeeds
+    /// and writes nothing. Refusals have no field.
+    func renameTune(_ target: TuneTarget, to name: String) async -> Result<String, Refusal>
 
     /// Stops the player, cancels the job, stops the server and waits until no
     /// child process remains. Called once, from applicationWillTerminate.

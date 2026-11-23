@@ -114,7 +114,7 @@ public enum GenreRules {
     }
 
     /// C0 and C1 controls and DEL.
-    private static func isControl(_ s: Unicode.Scalar) -> Bool {
+    static func isControl(_ s: Unicode.Scalar) -> Bool {
         s.value <= 0x1F || (0x7F...0x9F).contains(s.value)
     }
 

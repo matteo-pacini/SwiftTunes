@@ -353,3 +353,9 @@ struct GenresOnDisk {
 struct NotEditable: Error {
     var why: String
 }
+
+extension Engine {
+    func renameTune(_ target: TuneTarget, to name: String) async -> Result<String, Refusal> {
+        .failure(Refusal(field: nil, text: Rules.gone))
+    }
+}
