@@ -121,11 +121,14 @@ is working material the lead hands to the app role; in words:
     old name back. The rule it breaks, or the engine's refusal, shows under
     it and the field stays open. The name's tooltip is `Rename`. With nothing to play the hero shows the empty-state
     sentences and, while a tune is being made, the forming wave.
-  - UP NEXT: the label with its right-hand text, then a shelf of at most
-    three cards: queued tunes (artwork, name, `N BPM · <key> · M:SS`, a NEW
-    badge), the job (a small forming wave, `Being written` / `Being
-    rendered`, the time line), and `Not started` placeholders. Hover on a
-    tune card offers play it now, share and scrap; on the job card, scrap.
+  - UP NEXT: the label with its right-hand text, then a vertical list read
+    top to bottom in the order things will play, at most three rows on
+    glass: queued tunes (a small square of artwork, the name with a NEW
+    badge, `N BPM · <key>`, the length at the right), then the job (a small
+    forming wave in the artwork's place, `Being written` / `Being
+    rendered`, the time line), then `Not started` placeholders. Hover on a
+    tune row shows play it now, share and scrap at the right in place of
+    the length; on the job row, scrap.
   - COMPOSER: one glass bar: the label, the state as a pill, the switch;
     the `Makes <g>, keeps N ahead` line; the hold or failure sentence and
     the model line when they apply; `Try now` when failed or no device.
