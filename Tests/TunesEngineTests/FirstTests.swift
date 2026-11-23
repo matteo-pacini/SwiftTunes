@@ -25,4 +25,15 @@ import TunesRules
         #expect(rig.player.calls.isEmpty)
         await rig.close()
     }
+
+    @Test func suggestedNamesComeFromTheGenresWords() async throws {
+        let rig = try await Rig()
+        #expect(rig.engine.suggestTuneName() == "")
+        await rig.send(.selectGenre(id: "jazz"))
+        let names = (0..<20).map { _ in rig.engine.suggestTuneName() }
+        let allowed = Set(["Blue", "Smoky"].flatMap { m in ["Avenue", "Lamp"].map { "\(m) \($0)" } })
+        #expect(names.allSatisfy(allowed.contains))
+        #expect(Set(names).count > 1)
+        await rig.close()
+    }
 }

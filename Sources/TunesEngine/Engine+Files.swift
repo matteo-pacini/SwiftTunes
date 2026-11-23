@@ -399,3 +399,14 @@ extension Engine {
         return TuneMeta(name: nil, length: length, wave: w.compactMap(\.number))
     }
 }
+
+extension Engine {
+    func composeWithWords(_ words: String, name: String) async -> Result<Void, Refusal> {
+        .failure(Refusal(field: nil, text: "That genre is not sung."))
+    }
+
+    func suggestTuneName() -> String {
+        guard let g = genre else { return "" }
+        return Composing.name(moods: g.moods, things: g.things, rng: &rng)
+    }
+}

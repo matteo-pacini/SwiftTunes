@@ -261,18 +261,30 @@ public struct GenreSummary: Codable, Equatable, Sendable {
     public var id: String
     public var name: String
     public var kept: Int
+    /// The genre's tunes are sung.
+    public var sung: Bool
     /// Four colours as `#RRGGBB`; nil when the genres file gives none.
     public var palette: [String]?
 
-    public init(id: String, name: String, kept: Int, palette: [String]? = nil) {
+    public init(id: String, name: String, kept: Int, palette: [String]? = nil, sung: Bool = false) {
         self.id = id
         self.name = name
         self.kept = kept
+        self.sung = sung
         self.palette = palette
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, kept, palette
+        case id, name, kept, sung, palette
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        kept = try c.decode(Int.self, forKey: .kept)
+        sung = try c.decodeIfPresent(Bool.self, forKey: .sung) ?? false
+        palette = try c.decodeIfPresent([String].self, forKey: .palette)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -280,6 +292,7 @@ public struct GenreSummary: Codable, Equatable, Sendable {
         try c.encode(id, forKey: .id)
         try c.encode(name, forKey: .name)
         try c.encode(kept, forKey: .kept)
+        try c.encode(sung, forKey: .sung)
         try c.encode(palette, forKey: .palette)
     }
 }
@@ -302,8 +315,12 @@ public struct PlayingTune: Codable, Equatable, Sendable {
     public var pos: Int?
     /// 78 values in 0…1, empty until read.
     public var wave: [Double]
+    /// The file has words.
+    public var sung: Bool
+    /// The words as written, nil when not sung.
+    public var lyrics: String?
 
-    public init(name: String, file: String, bpm: Int?, key: String?, length: Double?, kept: Bool, new: Bool, pinned: Bool, pos: Int?, wave: [Double]) {
+    public init(name: String, file: String, bpm: Int?, key: String?, length: Double?, kept: Bool, new: Bool, pinned: Bool, pos: Int?, wave: [Double], sung: Bool = false, lyrics: String? = nil) {
         self.name = name
         self.file = file
         self.bpm = bpm
@@ -314,10 +331,28 @@ public struct PlayingTune: Codable, Equatable, Sendable {
         self.pinned = pinned
         self.pos = pos
         self.wave = wave
+        self.sung = sung
+        self.lyrics = lyrics
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, file, bpm, key, length, kept, new, pinned, pos, wave
+        case name, file, bpm, key, length, kept, new, pinned, pos, wave, sung, lyrics
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        file = try c.decode(String.self, forKey: .file)
+        bpm = try c.decodeIfPresent(Int.self, forKey: .bpm)
+        key = try c.decodeIfPresent(String.self, forKey: .key)
+        length = try c.decodeIfPresent(Double.self, forKey: .length)
+        kept = try c.decode(Bool.self, forKey: .kept)
+        new = try c.decode(Bool.self, forKey: .new)
+        pinned = try c.decode(Bool.self, forKey: .pinned)
+        pos = try c.decodeIfPresent(Int.self, forKey: .pos)
+        wave = try c.decode([Double].self, forKey: .wave)
+        sung = try c.decodeIfPresent(Bool.self, forKey: .sung) ?? false
+        lyrics = try c.decodeIfPresent(String.self, forKey: .lyrics)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -332,6 +367,8 @@ public struct PlayingTune: Codable, Equatable, Sendable {
         try c.encode(pinned, forKey: .pinned)
         try c.encode(pos, forKey: .pos)
         try c.encode(wave, forKey: .wave)
+        try c.encode(sung, forKey: .sung)
+        try c.encode(lyrics, forKey: .lyrics)
     }
 }
 
@@ -352,7 +389,10 @@ public struct QueuedTune: Codable, Equatable, Sendable {
     /// 1-based place in the order made, only when kept and shuffle is off.
     public var pos: Int?
 
-    public init(name: String, file: String, bpm: Int?, key: String?, length: Double?, kept: Bool, new: Bool, pinned: Bool, pos: Int?) {
+    /// The file has words.
+    public var sung: Bool
+
+    public init(name: String, file: String, bpm: Int?, key: String?, length: Double?, kept: Bool, new: Bool, pinned: Bool, pos: Int?, sung: Bool = false) {
         self.name = name
         self.file = file
         self.bpm = bpm
@@ -362,10 +402,25 @@ public struct QueuedTune: Codable, Equatable, Sendable {
         self.new = new
         self.pinned = pinned
         self.pos = pos
+        self.sung = sung
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, file, bpm, key, length, kept, new, pinned, pos
+        case name, file, bpm, key, length, kept, new, pinned, pos, sung
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        file = try c.decode(String.self, forKey: .file)
+        bpm = try c.decodeIfPresent(Int.self, forKey: .bpm)
+        key = try c.decodeIfPresent(String.self, forKey: .key)
+        length = try c.decodeIfPresent(Double.self, forKey: .length)
+        kept = try c.decode(Bool.self, forKey: .kept)
+        new = try c.decode(Bool.self, forKey: .new)
+        pinned = try c.decode(Bool.self, forKey: .pinned)
+        pos = try c.decodeIfPresent(Int.self, forKey: .pos)
+        sung = try c.decodeIfPresent(Bool.self, forKey: .sung) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -379,20 +434,30 @@ public struct QueuedTune: Codable, Equatable, Sendable {
         try c.encode(new, forKey: .new)
         try c.encode(pinned, forKey: .pinned)
         try c.encode(pos, forKey: .pos)
+        try c.encode(sung, forKey: .sung)
     }
 }
 
 /// The tune being made.
 public struct Job: Codable, Equatable, Sendable {
     public var stage: JobStage
+    /// The tune is sung.
+    public var sung: Bool
+    /// The tune is sung with the words the user gave.
+    public var ownWords: Bool
+    /// The name given to an own-words tune, else nil.
+    public var name: String?
     public var started: Double
     /// The median for this stage.
     public var expectS: Double?
     /// How long writing took, set while rendering.
     public var writtenS: Double?
 
-    public init(stage: JobStage, started: Double, expectS: Double?, writtenS: Double?) {
+    public init(stage: JobStage, started: Double, expectS: Double?, writtenS: Double?, sung: Bool = false, ownWords: Bool = false, name: String? = nil) {
         self.stage = stage
+        self.sung = sung
+        self.ownWords = ownWords
+        self.name = name
         self.started = started
         self.expectS = expectS
         self.writtenS = writtenS
@@ -400,14 +465,31 @@ public struct Job: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case stage
+        case sung
+        case ownWords = "own_words"
+        case name
         case started
         case expectS = "expect_s"
         case writtenS = "written_s"
     }
 
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        stage = try c.decode(JobStage.self, forKey: .stage)
+        sung = try c.decodeIfPresent(Bool.self, forKey: .sung) ?? false
+        ownWords = try c.decodeIfPresent(Bool.self, forKey: .ownWords) ?? false
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+        started = try c.decode(Double.self, forKey: .started)
+        expectS = try c.decodeIfPresent(Double.self, forKey: .expectS)
+        writtenS = try c.decodeIfPresent(Double.self, forKey: .writtenS)
+    }
+
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(stage, forKey: .stage)
+        try c.encode(sung, forKey: .sung)
+        try c.encode(ownWords, forKey: .ownWords)
+        try c.encode(name, forKey: .name)
         try c.encode(started, forKey: .started)
         try c.encode(expectS, forKey: .expectS)
         try c.encode(writtenS, forKey: .writtenS)
@@ -473,6 +555,8 @@ public struct Model: Codable, Equatable, Sendable {
     public var since: Double
     /// Seconds of silence in the plan being rewritten.
     public var silenceS: Int?
+    /// The plan being rewritten had too few sung lines.
+    public var thinWords: Bool
     /// The failure's text, plain.
     public var detail: String?
     public var failures: Int
@@ -482,7 +566,8 @@ public struct Model: Codable, Equatable, Sendable {
     /// Always nil on the Mac.
     public var ramFreeBytes: Int64?
 
-    public init(name: String, variant: String, device: String, state: ModelState, since: Double, silenceS: Int?, detail: String?, failures: Int, retryAt: Double?, ramUsedBytes: Int64?, ramFreeBytes: Int64?) {
+    public init(name: String, variant: String, device: String, state: ModelState, since: Double, silenceS: Int?, detail: String?, failures: Int, retryAt: Double?, ramUsedBytes: Int64?, ramFreeBytes: Int64?, thinWords: Bool = false) {
+        self.thinWords = thinWords
         self.name = name
         self.variant = variant
         self.device = device
@@ -503,11 +588,28 @@ public struct Model: Codable, Equatable, Sendable {
         case state
         case since
         case silenceS = "silence_s"
+        case thinWords = "thin_words"
         case detail
         case failures
         case retryAt = "retry_at"
         case ramUsedBytes = "ram_used_bytes"
         case ramFreeBytes = "ram_free_bytes"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        variant = try c.decode(String.self, forKey: .variant)
+        device = try c.decode(String.self, forKey: .device)
+        state = try c.decode(ModelState.self, forKey: .state)
+        since = try c.decode(Double.self, forKey: .since)
+        silenceS = try c.decodeIfPresent(Int.self, forKey: .silenceS)
+        thinWords = try c.decodeIfPresent(Bool.self, forKey: .thinWords) ?? false
+        detail = try c.decodeIfPresent(String.self, forKey: .detail)
+        failures = try c.decode(Int.self, forKey: .failures)
+        retryAt = try c.decodeIfPresent(Double.self, forKey: .retryAt)
+        ramUsedBytes = try c.decodeIfPresent(Int64.self, forKey: .ramUsedBytes)
+        ramFreeBytes = try c.decodeIfPresent(Int64.self, forKey: .ramFreeBytes)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -518,6 +620,7 @@ public struct Model: Codable, Equatable, Sendable {
         try c.encode(state, forKey: .state)
         try c.encode(since, forKey: .since)
         try c.encode(silenceS, forKey: .silenceS)
+        try c.encode(thinWords, forKey: .thinWords)
         try c.encode(detail, forKey: .detail)
         try c.encode(failures, forKey: .failures)
         try c.encode(retryAt, forKey: .retryAt)

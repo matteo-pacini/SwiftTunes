@@ -30,6 +30,14 @@ public protocol EngineAPI: AnyObject {
     /// returns the name as saved. A name equal to the current one succeeds
     /// and writes nothing. Refusals have no field.
     func renameTune(_ target: TuneTarget, to name: String) async -> Result<String, Refusal>
+    /// Asks for one tune sung with `words` in the selected genre, named
+    /// `name`. Returns once the request is accepted; the tune then shows as
+    /// the job. Refusals have no field.
+    func composeWithWords(_ words: String, name: String) async -> Result<Void, Refusal>
+    /// A two-word name from the selected genre's words, picked as the
+    /// composer names its tunes; a fresh pick on each call. Empty when no
+    /// genre is selected.
+    func suggestTuneName() -> String
 
     /// Stops the player, cancels the job, stops the server and waits until no
     /// child process remains. Called once, from applicationWillTerminate.
