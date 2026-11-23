@@ -861,8 +861,8 @@ final class Engine: EngineAPI {
     }
 
     func keptMetaDone(_ path: URL, _ meta: TuneMeta?) {
-        metaPending.remove(path.path)
-        guard let meta else { return }
+        // Not pending any more (a rename came between): this read is stale.
+        guard metaPending.remove(path.path) != nil, let meta else { return }
         writeWave(path, meta)
         for t in [current, nextKept].compactMap({ $0 }) where t.path == path {
             if let n = meta.name { t.name = n }

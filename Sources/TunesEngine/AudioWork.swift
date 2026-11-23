@@ -173,6 +173,32 @@ nonisolated enum AudioWork {
         return items
     }
 
+    /// Rewrites a tune's title tag in place: the audio and every other tag
+    /// are copied as they are into `part` (beside the file), which then
+    /// replaces it in one rename. A failure leaves the file as it was and
+    /// no part behind.
+    @concurrent static func retitle(_ url: URL, to title: String, part: URL) async throws {
+        Files.remove(part)
+        do {
+            let asset = AVURLAsset(url: url)
+            var items = try await asset.load(.metadata).filter { $0.identifier != .iTunesMetadataSongName }
+            let name = AVMutableMetadataItem()
+            name.identifier = .iTunesMetadataSongName
+            name.value = title as NSString
+            name.extendedLanguageTag = "und"
+            items.append(name)
+            guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetPassthrough) else {
+                throw AudioFailure(description: "no export session")
+            }
+            session.metadata = items
+            try await session.export(to: part, as: .m4a)
+            try Files.rename(part, url)
+        } catch {
+            Files.remove(part)
+            throw error
+        }
+    }
+
     /// Copies a kept tune into `directory` under a free export name; the
     /// path written.
     @concurrent static func exportCopy(of source: URL, into directory: URL, genre: String, title: String) async throws -> URL {
