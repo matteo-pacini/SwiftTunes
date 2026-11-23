@@ -1,0 +1,414 @@
+import CryptoKit
+import Foundation
+import Testing
+import TunesContract
+@testable import TunesEngine
+import TunesFakes
+import TunesRules
+
+/// Time that moves only when the rig moves it, to the next timer.
+final class ManualClock: EngineClock {
+    final class Timer: EngineTimer {
+        let due: Double
+        let seq: Int
+        let fire: @MainActor () -> Void
+        var cancelled = false
+
+        init(due: Double, seq: Int, fire: @escaping @MainActor () -> Void) {
+            self.due = due
+            self.seq = seq
+            self.fire = fire
+        }
+
+        func cancel() { cancelled = true }
+    }
+
+    var now: Double
+    var timers: [Timer] = []
+    var seq = 0
+
+    init(now: Double) { self.now = now }
+
+    func after(_ seconds: Double, _ fire: @escaping @MainActor () -> Void) -> any EngineTimer {
+        seq += 1
+        let t = Timer(due: now + max(0, seconds), seq: seq, fire: fire)
+        timers.append(t)
+        return t
+    }
+
+    /// Moves to the earliest timer and fires it; false when none is set.
+    func fireNext() -> Bool {
+        timers.removeAll { $0.cancelled }
+        guard let t = timers.min(by: { ($0.due, $0.seq) < ($1.due, $1.seq) }) else { return false }
+        timers.removeAll { $0 === t }
+        now = max(now, t.due)
+        t.fire()
+        return true
+    }
+
+    var pending: Int { timers.filter { !$0.cancelled }.count }
+}
+
+/// A player that plays nothing: it reports what the rig tells it to.
+final class FakePlayer: TunePlayer {
+    var onEvent: (@MainActor (PlayerEvent) -> Void)?
+    var calls: [String] = []
+    var current: (url: URL, token: Int)?
+    var next: (url: URL, token: Int)?
+    var pendingPlay: (url: URL, token: Int)?
+    var unplayable: Set<String> = []
+    var paused = false
+    var position = 0.0
+    var repeatOne = false
+
+    func play(_ url: URL, token: Int) {
+        calls.append("play \(url.lastPathComponent)")
+        current = nil
+        next = nil
+        pendingPlay = (url, token)
+        paused = false
+        position = 0
+    }
+
+    func setNext(_ url: URL?, token: Int) {
+        calls.append("next \(url?.lastPathComponent ?? "-")")
+        next = url.map { ($0, token) }
+    }
+
+    func advance() {
+        calls.append("advance")
+        guard let n = next else { return }
+        current = n
+        next = nil
+        position = 0
+        onEvent?(.started(token: n.token))
+    }
+
+    func setPaused(_ paused: Bool) {
+        calls.append(paused ? "pause" : "resume")
+        self.paused = paused
+    }
+
+    func seek(to seconds: Double) {
+        calls.append("seek \(seconds)")
+        position = seconds
+    }
+
+    func stop() {
+        calls.append("stop")
+        current = nil
+        next = nil
+        pendingPlay = nil
+    }
+
+    /// Reports the play asked for: started, or failed when the file is
+    /// missing or marked unplayable.
+    func deliver() -> Bool {
+        guard let p = pendingPlay else { return false }
+        pendingPlay = nil
+        if unplayable.contains(p.url.lastPathComponent) || !FileManager.default.fileExists(atPath: p.url.path) {
+            onEvent?(.failed(token: p.token, reason: "the file cannot be played"))
+        } else {
+            current = p
+            onEvent?(.started(token: p.token))
+        }
+        return true
+    }
+
+    /// The playing item reaches its end.
+    func finish() {
+        guard let c = current, !repeatOne else { return }
+        position = 0
+        if let n = next {
+            current = n
+            next = nil
+            onEvent?(.started(token: n.token))
+        } else {
+            current = nil
+            onEvent?(.ended(token: c.token))
+        }
+    }
+
+    var playing: String? { current?.url.lastPathComponent }
+    var queuedNext: String? { next?.url.lastPathComponent }
+}
+
+final class FakeHolds: HoldSource {
+    var hold: Hold?
+    func current() -> Hold? { hold }
+}
+
+final class FakeProbe: SystemProbe {
+    func footprint(pid: Int32) -> Int64? { 7_000_000_000 }
+    func diskFree(near url: URL) -> Int64 { 100_000_000_000 }
+}
+
+/// Starts pretend server processes; their lines and exits reach the engine
+/// when the rig delivers them, as a real process's would, later.
+final class FakeLauncher: ServerLauncher {
+    let ace: FakeAceServer
+    var deviceLine: String? = "ggml_metal_device_init: GPU name:   MTL0 (Fake M0)"
+    var noMetal = false
+    var launches: [[String]] = []
+    var processes: [FakeProcess] = []
+    var pending: [@MainActor () async -> Void] = []
+
+    init(ace: FakeAceServer) { self.ace = ace }
+
+    var running: Int { processes.filter(\.alive).count }
+
+    func launch(
+        arguments: [String], onLine: @escaping @MainActor (String) -> Void, onExit: @escaping @MainActor (Int32) -> Void
+    ) throws -> any ServerProcess {
+        let p = FakeProcess(launcher: self, onLine: onLine, onExit: onExit)
+        processes.append(p)
+        launches.append(arguments)
+        let port = arguments.last ?? ""
+        let lines = (deviceLine.map { [$0] } ?? []) + (noMetal ? ["--device MTL0 not found. Available: BLAS CPU"] : ["[Server] Listening on 127.0.0.1:\(port)"])
+        let noMetal = noMetal
+        let ace = ace
+        pending.append {
+            guard p.alive else { return }
+            if !noMetal { await ace.set(up: true) }
+            for line in lines { p.onLine(line) }
+            if noMetal { p.exit(1) }
+        }
+        return p
+    }
+
+    func deliver() async -> Bool {
+        guard !pending.isEmpty else { return false }
+        let work = pending
+        pending = []
+        for w in work { await w() }
+        return true
+    }
+
+    /// The running server crashes.
+    func crash() async {
+        guard let p = processes.last(where: \.alive) else { return }
+        await ace.set(up: false)
+        p.onLine("GGML_ASSERT failed: a fake crash")
+        p.exit(134)
+    }
+}
+
+final class FakeProcess: ServerProcess {
+    unowned let launcher: FakeLauncher
+    let onLine: @MainActor (String) -> Void
+    let onExit: @MainActor (Int32) -> Void
+    var alive = true
+    var stopped = false
+
+    init(launcher: FakeLauncher, onLine: @escaping @MainActor (String) -> Void, onExit: @escaping @MainActor (Int32) -> Void) {
+        self.launcher = launcher
+        self.onLine = onLine
+        self.onExit = onExit
+    }
+
+    var serverPID: Int32? { alive ? 4242 : nil }
+
+    func stop() {
+        guard alive, !stopped else { return }
+        stopped = true
+        let ace = launcher.ace
+        launcher.pending.append { [self] in
+            await ace.set(up: false)
+            exit(143)
+        }
+    }
+
+    func exit(_ status: Int32) {
+        guard alive else { return }
+        alive = false
+        onExit(status)
+    }
+
+    func waitForExit() async {
+        while alive, await launcher.deliver() {}
+    }
+}
+
+/// An engine on fakes in a folder of its own.
+final class Rig {
+    static let start = 1_795_390_000.0
+    let root: URL
+    let paths: EnginePaths
+    let clock: ManualClock
+    let player = FakePlayer()
+    let holds = FakeHolds()
+    let ace = FakeAceServer()
+    let host = FakeModelHost()
+    let launcher: FakeLauncher
+    let aceHTTP: LoopbackHTTPServer
+    let hostHTTP: LoopbackHTTPServer
+    var engine: Engine!
+    var snapshots: [Snapshot] = []
+    var token: (any SnapshotObservation)?
+    var modelFiles: [String: Data] = [:]
+
+    static let genresText = """
+    {
+      "genres": [
+        {
+          "id": "jazz",
+          "name": "Jazz",
+          "caption": "a late-night jazz trio, brushed drums, upright bass",
+          "turns": [
+            "a walking bass solo",
+            "muted trumpet",
+            "a vibraphone chorus"
+          ],
+          "bpm": [90, 140],
+          "moods": ["Blue", "Smoky"],
+          "things": ["Avenue", "Lamp"]
+        },
+        {
+          "id": "lofi",
+          "name": "Lo-fi",
+          "caption": "lo-fi beat, dusty vinyl, warm keys",
+          "turns": [
+            "rain in the background",
+            "tape wobble"
+          ],
+          "bpm": [70, 92]
+        }
+      ]
+    }
+
+    """
+
+    /// - Parameters:
+    ///   - ready: whether the model files are in place already.
+    ///   - keep: the newest-N rule's N.
+    init(ready: Bool = true, keep: Int = 50, ahead: Int = 2, root: URL? = nil, genres: String = Rig.genresText) async throws {
+        self.root = root ?? FileManager.default.temporaryDirectory.appending(path: "tunes-engine-\(UUID().uuidString)", directoryHint: .isDirectory)
+        paths = EnginePaths(
+            support: self.root.appending(path: "support", directoryHint: .isDirectory),
+            models: self.root.appending(path: "support/models", directoryHint: .isDirectory),
+            caches: self.root.appending(path: "caches", directoryHint: .isDirectory),
+            music: self.root.appending(path: "Music/Tunes", directoryHint: .isDirectory)
+        )
+        clock = ManualClock(now: Rig.start)
+        launcher = FakeLauncher(ace: ace)
+        let ace = ace
+        let host = host
+        aceHTTP = try await LoopbackHTTPServer { await ace.handle($0) }
+        hostHTTP = try await LoopbackHTTPServer { await host.handle($0) }
+        try FileManager.default.createDirectory(at: self.root, withIntermediateDirectories: true)
+
+        // Invented model files, a few KiB each.
+        let roles = ["lm", "dit", "text", "vae"]
+        var entries: [String] = []
+        for (i, role) in roles.enumerated() {
+            let name = "fake-\(role).gguf"
+            let data = Data((0..<(4096 + i * 1000)).map { UInt8(($0 * 31 + i) & 0xFF) })
+            modelFiles[name] = data
+            let sha = sha256Hex(data)
+            entries.append(#"{"role": "\#(role)", "name": "\#(name)", "sha256": "\#(sha)", "bytes": \#(data.count)}"#)
+        }
+        await host.set(files: modelFiles)
+        let pins = """
+        {"model": {"name": "ACE-Step 1.5 Turbo", "variant": "4B Q8", "base_url": "http://127.0.0.1:\(hostHTTP.port)",
+        "revision": "rev", "files": [\(entries.joined(separator: ", "))], "silence_code": 35847, "ram_bytes": 8589934592},
+        "keep": \(keep), "ahead": \(ahead), "duration": 12}
+        """
+        try Data(pins.utf8).write(to: self.root.appending(path: "pins.json"))
+        if !Files.exists(self.root.appending(path: "genres-default.json")) {
+            try Data(genres.utf8).write(to: self.root.appending(path: "genres-default.json"))
+        }
+        if ready { try placeModels() }
+        make()
+    }
+
+    func placeModels() throws {
+        try FileManager.default.createDirectory(at: paths.models, withIntermediateDirectories: true)
+        for (name, data) in modelFiles { try data.write(to: paths.models.appending(path: name)) }
+    }
+
+    var environment: EngineEnvironment {
+        let port = Int(aceHTTP.port)
+        return EngineEnvironment(
+            paths: paths, aceServer: URL(filePath: "/nonexistent/ace-server"),
+            defaultGenres: root.appending(path: "genres-default.json"), pins: root.appending(path: "pins.json"),
+            clock: clock, random: SplitMix64(seed: 11), player: player, launcher: launcher, holds: holds, probe: FakeProbe(),
+            timeZone: TimeZone(identifier: "UTC")!, freePort: { port }
+        )
+    }
+
+    /// Builds the engine (again, for a restart) on the same folders.
+    func make() {
+        token?.cancel()
+        snapshots = []
+        engine = Engine(environment)
+        token = engine.observe { [weak self] in self?.snapshots.append($0) }
+    }
+
+    var snap: Snapshot { engine.snapshot }
+
+    /// Waits until the engine, the player and the launcher have nothing left
+    /// to do at this moment.
+    func settle() async {
+        for _ in 0..<1000 {
+            await engine.quiet()
+            let a = await launcher.deliver()
+            let b = player.deliver()
+            if !a && !b {
+                await engine.quiet()
+                if launcher.pending.isEmpty && player.pendingPlay == nil { return }
+            }
+        }
+        Issue.record("the rig never settled")
+    }
+
+    /// Lets time pass, timer by timer, until `done` holds.
+    @discardableResult
+    func run(until done: () -> Bool, steps: Int = 5000, sourceLocation: SourceLocation = #_sourceLocation) async -> Bool {
+        for _ in 0..<steps {
+            await settle()
+            if done() { return true }
+            if !clock.fireNext() {
+                await settle()
+                if done() { return true }
+                Issue.record("nothing left to happen and the condition never held", sourceLocation: sourceLocation)
+                return false
+            }
+        }
+        Issue.record("the condition did not hold within \(steps) steps", sourceLocation: sourceLocation)
+        return false
+    }
+
+    func send(_ c: Command) async {
+        engine.send(c)
+        await settle()
+    }
+
+    func genreDir(_ name: String) -> URL { paths.music.appending(path: name, directoryHint: .isDirectory) }
+
+    /// A kept tune file (not real audio) made `minutesAgo` before the start.
+    @discardableResult
+    func keptTune(_ genre: String, day: Int, bpm: Int = 100, key: String = "A-minor") throws -> URL {
+        let dir = genreDir(genre)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let name = String(format: "202601%02d-120000-%dbpm-%@.m4a", day, bpm, key)
+        let url = dir.appending(path: name)
+        try Data("not audio \(day)".utf8).write(to: url)
+        return url
+    }
+
+    func tunes(_ genre: String) -> [String] {
+        ((try? FileManager.default.contentsOfDirectory(atPath: genreDir(genre).path)) ?? []).filter(TuneFiles.isTune).sorted()
+    }
+
+    func close() async {
+        await engine.shutdown()
+        token?.cancel()
+        aceHTTP.stop()
+        hostHTTP.stop()
+        try? FileManager.default.removeItem(at: root)
+    }
+}
+
+func sha256Hex(_ data: Data) -> String {
+    SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+}
