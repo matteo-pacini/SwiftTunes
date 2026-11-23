@@ -135,6 +135,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             guard let self else { return }
             show()
             open.apply(to: model)
+            if demo.inactive {
+                try? await Task.sleep(for: .milliseconds(300))
+                NSApp.deactivate()
+            }
             try? await Task.sleep(for: .milliseconds(800))
             if let window = popover.contentViewController?.view.window {
                 print("popover window \(window.windowNumber)")

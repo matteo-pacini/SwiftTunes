@@ -2,7 +2,7 @@ import AppKit
 import TunesContract
 import TunesPanel
 
-/// `--demo <file.jsonl> [--demo-line N] [--demo-open CARD] [--demo-appearance light|dark]`: the app runs on
+/// `--demo <file.jsonl> [--demo-line N] [--demo-open CARD] [--demo-appearance light|dark] [--demo-inactive]`: the app runs on
 /// a stand-in engine that shows the snapshots of a fixture file instead of
 /// composing or playing, so each state can be opened and looked at. It plays
 /// no sound and touches no file but the one it reads.
@@ -17,6 +17,9 @@ struct DemoOptions {
     var open: Open?
     /// `--demo-appearance light|dark`: the whole app in that appearance.
     var appearance: NSAppearance.Name?
+    /// `--demo-inactive`: the app gives up being active once the popover is
+    /// open, to look at the cards in a window that is not key.
+    var inactive: Bool
 
     enum Open {
         case player, chooser, new
@@ -53,6 +56,7 @@ struct DemoOptions {
         guard let path = value("--demo") else { return nil }
         file = URL(fileURLWithPath: path)
         line = value("--demo-line").flatMap(Int.init)
+        inactive = arguments.contains("--demo-inactive")
         switch value("--demo-appearance") {
         case "light": appearance = .aqua
         case "dark": appearance = .darkAqua

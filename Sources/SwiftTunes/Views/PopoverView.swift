@@ -86,8 +86,13 @@ struct PushButton: View {
 
     private var button: some View {
         Button(action: action) {
-            Text(verbatim: control.text)
-                .foregroundStyle(destructive ? AnyShapeStyle(.red) : AnyShapeStyle(prominent ? .white : .primary))
+            // Only a destructive title is coloured here: the button style picks
+            // the others' colour to match its fill, key window or not.
+            if destructive {
+                Text(verbatim: control.text).foregroundStyle(Tone.red.color)
+            } else {
+                Text(verbatim: control.text)
+            }
         }
         .controlSize(.small)
         .disabled(!control.enabled)
