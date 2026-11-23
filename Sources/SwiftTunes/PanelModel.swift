@@ -39,6 +39,7 @@ final class PanelModel {
         observation = engine.observe { [weak self] s in
             guard let self else { return }
             snapshot = s
+            panel = panel.following(s)
             now = Self.clock()
             updateTick()
             onSnapshot?(s)
@@ -81,6 +82,8 @@ final class PanelModel {
     }
 
     private func cancelCalls() {
+        renameCall?.cancel()
+        renameCall = nil
         editorCall?.cancel()
         editorCall = nil
         shareCall?.cancel()
@@ -138,6 +141,30 @@ final class PanelModel {
             editorCall?.cancel()
             shareCall?.cancel()
             set(p)
+        }
+    }
+
+    // MARK: Renaming the playing tune
+
+    @ObservationIgnored private var renameCall: Task<Void, Never>?
+
+    func beginRename() { set(panel.beginningRename(snapshot)) }
+    func typeName(_ text: String) { set(panel.typedName(text)) }
+
+    func cancelRename() {
+        renameCall?.cancel()
+        renameCall = nil
+        set(panel.cancellingRename())
+    }
+
+    func saveRename() {
+        let (p, target, name) = panel.savingRename()
+        guard let target, let name else { return }
+        set(p)
+        renameCall = Task { [weak self, engine] in
+            let result = await engine.renameTune(target, to: name)
+            guard let self, !Task.isCancelled else { return }
+            set(panel.renamed(result, target: target))
         }
     }
 

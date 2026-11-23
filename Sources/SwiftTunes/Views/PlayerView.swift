@@ -76,21 +76,36 @@ struct Hero: View {
 
     private var title: some View {
         VStack(spacing: 3) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(verbatim: now.title)
-                    .font(.system(size: 25, weight: .bold, design: .rounded))
-                    .foregroundStyle(now.titleTone.color)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                if !now.badge.isEmpty {
+            if let rename = now.rename {
+                RenameField(field: rename, model: model)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    name
+                    if !now.badge.isEmpty {
                     Text(verbatim: "★").font(.system(size: 13)).foregroundStyle(.secondary)
                         .accessibilityLabel(Text(verbatim: now.badge))
                         .help(now.badge)
+                    }
                 }
             }
             if !now.meta.isEmpty {
                 Text(verbatim: now.meta).font(.system(size: 12.5)).foregroundStyle(.secondary)
             }
+        }
+    }
+
+    @ViewBuilder private var name: some View {
+        let text = Text(verbatim: now.title)
+            .font(.system(size: 25, weight: .bold, design: .rounded))
+            .foregroundStyle(now.titleTone.color)
+            .lineLimit(2)
+            .multilineTextAlignment(.center)
+        if let control = now.titleControl {
+            Button(action: model.beginRename) { text }
+                .buttonStyle(.plain)
+                .helped(control)
+        } else {
+            text
         }
     }
 
@@ -249,5 +264,43 @@ struct ComposerBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .glassEffect(.regular, in: .rect(cornerRadius: 15))
+    }
+}
+
+/// The playing tune's name as a text field, with a tick and a cross, and
+/// the sentence under it.
+struct RenameField: View {
+    let field: PlayerCard.RenameField
+    let model: PanelModel
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 6) {
+                TextField(text: Binding(get: { field.text }, set: model.typeName), prompt: Text(verbatim: "")) {
+                    Text(verbatim: field.save.help)
+                }
+                .labelsHidden()
+                .textFieldStyle(.plain)
+                .font(.system(size: 21, weight: .bold, design: .rounded))
+                .multilineTextAlignment(.center)
+                .focused($focused)
+                .onSubmit(model.saveRename)
+                .onExitCommand(perform: model.cancelRename)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .glassEffect(.regular, in: .rect(cornerRadius: 10))
+                RoundButton(symbol: "checkmark", control: field.save, size: 28, action: model.saveRename)
+                RoundButton(symbol: "xmark", control: field.cancel, size: 28, action: model.cancelRename)
+            }
+            if !field.error.isEmpty {
+                Text(verbatim: field.error)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Tone.red.color)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onAppear { focused = true }
     }
 }

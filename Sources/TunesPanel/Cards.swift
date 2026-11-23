@@ -174,6 +174,10 @@ public struct PlayerCard: Sendable, Equatable {
         public var genre: Control
         public var title: String
         public var titleTone: Tone
+        /// A click on the name starts renaming it: `Rename`; nil with no tune.
+        public var titleControl: Control?
+        /// The name as a text field, while it is being renamed.
+        public var rename: RenameField?
         /// "" or "★ kept for good".
         public var badge: String
         public var meta: String
@@ -203,6 +207,14 @@ public struct PlayerCard: Sendable, Equatable {
                 && a.playPause == b.playPause && a.showsPause == b.showsPause && a.next == b.next
                 && a.shuffle == b.shuffle && a.repeat == b.repeat && a.share == b.share && a.scrap == b.scrap
         }
+    }
+
+    public struct RenameField: Sendable, Equatable {
+        public var text: String
+        /// The local rule's sentence, else the engine's refusal, else "".
+        public var error: String
+        public var save: Control
+        public var cancel: Control
     }
 
     public struct Wave: Sendable, Equatable {

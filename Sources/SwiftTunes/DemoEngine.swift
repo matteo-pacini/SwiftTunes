@@ -9,8 +9,8 @@ import TunesPanel
 ///
 /// A time written "@-N" or "@+N" in the file is N seconds before or after
 /// the launch. CARD is `player`, `chooser`, `new`, `edit:<id>`, `ask:<id>`,
-/// `share` (the playing tune) or `share:<queue index>`; the popover opens
-/// on it at launch.
+/// `share` (the playing tune), `share:<queue index>`, `rename` or
+/// `rename:<text typed>`; the popover opens on it at launch.
 struct DemoOptions {
     var file: URL
     var line: Int?
@@ -25,6 +25,8 @@ struct DemoOptions {
         case player, chooser, new
         case edit(String), ask(String)
         case share(Int?)
+        /// The rename field, with this text typed if given.
+        case rename(String?)
 
         @MainActor func apply(to model: PanelModel) async {
             switch self {
@@ -42,6 +44,9 @@ struct DemoOptions {
                 // The question opens once the genre's fields have loaded.
                 try? await Task.sleep(for: .milliseconds(200))
                 model.askDelete()
+            case .rename(let text):
+                model.beginRename()
+                if let text { model.typeName(text) }
             case .share(let index):
                 guard case .player(let card) = model.card else { return }
                 if let index {
@@ -73,12 +78,14 @@ struct DemoOptions {
         case "chooser": open = .chooser
         case "new": open = .new
         case "share": open = .share(nil)
+        case "rename": open = .rename(nil)
         case let v?:
             let parts = v.split(separator: ":", maxSplits: 1).map(String.init)
             switch (parts.first, parts.count == 2 ? parts[1] : nil) {
             case ("edit", let id?): open = .edit(id)
             case ("ask", let id?): open = .ask(id)
             case ("share", let i?): open = .share(Int(i))
+            case ("rename", let text?): open = .rename(text)
             default: open = .player
             }
         }
@@ -205,6 +212,20 @@ final class DemoEngine: EngineAPI {
 
     func exportCopy(of target: TuneTarget) async -> Result<URL, Refusal> {
         .failure(Refusal(field: nil, text: "Nothing was exported: this is a demo."))
+    }
+
+    /// Renames the playing tune in the shown snapshot only; no file is
+    /// touched.
+    func renameTune(_ target: TuneTarget, to name: String) async -> Result<String, Refusal> {
+        guard target.index == nil, let t = snapshot.tune, t.name == target.name || t.file == target.name else {
+            return .failure(Refusal(field: nil, text: "That tune is no longer there."))
+        }
+        if let error = TuneRules.nameError(name) { return .failure(Refusal(field: nil, text: error)) }
+        let saved = GenreRules.trim(name)
+        guard saved != t.name else { return .success(saved) }
+        snapshot.tune?.name = saved
+        changed()
+        return .success(saved)
     }
 
     func shutdown() async {}

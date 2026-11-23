@@ -12,8 +12,23 @@ public struct Panel: Sendable, Equatable {
     public var editor: Editor?
     public var share: Share?
     public var notice: Notice?
+    /// The playing tune's name being edited in place.
+    public var rename: Rename?
 
     public init() {}
+
+    /// The playing tune's name as a text field.
+    public struct Rename: Sendable, Equatable {
+        /// The tune as it was when the field opened.
+        public var target: TuneTarget
+        /// Its file stem: the field closes if another tune starts playing.
+        public var file: String
+        public var text: String
+        /// The engine's refusal of the last save, until the text changes.
+        public var refused: String?
+        /// A save is out.
+        public var busy = false
+    }
 
     /// The footer's line for a while.
     public struct Notice: Sendable, Equatable {
@@ -322,6 +337,7 @@ extension Panel {
     /// player; the editor discards, and its delete question keeps the genre.
     public func escaping(_ snapshot: Snapshot) -> (panel: Panel, close: Bool) {
         if snapshot.setup != .ready { return (self, true) }
+        if rename != nil, mode == .player { return (cancellingRename(), false) }
         switch mode {
         case .editor where editor?.asking == true:
             return (editor?.busy == true ? self : keepingGenre(), false)
@@ -447,4 +463,70 @@ extension Panel {
 
 extension Panel.Share {
     var displayName: String { info?.name ?? target.name }
+}
+
+// MARK: - Renaming the playing tune
+
+extension Panel {
+    /// A click on the playing tune's name: the field, holding the name.
+    public func beginningRename(_ snapshot: Snapshot) -> Panel {
+        guard mode == .player, rename == nil, let t = snapshot.tune else { return self }
+        var p = self
+        p.rename = Rename(target: TuneTarget(name: t.name, index: nil), file: t.file, text: t.name)
+        return p
+    }
+
+    /// The field's text as typed; the engine's last refusal goes with it.
+    public func typedName(_ text: String) -> Panel {
+        guard var r = rename, !r.busy, r.text != text else { return self }
+        r.text = text
+        r.refused = nil
+        var p = self
+        p.rename = r
+        return p
+    }
+
+    /// The tick or Return: the target and the name to send to `renameTune`,
+    /// or nil while the name breaks a rule or a save is out.
+    public func savingRename() -> (Panel, TuneTarget?, String?) {
+        guard var r = rename, !r.busy, TuneRules.nameError(r.text) == nil else { return (self, nil, nil) }
+        r.busy = true
+        r.refused = nil
+        var p = self
+        p.rename = r
+        return (p, r.target, r.text)
+    }
+
+    /// The answer to `renameTune(target, …)`: success closes the field; a
+    /// refusal shows under it and the field stays open.
+    public func renamed(_ result: Result<String, Refusal>, target: TuneTarget) -> Panel {
+        guard var r = rename, r.busy, r.target == target else { return self }
+        var p = self
+        switch result {
+        case .success:
+            p.rename = nil
+        case .failure(let refusal):
+            r.busy = false
+            r.refused = refusal.text.isEmpty ? "The tune was not renamed." : refusal.text
+            p.rename = r
+        }
+        return p
+    }
+
+    /// The cross or Esc: the old name stays.
+    public func cancellingRename() -> Panel {
+        var p = self
+        p.rename = nil
+        return p
+    }
+
+    /// A new snapshot: if another tune plays now, or none, the field closes
+    /// without saving.
+    public func following(_ snapshot: Snapshot) -> Panel {
+        guard let r = rename else { return self }
+        if snapshot.tune?.file == r.file { return self }
+        var p = self
+        p.rename = nil
+        return p
+    }
 }

@@ -16,7 +16,7 @@ public enum Decide {
         if p.mode == .editor, let e = p.editor { return .editor(editor(s, e)) }
         if p.mode == .share, let sh = p.share { return .share(share(s, sh, home: home)) }
         if p.mode == .chooser || s.genre == nil { return .chooser(chooser(s)) }
-        return .player(player(s, now: now))
+        return .player(player(s, rename: p.following(s).rename, now: now))
     }
 
     // MARK: Setup
@@ -229,11 +229,11 @@ public enum Decide {
         Palette.of(name: g.name, hex: g.palette)
     }
 
-    static func player(_ s: Snapshot, now: Double) -> PlayerCard {
-        PlayerCard(palette: palette(s), strip: s.error, now: nowSection(s, now: now), next: nextSection(s, now: now), composer: composer(s, now: now))
+    static func player(_ s: Snapshot, rename: Panel.Rename? = nil, now: Double) -> PlayerCard {
+        PlayerCard(palette: palette(s), strip: s.error, now: nowSection(s, rename: rename, now: now), next: nextSection(s, now: now), composer: composer(s, now: now))
     }
 
-    static func nowSection(_ s: Snapshot, now: Double) -> PlayerCard.Now {
+    static func nowSection(_ s: Snapshot, rename: Panel.Rename? = nil, now: Double) -> PlayerCard.Now {
         let t = s.tune
         let name = genreName(s)
         var suffix = ""
@@ -286,6 +286,15 @@ public enum Decide {
             genre: Control(text: name, help: "Genre"),
             title: title,
             titleTone: tone,
+            titleControl: t == nil ? nil : Control(help: "Rename"),
+            rename: rename.map { r in
+                PlayerCard.RenameField(
+                    text: r.text,
+                    error: TuneRules.nameError(r.text) ?? r.refused ?? "",
+                    save: Control(enabled: !r.busy && TuneRules.nameError(r.text) == nil, help: "Save"),
+                    cancel: Control(enabled: !r.busy, help: "Cancel")
+                )
+            },
             badge: t?.pinned == true ? "★ kept for good" : "",
             meta: meta,
             wave: wave,
