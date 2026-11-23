@@ -22,6 +22,7 @@ GPL-3.0-or-later.
 |---|---|---|
 | 1 | Build system | A Swift package, plus `Scripts/make-app.sh` to build `ace-server` and assemble the bundle. No Xcode project. |
 | 2 | Language | Swift 6 and AppKit. The lifeline shim is C. |
+| 2a | Dependencies | Apple frameworks and tools only, in the app and in the tests. The exceptions are `ace-server` itself, the model, and `cmake` to build the server. |
 | 3 | Who owns `ace-server` | The app, through the lifeline shim: the shim holds the read end of a pipe whose write end only the app holds, and kills the server's process group when the pipe closes. |
 | 4 | Where `ace-server` comes from | Built from the pinned acestep.cpp revision and embedded in `SwiftTunes.app/Contents/Helpers`. |
 | 5 | Signing, releases | Local builds only, ad-hoc signed. No release workflow yet. |
@@ -170,7 +171,7 @@ Targets:
      state back and plays nothing by itself.
    - `TunesPanelTests`: the panel cases of the rule notes, (f), that are not about
      keys, against the fixture files adapted to this contract.
-   - The engine suite passes again under a CPU limit.
+   - The engine suite passes again under a CPU limit (`taskpolicy -b`).
 2. `Scripts/make-app.sh` produces `SwiftTunes.app` with `ace-server` and
    `tunes-lifeline` in `Contents/Helpers`; `plutil -lint` passes on its
    Info.plist, which has `LSUIElement`; `codesign --verify --deep --strict`
