@@ -74,6 +74,8 @@ struct RealServerTests {
         engine.send(.setComposer(on: true))
         await until { $0.tune != nil || $0.ready > 0 || $0.model.state == .failed || $0.model.state == .noDevice || $0.model.state.rawValue.hasPrefix("held") }
         let done = engine.snapshot
+        // Nothing plays, so the new tune waits in the queue.
+        let made = engine.ready.first ?? engine.current
         // The server keeps composing the second tune; its lifetime maximum
         // covers both stages of the first.
         if let pid = engine.server?.process?.serverPID, let m = Self.lifetimeMax(pid) { peak = max(peak, m) }
@@ -87,7 +89,8 @@ struct RealServerTests {
         report.append("timings: writing \(done.expect.map { "\($0.writingS)" } ?? "-") s, rendering \(done.expect.map { "\($0.renderingS)" } ?? "-") s")
         report.append("device: \(done.model.device)")
         report.append("server peak footprint: \(peak) bytes (\(String(format: "%.2f", Double(peak) / 1_073_741_824)) GiB)")
-        report.append("tune: \(done.tune?.name ?? "-") \(done.tune?.bpm.map(String.init) ?? "-") BPM \(done.tune?.key ?? "-") length \(done.tune?.length.map { "\($0)" } ?? "-") s")
+        report.append("tune: \(made?.name ?? "-"), \(made?.bpm.map(String.init) ?? "-") BPM, \(made?.key ?? "-"), \(made?.length.map { "\($0)" } ?? "-") s, \(made?.wave.count ?? 0) wave bars")
+        report.append("shutdown took \(String(format: "%.1f", Date().timeIntervalSince(t0) - elapsed)) s")
         report.append("files: \(tunes)")
         report.append("server exits: \(tap.exits)")
         try Data((report.joined(separator: "\n") + "\n").utf8).write(to: out.appending(path: "report.txt"))
@@ -95,6 +98,6 @@ struct RealServerTests {
 
         #expect(done.model.state != .failed && done.model.state != .noDevice)
         #expect(tunes.count >= 1)
-        #expect(done.tune?.wave.count == 78)
+        #expect(made?.wave.count == 78 && made?.length != nil)
     }
 }
