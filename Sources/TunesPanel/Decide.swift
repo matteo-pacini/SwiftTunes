@@ -80,54 +80,23 @@ public enum Decide {
 
     // MARK: Editor
 
-    /// The error each box would show on its own: `fieldError` asked about
-    /// one rule at a time, the other boxes holding values every rule accepts.
-    static func fieldErrors(_ v: GenreFieldsText, others: [String]) -> (errors: [GenreField: String], slowestBad: Bool, fastestBad: Bool) {
-        let lo = String(GenreRules.bpmRange.lowerBound)
-        let hi = String(GenreRules.bpmRange.upperBound)
-        let fine = GenreFieldsText(name: "a", caption: "a", turns: "", slowest: lo, fastest: hi)
-        func ask(_ f: GenreFieldsText, _ others: [String] = []) -> String? { GenreRules.fieldError(f, others: others)?.text }
-        var errors: [GenreField: String] = [:]
-        var f = fine
-        f.name = v.name
-        errors[.name] = ask(f, others)
-        f = fine
-        f.caption = v.caption
-        errors[.caption] = ask(f)
-        f = fine
-        f.turns = v.turns
-        errors[.turns] = ask(f)
-        f = fine
-        f.slowest = v.slowest
-        f.fastest = v.fastest
-        errors[.bpm] = ask(f)
-        f.fastest = hi
-        var slowestBad = ask(f) != nil
-        f.slowest = lo
-        f.fastest = v.fastest
-        var fastestBad = ask(f) != nil
-        if errors[.bpm] != nil && !slowestBad && !fastestBad {
-            slowestBad = true
-            fastestBad = true
-        }
-        return (errors, slowestBad, fastestBad)
-    }
-
     static func editor(_ s: Snapshot, _ e: Panel.Editor) -> EditorCard {
         let genre = e.id.flatMap { id in s.genres.first { $0.id == id } }
         let kept = genre?.kept ?? 0
-        let checked = fieldErrors(e.values, others: Panel.otherNames(s, except: e.id))
+        let problems = GenreRules.problems(e.values, others: Panel.otherNames(s, except: e.id))
+        let errors = Dictionary(problems.map { ($0.field, $0.text) }, uniquingKeysWith: { first, _ in first })
+        let tempoBoxes = problems.first { $0.field == .bpm }?.boxes ?? []
         let loaded = e.id != nil && !e.loading
         func shown(_ g: GenreField) -> Bool {
             loaded || e.tried || EditorField.allCases.contains { $0.group == g && e.touched.contains($0) }
         }
         let refusedAt: GenreField? = e.refused.map { $0.field ?? .bpm }
         func error(_ g: GenreField) -> String {
-            if shown(g), let t = checked.errors[g] { return t }
+            if shown(g), let t = errors[g] { return t }
             if refusedAt == g, let r = e.refused { return r.text }
             return ""
         }
-        let bpmShown = shown(.bpm) && checked.errors[.bpm] != nil
+        let bpmShown = shown(.bpm) && errors[.bpm] != nil
         let bpmRefused = refusedAt == .bpm && !bpmShown
         func field(_ label: String, _ side: String = "", _ placeholder: String = "", for g: GenreField) -> EditorCard.Field {
             let err = error(g)
@@ -139,7 +108,7 @@ public enum Decide {
             if kept > 0 { hint += kept == 1 ? " The 1 kept tune stays as it is." : " The \(kept) kept tunes stay as they are." }
         }
         let name = genre?.name ?? e.name
-        let anyError = EditorField.allCases.map(\.group).contains { shown($0) && checked.errors[$0] != nil }
+        let anyError = EditorField.allCases.map(\.group).contains { shown($0) && errors[$0] != nil }
         let blocked = e.loading || e.busy || anyError || e.refused?.field != nil
         var ask: EditorCard.Ask?
         if e.asking {
@@ -158,8 +127,8 @@ public enum Decide {
             name: field("NAME", for: .name),
             caption: field("PROMPT", "what every tune has", "instruments, mood, style, in a few phrases", for: .caption),
             turns: field("VARIATIONS", e.id == nil ? "optional" : "one per line, two are picked per tune", "one per line", for: .turns),
-            slowest: EditorCard.Field(label: "SLOWEST", side: "", placeholder: "", error: "", bad: bpmRefused || (shown(.bpm) && checked.slowestBad)),
-            fastest: EditorCard.Field(label: "FASTEST", side: "", placeholder: "", error: "", bad: bpmRefused || (shown(.bpm) && checked.fastestBad)),
+            slowest: EditorCard.Field(label: "SLOWEST", side: "", placeholder: "", error: "", bad: bpmRefused || (shown(.bpm) && tempoBoxes.contains(.slowest))),
+            fastest: EditorCard.Field(label: "FASTEST", side: "", placeholder: "", error: "", bad: bpmRefused || (shown(.bpm) && tempoBoxes.contains(.fastest))),
             tempoError: error(.bpm),
             hint: hint,
             delete: e.id != nil && s.genres.count > 1 ? Control(enabled: !e.busy, text: "Delete genre…", help: "Delete genre…") : nil,
