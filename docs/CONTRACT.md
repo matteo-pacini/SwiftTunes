@@ -262,4 +262,27 @@ public struct GenreFieldsText: Sendable, Equatable {
 }
 ```
 
+The editor shows one error under each field at once, and marks which tempo
+box an error is about, so the same file also gives every field's first
+problem:
+
+```swift
+public enum GenreBox: Sendable, Hashable { case name, caption, turns, slowest, fastest }
+
+public struct GenreProblem: Sendable, Equatable {
+    public var field: GenreField      // slowest and fastest share `bpm`
+    public var boxes: Set<GenreBox>   // the boxes to mark; both tempo boxes when slowest is above fastest
+    public var text: String
+}
+
+extension GenreRules {
+    /// At most one problem per field, in the order `fieldError` checks them.
+    /// `fieldError` is the first of these as a `Refusal`.
+    public static func problems(_ fields: GenreFieldsText, others: [String]) -> [GenreProblem]
+}
+```
+
+The helpers `trim`, `parseTurns`, `wholeNumber` and the limits are public so
+the panel parses and counts exactly as the rules do.
+
 This is the only logic in `TunesContract`. The engine owns its tests.
