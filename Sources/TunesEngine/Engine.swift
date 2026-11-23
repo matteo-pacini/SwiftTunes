@@ -425,8 +425,8 @@ final class Engine: EngineAPI {
 
     /// Brings the order up to date with the folder: tunes gone are dropped,
     /// kept tunes the round has not met join its end. With the round's last
-    /// tune playing and repeat on, the next round is drawn now, so what
-    /// plays next is always in the queue.
+    /// tune playing and repeat on, the next round is drawn now, so the player
+    /// knows what follows; the queue still ends with this round.
     func syncRound() {
         guard genre != nil else {
             roundOrder = []
@@ -453,18 +453,18 @@ final class Engine: EngineAPI {
         }
     }
 
-    /// What will play, in order: the finished new tunes, then the round's
-    /// kept tunes. Command indexes refer to it.
+    /// What will play, in order: the finished new tunes, then the rest of the
+    /// round's kept tunes. Command indexes refer to it.
     func queueNow() -> [Tune] {
         syncRound()
-        guard let g = genre, let first = nextKept else { return ready }
+        guard !roundAhead, let g = genre, let first = nextKept else { return ready }
         return ready + [first] + roundOrder.dropFirst().map { keptTune(genreDir(g).appending(path: $0), decode: false) }
     }
 
     /// The kept tunes in the queue.
     func roundLeft() -> [String] {
         syncRound()
-        return roundOrder
+        return roundAhead ? [] : roundOrder
     }
 
     func ended() -> Bool {

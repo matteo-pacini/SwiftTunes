@@ -27,10 +27,17 @@ import TunesRules
             out.append(now)
             let s = rig.snap
             #expect(s.roundLeft == s.queue.filter(\.kept).count, sourceLocation: sourceLocation)
+            // The queue ends with the round: on its last tune it is empty,
+            // and the next round's first is not the tune that ends this one.
             let promised = s.queue.first?.file
             rig.player.finish()
             await rig.settle()
-            #expect(rig.snap.tune?.file == promised, "the queue said \(promised ?? "nothing") was next", sourceLocation: sourceLocation)
+            if let promised {
+                #expect(rig.snap.tune?.file == promised, "the queue said \(promised) was next", sourceLocation: sourceLocation)
+            } else {
+                #expect(s.roundLeft == 0, sourceLocation: sourceLocation)
+                #expect(rig.snap.tune?.file != now || s.keptTotal == 1, sourceLocation: sourceLocation)
+            }
         }
         return out
     }

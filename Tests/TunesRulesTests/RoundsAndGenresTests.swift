@@ -137,6 +137,32 @@ private let K = (1...6).map { "2026010\($0)-000000-90bpm-C-major.m4a" }
         #expect(GenresFile.object(id: "n", GenreFields(name: "N", caption: "c", turns: [], bpm: [90, 100])).dumps().contains("palette") == false)
     }
 
+    @Test func sungIsOptionalAndWrittenOnlyWhenTrue() throws {
+        let base = #"{"id": "a", "name": "A", "caption": "c", "turns": [], "bpm": [90, 100]"#
+        #expect(try GenresFile.parse(Self.doc(base + "}")).genres.first?.sung == false)
+        #expect(try GenresFile.parse(Self.doc(base + #", "sung": true}"#)).genres.first?.sung == true)
+        #expect(try GenresFile.parse(Self.doc(base + #", "sung": false}"#)).genres.first?.fields.sung == false)
+        #expect(throws: GenresFile.Mistake("genre 1: sung must be true or false")) {
+            try GenresFile.parse(Self.doc(base + #", "sung": "yes"}"#))
+        }
+        let doc = try JSONValue.parse(#"{"genres": [{"id": "j", "name": "J", "caption": "c", "turns": [], "bpm": [90, 100], "moods": ["M"]}]}"#)
+        let on = GenresFile.updating(doc, id: "j", with: GenreFields(name: "J", caption: "c", turns: [], bpm: [90, 100], sung: true))
+        #expect(on.dumps() == #"{"genres": [{"id": "j", "name": "J", "caption": "c", "turns": [], "bpm": [90, 100], "sung": true, "moods": ["M"]}]}"#)
+        let both = GenresFile.updating(on, id: "j", with: GenreFields(name: "J", caption: "c", turns: [], bpm: [90, 100], palette: ["#000000", "#111111", "#222222", "#333333"], sung: true))
+        #expect(both.dumps().contains(##""bpm": [90, 100], "sung": true, "palette": ["#000000"##))
+        #expect(GenresFile.updating(on, id: "j", with: GenreFields(name: "J", caption: "c", turns: [], bpm: [90, 100])) == doc)
+        #expect(GenresFile.object(id: "n", GenreFields(name: "N", caption: "c", turns: [], bpm: [90, 100], sung: true)).dumps()
+            == #"{"id": "n", "name": "N", "caption": "c", "turns": [], "bpm": [90, 100], "sung": true}"#)
+        #expect(!GenresFile.object(id: "n", GenreFields(name: "N", caption: "c", turns: [], bpm: [90, 100])).dumps().contains("sung"))
+    }
+
+    @Test func aSungCaptionHasNoInstrumental() {
+        var rng = SplitMix64(seed: 3)
+        #expect(Composing.caption(caption: "c", turns: [], sung: true, rng: &rng) == "c")
+        #expect(Composing.caption(caption: "c", turns: ["x"], sung: true, rng: &rng) == "c, x")
+        #expect(Composing.caption(caption: "c", turns: ["x"], sung: false, rng: &rng) == "c, x, instrumental")
+    }
+
     @Test func theRepositorysFileRoundTripsByteForByte() throws {
         #expect(GenresFile.format(try JSONValue.parse(Self.repoGenres)) == Self.repoGenres)
     }

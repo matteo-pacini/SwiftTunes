@@ -116,19 +116,20 @@ struct Seen {
         #expect(await rig.run { rig.snap.model.state == .writing })
         seen = step("writing")
         p = try #require(seen.player)
-        #expect(p.next.rows.contains { $0.kind == .job && $0.name == "Being written" && $0.right == "composing" })
+        #expect(p.making?.rows.contains { $0.kind == .job && $0.name == "Being written" && $0.right == "composing" } == true)
+        #expect(!p.next.rows.contains { $0.kind == .job })
         #expect(p.composer.lines.first?.text == "Makes Jazz, keeps 2 ahead" && p.composer.lines.first?.right == "using 6.5 GiB of memory")
         #expect(p.composer.label == "on" && seen.status.dot == .cyan)
 
         #expect(await rig.run { rig.snap.model.state == .rendering })
         seen = step("rendering")
         p = try #require(seen.player)
-        #expect(p.next.rows.contains { $0.kind == .job && $0.name == "Being rendered" && $0.sub.contains("written in") })
+        #expect(p.making?.rows.contains { $0.kind == .job && $0.name == "Being rendered" && $0.sub.contains("written in") } == true)
 
         #expect(await rig.run { rig.snap.ready == 2 && rig.snap.model.state == .idle })
         seen = step("queue full")
         p = try #require(seen.player)
-        #expect(p.next.head == "2 ready")
+        #expect(p.next.head == "2 new, then kept")
         #expect(p.next.rows.filter { $0.tag == "new" }.count == 2 && !p.next.rows.contains { $0.kind == .job })
         #expect(p.composer.lines.first?.right == "resting, queue is full" && seen.status.dot == nil)
 
@@ -137,7 +138,7 @@ struct Seen {
         seen = step("first new tune playing")
         p = try #require(seen.player)
         #expect(p.now.title == rig.snap.tune?.name && rig.snap.tune?.new == true && p.now.suffix == "")
-        #expect(p.next.head == "1 ready")
+        #expect(p.next.head == "1 new, then kept")
 
         #expect(await rig.run { rig.snap.ready == 2 && rig.snap.model.state == .idle })
         // A hold applies when a job is next due: the queue must have room.
@@ -217,6 +218,61 @@ struct Seen {
         if ProcessInfo.processInfo.environment["TUNES_SESSION_LOG"] != nil {
             print(log.joined(separator: "\n"))
         }
+        await rig.close()
+    }
+
+    /// A sung genre with twelve kept tunes: the whole round in the queue card,
+    /// a plan written again for thin words, a sung tune and its words, and a
+    /// tune with the user's own words.
+    @Test func aSungSession() async throws {
+        let rig = try await Rig(genres: SingingTests.sungGenres)
+        for d in 1...12 { try rig.keptTune("Jazz", day: d) }
+        rig.make()
+        await rig.send(.setShuffle(on: false))
+        await rig.send(.selectGenre(id: "jazz"))
+
+        // Twelve kept: one plays, eleven wait; the player shows three.
+        var p = try #require(see(rig).player)
+        #expect(rig.snap.queue.count == 11 && rig.snap.roundLeft == 11)
+        #expect(p.next.rows.count == 3 && p.next.rows.map(\.number) == ["1", "2", "3"])
+        #expect(p.next.more?.text == "then 8 more this round · Show all")
+        let queueSeen = see(rig, Panel().openingQueue())
+        guard case .queue(let q) = queueSeen.card else {
+            Issue.record("no queue card: \(queueSeen.dump)")
+            return
+        }
+        #expect(q.label == "QUEUE · 11 THIS ROUND" && q.rows.count == 11)
+        #expect(q.rows.map(\.name) == rig.snap.queue.map(\.name))
+        #expect(q.last == "after these, the round starts over")
+
+        // A sung tune: the first plan's words are too thin and it is written again.
+        await rig.send(.stop)
+        await rig.ace.set(kinds: [.thin, .normal])
+        await rig.ace.set(runningPolls: 2)
+        await rig.send(.setComposer(on: true))
+        #expect(await rig.run { rig.snap.model.thinWords })
+        p = try #require(see(rig).player)
+        #expect(p.composer.lines.map(\.text).contains("Writing again: the last plan had too few sung lines."))
+        #expect(await rig.run { rig.snap.ready == 2 && rig.snap.model.state == .idle })
+        p = try #require(see(rig).player)
+        #expect(p.next.rows.first?.sub.hasSuffix(" · sung") == true && p.next.rows.first?.tag == "new")
+
+        // The user's words: made before the genre's own, shown as theirs.
+        await rig.ace.set(runningPolls: 3)
+        #expect(refusal(await rig.engine.composeWithWords("[Verse]\nmy own line", name: "Evening Walk")) == nil)
+        #expect(await rig.run { rig.snap.job?.ownWords == true })
+        p = try #require(see(rig).player)
+        let row = try #require(p.making?.rows.first { $0.kind == .job })
+        #expect(row.name == "Evening Walk" && row.sub.hasPrefix("with your words · being written"))
+        #expect(await rig.run { rig.snap.ready == 3 && rig.snap.job == nil })
+        #expect(see(rig).player?.next.rows.first?.name == "Evening Walk")
+
+        // Played: its words show behind the Lyrics button.
+        await rig.send(.play)
+        #expect(rig.snap.tune?.name == "Evening Walk" && rig.snap.tune?.sung == true)
+        p = try #require(see(rig).player)
+        #expect(p.now.lyricsButton?.text == "Lyrics" && p.now.meta.contains("sung"))
+        #expect(rig.snap.tune?.lyrics == "[Verse]\nmy own line")
         await rig.close()
     }
 }

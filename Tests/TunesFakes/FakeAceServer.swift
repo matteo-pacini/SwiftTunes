@@ -53,6 +53,10 @@ public actor FakeAceServer {
         case fail
         /// The server crashes while the job is polled.
         case exit
+        /// Asked to write words, it writes none: `[Instrumental]`.
+        case declines
+        /// Asked to write words, it writes three lines.
+        case thin
     }
 
     public static let silenceCode = 35847
@@ -118,6 +122,24 @@ public actor FakeAceServer {
     public var lmCount: Int { lmBodies.count }
     public var lmBPMs: [Int] { lmBodies.compactMap { $0["bpm"] as? Int } }
     public var lmCaptions: [String] { lmBodies.compactMap { $0["caption"] as? String } }
+    /// The lyrics of each /lm request, as sent.
+    public var lmLyrics: [String] { lmBodies.map { $0["lyrics"] as? String ?? "(none)" } }
+    /// The vocal_language of each /lm request, nil where none was sent.
+    public var lmLanguages: [String?] { lmBodies.map { $0["vocal_language"] as? String } }
+    /// The words the fake writes when asked to.
+    public static let words = """
+    [Verse]
+    walking home under amber lights
+    the city hums a quiet tune
+    [Chorus]
+    hold on, hold on to the night
+    we are dancing on the moon
+    [Verse]
+    every window keeps a secret
+    every street a little song
+    [Chorus]
+    hold on, hold on to the night
+    """
     public var synthFormats: [String] { synthBodies.compactMap { $0["output_format"] as? String } }
 
     public func handle(_ r: HTTPRequest) async -> HTTPResponse {
@@ -132,7 +154,19 @@ public actor FakeAceServer {
             let kind = kinds.isEmpty ? .normal : kinds.removeFirst()
             let duration = body["duration"] as? Int ?? 180
             let bpm = body["bpm"] as? Int ?? 90
-            let plan = Self.plan(kind: kind, duration: duration, bpm: bpm, key: lmBodies.count % 2 == 1 ? "C# minor" : "F major")
+            // Words as the three request shapes get them: kept for no voice,
+            // written when empty, kept as given otherwise.
+            let asked = body["lyrics"] as? String ?? ""
+            let lyrics: String
+            switch (asked, kind) {
+            case ("[Instrumental]", _): lyrics = "[Instrumental]"
+            case ("", .declines): lyrics = "[Instrumental]"
+            case ("", .thin): lyrics = "[Verse]\nla la la\nla la la\nhold on"
+            case ("", _): lyrics = Self.words
+            default: lyrics = asked
+            }
+            let plan = Self.plan(kind: kind, duration: duration, bpm: bpm, key: lmBodies.count % 2 == 1 ? "C# minor" : "F major",
+                                 lyrics: lyrics, language: body["vocal_language"] as? String)
             if holdLM {
                 await withCheckedContinuation { cont in
                     lmHeld.append(cont)
@@ -227,7 +261,7 @@ public actor FakeAceServer {
 
     /// The plan the language model would write: `duration` seconds of codes
     /// at five a second, the silence code where silent.
-    static func plan(kind: Kind, duration: Int, bpm: Int, key: String) -> String {
+    static func plan(kind: Kind, duration: Int, bpm: Int, key: String, lyrics: String = "[Instrumental]", language: String? = nil) -> String {
         let n = duration * 5
         var codes = (0..<n).map { 100 + ($0 * 37) % 60000 }
         if kind == .silent {
@@ -244,7 +278,9 @@ public actor FakeAceServer {
         case .exit: extra = #", "fake_kind": "exit""#
         default: break
         }
-        return #"[{"caption": "x", "audio_codes": "\#(text)", "bpm": \#(bpm), "keyscale": "\#(key)", "duration": \#(duration)\#(extra)}]"#
+        let words = String(decoding: (try? JSONSerialization.data(withJSONObject: lyrics, options: .fragmentsAllowed)) ?? Data("\"\"".utf8), as: UTF8.self)
+        let lang = language.map { #", "vocal_language": "\#($0)""# } ?? ""
+        return #"[{"caption": "x", "audio_codes": "\#(text)", "bpm": \#(bpm), "keyscale": "\#(key)", "duration": \#(duration), "lyrics": \#(words)\#(lang)\#(extra)}]"#
     }
 }
 
