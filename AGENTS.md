@@ -51,6 +51,9 @@ Read, in this order, before any work:
   from or names a program it resembles.
 - Stay inside the files your role owns (`docs/SPEC.md`, "Ownership"). A
   change you need elsewhere is a request to the lead.
+- Each rule here is the short form. The layout, the wording, the round and
+  singing are in `docs/SPEC.md`; types, fields and commands in
+  `docs/CONTRACT.md`; testing in `docs/TESTING.md`.
 
 ## Swift
 
@@ -96,7 +99,7 @@ renderer, which starves the engine too. Scrolling is an `NSScrollView`
 whose document is an `NSHostingView` of the SwiftUI rows, and multi-line
 text is an `NSTextView`, each through `NSViewRepresentable`. The demo's
 `--demo-probe` measures it; run it on any card that gains a scrolling
-region.
+region. How to run it: `docs/TESTING.md`, "The demo".
 
 ## Checks
 
@@ -111,6 +114,9 @@ Scripts/make-app.sh    # builds ace-server and assembles SwiftTunes.app
 (`nix develop -c Scripts/make-app.sh`), which supplies it; do not install
 anything globally. No script calls `nix` itself.
 
+What each suite covers, the rules a test follows, the real-server tests and
+the demo's flags: `docs/TESTING.md`.
+
 ## Working here
 
 - Commit on your own branch in your own worktree. Do not push, tag, or touch
@@ -124,5 +130,8 @@ anything globally. No script calls `nix` itself.
 - In every report keep three things apart: what was proven on the real Mac,
   what was simulated against fakes, and what is only expected. Show test
   output, not a summary of it.
+- Before anything shows a window or makes a sound on the owner's machine,
+  read `docs/TESTING.md`, "Anything that shows a window or makes a sound":
+  ask first, a fixed count, no retries, stop processes by ID.
 - Releases, signing identities, pushes and the GitHub repository's settings
   belong to the owner.
