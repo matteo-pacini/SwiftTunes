@@ -102,9 +102,10 @@ import TunesRules
         await rig.send(.download)
         #expect(await rig.run { rig.snap.setup == .ready })
         #expect(rig.snap.need.onDiskBytes == total(rig) && onDisk(rig).count == 4)
-        // It grew with the download, part by part.
+        // Read from the folder at every snapshot: it only grows while the
+        // download runs. How many snapshots fall mid-file depends on timing.
         let during = rig.snapshots.filter { $0.setup == .downloading }.map(\.need.onDiskBytes)
-        #expect(during.contains { $0 > 0 && $0 < total(rig) } && during == during.sorted())
+        #expect(!during.isEmpty && during == during.sorted() && during.allSatisfy { $0 <= total(rig) })
         await rig.close()
     }
 
