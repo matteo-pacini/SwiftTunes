@@ -451,9 +451,12 @@ round".
   done until the notices were checked against it.
 - **No web page in the server.** `ace-server` is built with an empty
   `tools/public/index.html.gz`, so it serves `/health`, `/lm` and `/synth`
-  and nothing at `/`. `Scripts/build-ace-server.sh` empties that one file in
-  its cached checkout and accepts that one change; any other local change
-  still stops it.
+  and nothing at `/`. `Scripts/build-ace-server.sh` makes exactly two changes in
+  its cached checkout: it empties that file, and it quotes the one variable
+  in `tools/xxd.cmake` that makes the embedding step fail on an empty file.
+  It checks that the file is empty and that `xxd.cmake` differs from the
+  pinned revision by that line alone; any other local change still stops
+  it.
 - **The workflow** (`.github/workflows/release.yml`) runs on a pushed `v*`
   tag, in the `release` environment, which holds the secrets and accepts
   only `v*` tags. In order: the tag's commit is on `main`, the tag matches
