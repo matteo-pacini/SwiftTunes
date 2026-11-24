@@ -120,7 +120,7 @@ final class FadingScrollView: NSScrollView {
 }
 
 /// Plain multi-line text in an `NSTextView`: no rich text, no smart quotes,
-/// dashes or other substitutions, and the system's undo.
+/// dashes or other substitutions, and an undo history of its own.
 ///
 /// The caller owns the text: `changed` reports each edit and each caret
 /// move as the whole text and the caret (in characters, at the end of the
@@ -180,6 +180,10 @@ struct PlainTextEditor: NSViewRepresentable {
         /// Set while the caller's values are applied, so the view's own
         /// notifications are not reported back as edits during a view update.
         private var applying = false
+        /// Not the window's: the popover's window outlives the card, and its
+        /// undo manager would keep this view's edits after the view is gone,
+        /// for Command-Z to replay into it.
+        private let undo = UndoManager()
 
         init(_ parent: PlainTextEditor) { self.parent = parent }
 
@@ -223,6 +227,8 @@ struct PlainTextEditor: NSViewRepresentable {
             guard !applying, let view else { return }
             parent.changed(view.string, caret(in: view))
         }
+
+        func undoManager(for view: NSTextView) -> UndoManager? { undo }
 
         func textDidChange(_ notification: Notification) { report() }
         func textViewDidChangeSelection(_ notification: Notification) { report() }

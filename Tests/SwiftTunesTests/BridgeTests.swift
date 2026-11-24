@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Testing
+import TunesContract
 import TunesPanel
 @testable import SwiftTunes
 
@@ -92,9 +93,9 @@ struct PlainTextEditorTests {
         #expect(words.text == out && words.caret == outCaret)
     }
 
-    /// Needs a window server session: a text view takes its undo manager
-    /// from its window, as in the popover. The window is never shown.
-    @Test("a mark inserted by the panel is undone by the window's undo, and the undone text is reported")
+    /// Needs a window server session: `undo:` is answered by the window, as
+    /// in the popover. The window is never shown.
+    @Test("Undo, sent down the responder chain, takes back a mark the panel inserted, and is reported; the window keeps none of it")
     func undo() throws {
         let words = Words("abcdef", caret: 3)
         let window = NSWindow(contentRect: words.host.frame, styleMask: [.borderless], backing: .buffered, defer: true)
@@ -106,11 +107,13 @@ struct PlainTextEditorTests {
         (words.text, words.caret) = Panel.inserting("[Chorus]", into: words.text, at: words.caret)
         words.redraw()
         #expect(view.string == "abc\n[Chorus]\ndef")
-        let undo = try #require(view.undoManager)
-        #expect(undo.canUndo)
-        undo.undo()
+        #expect(window.makeFirstResponder(view))
+        #expect(view.tryToPerform(Selector(("undo:")), with: nil))
         #expect(view.string == "abcdef")
         #expect(words.text == "abcdef")
+        #expect(view.tryToPerform(Selector(("redo:")), with: nil))
+        #expect(words.text == "abc\n[Chorus]\ndef")
+        #expect(window.undoManager?.canUndo == false)
     }
 
     @Test("Tab and Shift-Tab are not typed")
@@ -157,5 +160,96 @@ struct ScrollBoxTests {
         scroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, height - 340)))
         scroll.reflectScrolledClipView(scroll.contentView)
         #expect(scroll.layer?.mask == nil)
+    }
+}
+
+@Suite("Main menu")
+@MainActor
+struct MainMenuTests {
+    @Test("the Edit menu sends the standard actions down the responder chain, with their key equivalents")
+    func edit() throws {
+        let main = makeMainMenu()
+        let edit = try #require(main.items.first { $0.submenu?.title == "Edit" }?.submenu)
+        let items = edit.items.filter { !$0.isSeparatorItem }
+        let expected: [(String, String, String, NSEvent.ModifierFlags)] = [
+            ("Undo", "undo:", "z", .command),
+            ("Redo", "redo:", "z", [.command, .shift]),
+            ("Cut", "cut:", "x", .command),
+            ("Copy", "copy:", "c", .command),
+            ("Paste", "paste:", "v", .command),
+            ("Delete", "delete:", "", .command),
+            ("Select All", "selectAll:", "a", .command),
+        ]
+        #expect(items.count == expected.count)
+        for (item, (title, action, key, modifiers)) in zip(items, expected) {
+            #expect(item.title == title)
+            #expect(item.action.map(NSStringFromSelector) == action)
+            #expect(item.keyEquivalent == key)
+            #expect(key.isEmpty || item.keyEquivalentModifierMask == modifiers)
+            #expect(item.target == nil)
+        }
+    }
+
+    @Test("the app menu quits, with no key equivalent")
+    func app() throws {
+        let app = try #require(makeMainMenu().items.first?.submenu)
+        #expect(app.items.map(\.title) == ["Quit SwiftTunes"])
+        #expect(app.items.first?.action == #selector(NSApplication.terminate(_:)))
+        #expect(app.items.first?.keyEquivalent == "")
+    }
+}
+
+@Suite("Pasting words")
+@MainActor
+struct PasteTests {
+    /// Fixture 36: a sung genre playing.
+    private func sung() throws -> TunesContract.Snapshot {
+        let file = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "TunesPanelTests/Fixtures/36-sung-lyrics.jsonl")
+        let options = try #require(DemoOptions(arguments: ["SwiftTunes", "--demo", file.path]))
+        return DemoEngine(options: options).snapshot
+    }
+
+    @Test("the text view is editable and selectable, and its contextual menu offers Cut, Copy and Paste")
+    func menu() throws {
+        let view = try Words("ab", caret: 2).view
+        #expect(view.isEditable && view.isSelectable)
+        let click = try #require(NSEvent.mouseEvent(with: .rightMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                                    windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        let actions = try #require(view.menu(for: click)).items.compactMap(\.action).map(NSStringFromSelector)
+        #expect(Set(["cut:", "copy:", "paste:"]).isSubset(of: actions))
+    }
+
+    /// Reads a private pasteboard, as `paste:` reads the general one, so the
+    /// test never touches the user's clipboard.
+    @Test("styled text pastes as plain text in the editor's font, and reaches the words and the counter")
+    func paste() throws {
+        let words = Words("", caret: 0)
+        let view = try words.view
+        let board = NSPasteboard(name: NSPasteboard.Name("SwiftTunesTests.\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.clearContents()
+        let styled = NSAttributedString(string: "Line one\nLine two", attributes: [
+            .font: NSFont.boldSystemFont(ofSize: 30), .foregroundColor: NSColor.systemRed, .underlineStyle: 1,
+        ])
+        #expect(board.writeObjects([styled]))
+        #expect(view.readSelection(from: board))
+
+        #expect(view.string == "Line one\nLine two")
+        let storage = try #require(view.textStorage)
+        var runs = 0
+        storage.enumerateAttributes(in: NSRange(location: 0, length: storage.length)) { attributes, _, _ in
+            runs += 1
+            #expect(attributes[.font] as? NSFont == NSFont.systemFont(ofSize: 13))
+            #expect(attributes[.underlineStyle] == nil)
+            #expect(attributes[.foregroundColor] as? NSColor != NSColor.systemRed)
+        }
+        #expect(runs == 1)
+        #expect(words.text == "Line one\nLine two" && words.caret == 17)
+
+        let s = try sung()
+        let panel = Panel().openingWords(s, name: "Long Way Home").typedWords(words.text, caret: words.caret)
+        guard case .words(let card) = Decide.card(s, panel, now: 0, home: "/") else { Issue.record("not the sheet"); return }
+        #expect(card.counter == "2 sung lines · 17 of 2,000 characters")
     }
 }
