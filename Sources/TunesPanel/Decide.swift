@@ -9,10 +9,12 @@ public enum Decide {
 
     // MARK: Which card
 
-    /// The setup cards until the model is in place, then the editor, the
-    /// share sheet, the chooser (also while no genre is picked), the player.
+    /// The setup cards while the model is not in place and no genre has a
+    /// kept tune; then the editor, the share sheet, the chooser (also while
+    /// no genre is picked), the player. Without the model, kept tunes still
+    /// play and the composer bar stands in for the setup cards.
     public static func card(_ s: Snapshot, _ p: Panel, now: Double, home: String) -> Card {
-        if s.setup != .ready { return .setup(setup(s)) }
+        if setupShows(s) { return .setup(setup(s)) }
         if p.mode == .editor, let e = p.editor { return .editor(editor(s, e)) }
         if p.mode == .share, let sh = p.share { return .share(share(s, sh, home: home)) }
         if p.mode == .chooser || s.genre == nil { return .chooser(chooser(s)) }
@@ -22,6 +24,11 @@ public enum Decide {
     }
 
     // MARK: Setup
+
+    /// Whether the setup cards take the whole popover.
+    static func setupShows(_ s: Snapshot) -> Bool {
+        s.setup != .ready && !s.genres.contains { $0.kept > 0 }
+    }
 
     static func setup(_ s: Snapshot) -> SetupCard {
         let d = s.download
@@ -460,6 +467,23 @@ public enum Decide {
         )
     }
 
+    /// The composer bar without the model: what to download, the download
+    /// going, or why it stopped; no switch.
+    static func standingIn(_ s: Snapshot) -> PlayerCard.Composer {
+        let card = setup(s)
+        let standIn: PlayerCard.StandIn
+        switch card.kind {
+        case .missing:
+            standIn = .init(text: "The music model is not on this Mac.", detail: Format.gib(s.need.downloadBytes, decimals: 2),
+                            progress: nil, button: card.button, command: card.command)
+        case .downloading, .failed:
+            standIn = .init(text: card.detail, detail: card.rows.map(\.value).joined(separator: " · "),
+                            progress: card.progress, button: card.button, command: card.command)
+        }
+        return PlayerCard.Composer(on: false, label: "", labelTone: .soft, pill: nil, pillTone: .soft, toggle: Control(enabled: false, help: "Composer on"),
+                                   lines: [], retry: nil, words: nil, showsSwitch: false, standIn: standIn)
+    }
+
     /// Whether the selected genre is sung.
     static func sung(_ s: Snapshot) -> Bool {
         s.genres.first { $0.id == s.genre }?.sung ?? false
@@ -468,11 +492,12 @@ public enum Decide {
     /// `Sing my words…` on a sung genre's composer bar; off while a tune with
     /// the user's words is being made.
     static func wordsControl(_ s: Snapshot) -> Control? {
-        guard sung(s) else { return nil }
+        guard sung(s), s.setup == .ready else { return nil }
         return Control(enabled: s.job?.ownWords != true, text: "Sing my words…", help: "Sing my words…")
     }
 
     static func composer(_ s: Snapshot, now: Double) -> PlayerCard.Composer {
+        if s.setup != .ready { return standingIn(s) }
         let m = s.model
         let name = genreName(s)
         let newWaiting = s.queue.filter(\.new).count
@@ -607,7 +632,7 @@ public enum Decide {
         } else if s.composing && (m == .failed || m == .noDevice) {
             dot = .red
         }
-        guard s.setup == .ready, s.genre != nil else {
+        guard !setupShows(s), s.genre != nil else {
             return StatusItem(dim: true, text: "", dot: dot, help: "SwiftTunes")
         }
         return StatusItem(dim: s.player == .none, text: s.player == .playing ? genreName(s) : "", dot: dot, help: "SwiftTunes")
