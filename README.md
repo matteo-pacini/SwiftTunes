@@ -56,7 +56,7 @@ from Omarchy.
   <tr>
     <td><img src="docs/screenshots/own-words.png" width="250" alt="The sheet for a tune with your own words: buttons that insert verse, chorus, bridge and instrumental break marks, a text box with the words, a count of sung lines and characters, a suggested name, and Compose."></td>
     <td><img src="docs/screenshots/editor.png" width="250" alt="Editing a sung genre in grouped rows, its name selected for typing: prompt, variations, tempo range, the Singing switch with its explanation, four colour wells, and the buttons to delete, cancel or save."></td>
-    <td><img src="docs/screenshots/playing-light.png" width="250" alt="The playing state in light appearance: the same layout on a pale wash of the genre's colours with dark text."></td>
+    <td><img src="docs/screenshots/playing-light.png" width="250" alt="The playing state in light appearance: the same layout, volume slider under the round controls included, on a pale wash of the genre's colours with dark text."></td>
   </tr>
 </table>
 
