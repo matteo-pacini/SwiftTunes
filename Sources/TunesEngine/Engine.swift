@@ -589,6 +589,7 @@ final class Engine: EngineAPI {
         case .setComposer(let on): setComposer(on)
         case .setShuffle(let on): setModes(shuffle: on, repeat: repeatMode)
         case .setRepeat(let mode): setModes(shuffle: shuffle, repeat: mode)
+        case .setVolume: break
         case .scrapPlaying(let name): scrapPlaying(name)
         case .scrapQueued(let i, let name): scrapQueued(i, name)
         case .scrapJob: scrapJob()
