@@ -27,8 +27,7 @@ from Omarchy.
   once a round, shuffled or in the order made; repeat all, one or off. What
   is being made shows apart, under it.
 - **Previous.** Within the first three seconds of a tune, Previous goes back
-  to the one before it in the round; later, it starts the tune again. The
-  Previous media key does the same.
+  to the one before it in the round; later, it starts the tune again.
 - **Sung genres and your own words.** A sung genre's tunes have words,
   written by the model in English; the words of the playing tune open under
   it. From a sung genre you can also ask for one tune sung with words you
