@@ -1,7 +1,10 @@
 name: CI
 
+# Branches only: a pushed v* tag is the release workflow's.
 on:
   push:
+    branches:
+      - "**"
   pull_request:
 
 permissions:
@@ -70,12 +73,17 @@ jobs:
             keep-outputs = true
             sandbox = relaxed
             sandbox-fallback = false
+      - name: Name the compiler
+        id: compiler
+        run: |
+          version="$(/usr/bin/clang --version | head -n 1)"
+          echo "clang=${version//[^A-Za-z0-9.]/-}" >>"$GITHUB_OUTPUT"
       # The acestep.cpp checkout and its build tree; Scripts/build-ace-server.sh
-      # rebuilds only what changed. The compiler is part of the key because the
-      # object files in it come from that Xcode's clang.
+      # rebuilds only what changed. The key holds the clang version line
+      # because the object files in the tree come from that compiler.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/Library/Caches/SwiftTunes-build
-          key: ace-server-xcode-27.2-${{ hashFiles('Config/pins.json', 'Scripts/build-ace-server.sh') }}
+          key: ace-server-${{ steps.compiler.outputs.clang }}-${{ hashFiles('Config/pins.json', 'Scripts/build-ace-server.sh') }}
       - name: Build the ad-hoc signed app
         run: nix develop -c Scripts/make-app.sh
