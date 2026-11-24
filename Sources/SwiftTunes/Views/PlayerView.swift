@@ -156,7 +156,7 @@ struct Hero: View {
 }
 
 /// The player's level: the system slider between two speaker marks. While
-/// the pointer holds it, it draws its own place and sends each new step;
+/// the pointer holds it, it draws its own place and sends each change;
 /// on release, the last place.
 struct VolumeRow: View {
     let volume: PlayerCard.Volume
@@ -187,14 +187,12 @@ struct VolumeRow: View {
     private var level: Binding<Double> {
         Binding(get: { drag ?? volume.level }, set: { value in
             // Not held by the pointer (a keyboard or accessibility step): final at once.
-            guard let held = drag else {
+            guard drag != nil else {
                 model.setVolume(fraction: value, dragging: false)
                 return
             }
             drag = value
-            if Decide.volume(fraction: value, dragging: true) != Decide.volume(fraction: held, dragging: true) {
-                model.setVolume(fraction: value, dragging: true)
-            }
+            model.setVolume(fraction: value, dragging: true)
         })
     }
 }

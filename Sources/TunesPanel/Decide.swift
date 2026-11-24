@@ -237,10 +237,11 @@ public enum Decide {
     }
 
     /// The slider at `fraction` of the way across: the level, within 0…1, to
-    /// a hundredth. `dragging` is true while the pointer holds the slider.
-    public static func volume(fraction: Double, dragging: Bool) -> Command {
-        let f = fraction.isFinite ? min(1, max(0, fraction)) : 0
-        return .setVolume(to: (f * 100).rounded() / 100, dragging: dragging)
+    /// a hundredth, or nil for a fraction that is not finite. `dragging` is
+    /// true while the pointer holds the slider.
+    public static func volume(fraction: Double, dragging: Bool) -> Command? {
+        guard fraction.isFinite else { return nil }
+        return .setVolume(to: (min(1, max(0, fraction)) * 100).rounded() / 100, dragging: dragging)
     }
 
     /// The selected genre's palette, or one made from its name.
