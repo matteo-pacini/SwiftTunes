@@ -474,8 +474,10 @@ round".
   Nix and run `nix develop -c Scripts/make-app.sh`, so `cmake` is the one
   `flake.lock` pins. `ci.yml` builds the ad-hoc app on every push, and
   checks that the changelog has a section for the plist's version.
-- **Secrets.** No workflow uses `pull_request_target`. No secret is echoed,
-  passed on a command line or written into an uploaded file. Every action a
+- **Secrets.** No workflow uses `pull_request_target`. A secret reaches a
+  step only through `env:` and is used as a quoted shell variable; none is
+  written into a workflow's script text, echoed, or put in an uploaded
+  file. Every action a
   job with secrets uses is pinned to a full commit hash.
 - **Tags.** The owner pushes the tag and publishes the draft. A tag whose
   run failed, or whose draft was thrown away, may be deleted and pushed

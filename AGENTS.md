@@ -144,8 +144,8 @@ the demo's flags: `docs/TESTING.md`.
 - A change a user can notice adds a line under `Unreleased` in
   `CHANGELOG.md`, in plain words for someone who uses the app
   (`docs/SPEC.md`, "Releases").
-- No workflow uses `pull_request_target`, and none prints a secret or
-  passes one on a command line.
+- No workflow uses `pull_request_target`. A secret reaches a step only
+  through `env:`; none is written into a workflow's script text or printed.
 - Comments say what the code cannot: why, an invariant, a workaround with its
   reference. Never what the line below does, never how the code got here.
 - In every report keep three things apart: what was proven on the real Mac,
