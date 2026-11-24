@@ -265,7 +265,7 @@ public enum Decide {
         var tone = Tone.soft
         var meta = ""
         var wave: PlayerCard.Wave?
-        var time: (left: String, right: String)?
+        var time: PlayerCard.Clock?
         if let t {
             title = t.name
             tone = s.player == .paused ? .soft : .normal
@@ -273,7 +273,7 @@ public enum Decide {
             let pos = position(s, now: now)
             let played = t.length.map { $0 > 0 ? max(0, min(waveBars, Int((pos / $0 * Double(waveBars)).rounded(.down)))) : 0 } ?? 0
             wave = PlayerCard.Wave(levels: waveLevels(t.wave), played: played, help: "Seek")
-            time = (Format.clock(pos), Format.clock(t.length))
+            time = PlayerCard.Clock(left: Format.clock(pos), right: Format.clock(t.length))
         } else if s.ended {
             title = "Played all \(Format.plural(keptCount(s), "\(name) tune", "\(name) tunes"))"
             meta = "Play starts over. Repeat is off."
@@ -619,6 +619,26 @@ public enum Decide {
         if s.player == .playing || undoActive(s, now: now) { return true }
         if jobShown(s) { return true }
         return s.composing && s.model.state == .failed && s.model.retryAt != nil
+    }
+
+    /// What moves on the card showing: nothing while the popover is closed or
+    /// Reduce Motion is on; the backdrop also holds still in Low Power Mode.
+    /// A forming wave moves whenever it is drawn, from the first snapshot
+    /// that has the job.
+    public static func animating(_ s: Snapshot, _ p: Panel, now: Double, popoverOpen: Bool, reduceMotion: Bool, lowPower: Bool) -> Animating {
+        let allowed = popoverOpen && !reduceMotion
+        var hero = false
+        var job = false
+        switch card(s, p, now: now, home: "") {
+        case .player(let c):
+            hero = c.now.forming != nil
+            job = c.making?.rows.contains { $0.kind == .job } ?? false
+        case .queue(let c):
+            job = c.making?.rows.contains { $0.kind == .job } ?? false
+        default:
+            break
+        }
+        return Animating(backdrop: allowed && !lowPower, heroForming: allowed && hero, jobForming: allowed && job)
     }
 
     /// `Remove Music Model…`: enabled while anything of the model is on

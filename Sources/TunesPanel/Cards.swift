@@ -246,7 +246,7 @@ public struct PlayerCard: Sendable, Equatable {
         public var forming: JobStage?
         /// Repeat is on one tune.
         public var repeatsOne: Bool
-        public var time: (left: String, right: String)?
+        public var time: Clock?
         public var playPause: Control
         /// Whether the main button shows pause.
         public var showsPause: Bool
@@ -260,13 +260,12 @@ public struct PlayerCard: Sendable, Equatable {
         /// What the scrap control sends: the playing tune's name as drawn.
         public var scrapCommand: Command?
 
-        public static func == (a: Now, b: Now) -> Bool {
-            a.suffix == b.suffix && a.genre == b.genre && a.title == b.title && a.titleTone == b.titleTone
-                && a.badge == b.badge && a.meta == b.meta && a.wave == b.wave
-                && a.time?.left == b.time?.left && a.time?.right == b.time?.right
-                && a.playPause == b.playPause && a.showsPause == b.showsPause && a.next == b.next
-                && a.shuffle == b.shuffle && a.repeat == b.repeat && a.share == b.share && a.scrap == b.scrap
-        }
+    }
+
+    /// The position and the length under the wave.
+    public struct Clock: Sendable, Equatable {
+        public var left: String
+        public var right: String
     }
 
     public struct RenameField: Sendable, Equatable {
@@ -406,6 +405,16 @@ public enum Footer: Sendable, Equatable {
     case notice(String)
     /// "Scrapped <t>." and the button "Undo · N s".
     case undo(text: String, button: Control)
+}
+
+/// What may move now.
+public struct Animating: Sendable, Equatable {
+    /// The colour field drifts.
+    public var backdrop: Bool
+    /// The hero's forming wave moves.
+    public var heroForming: Bool
+    /// The job row's small forming wave moves.
+    public var jobForming: Bool
 }
 
 /// The status item menu's `Remove Music Model…` and the alert it asks with.

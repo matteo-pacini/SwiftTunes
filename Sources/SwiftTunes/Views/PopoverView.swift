@@ -26,9 +26,15 @@ struct PopoverView: View {
         .frame(width: 380)
         .font(.system(size: 13))
         .monospacedDigit()
-        .environment(\.motion, Motion(open: model.isOpen, reduce: reduceMotion, lowPower: model.lowPower))
+        .environment(\.motion, motion)
         .animation(reduceMotion ? nil : .spring(duration: 0.4), value: model.footer)
         .onExitCommand(perform: model.escape)
+    }
+
+    private var motion: Motion {
+        let a = Decide.animating(model.snapshot, model.panel, now: model.now, popoverOpen: model.isOpen,
+                                 reduceMotion: reduceMotion, lowPower: model.lowPower || model.stillBackdrop)
+        return Motion(drifts: a.backdrop, forms: a.heroForming || a.jobForming)
     }
 
     @ViewBuilder private func backdrop(_ card: Card) -> some View {
