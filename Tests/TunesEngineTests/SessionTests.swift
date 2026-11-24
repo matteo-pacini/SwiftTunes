@@ -151,6 +151,7 @@ struct Seen {
         #expect(await rig.run { rig.snap.model.state == .writing })
         seen = step("writing")
         p = try #require(seen.player)
+        #expect(p.making?.head == "joins the round when ready")
         #expect(p.making?.rows.contains { $0.kind == .job && $0.name == "Being written" && $0.right == "composing" } == true)
         #expect(!p.next.rows.contains { $0.kind == .job })
         #expect(p.composer.lines.first?.text == "Makes Jazz, keeps 2 ahead" && p.composer.lines.first?.right == "using 6.5 GiB of memory")
@@ -166,10 +167,24 @@ struct Seen {
         p = try #require(seen.player)
         #expect(p.next.head == Self.place(rig.snap))
         #expect(p.next.rows.filter { $0.tag == "new" }.count == 2 && !p.next.rows.contains { $0.kind == .job })
+        // The new tunes join the end of the round, after the kept ones.
+        #expect(p.next.rows.suffix(2).allSatisfy { $0.tag == "new" })
         #expect(p.composer.lines.first?.right == "resting, queue is full" && seen.status.dot == nil)
 
-        rig.player.finish()
-        await rig.settle()
+        // The kept tunes waiting before them play; the composer rests. Files,
+        // not names: a kept tune deep in the queue shows its file stem until
+        // it is read.
+        func files() -> [String] {
+            let s = rig.snap
+            return s.played.map(\.file) + (s.tune.map { [$0.file] } ?? []) + s.queue.map(\.file)
+        }
+        let fullRound = files()
+        while rig.snap.tune?.new != true {
+            rig.player.finish()
+            await rig.settle()
+            #expect(files() == fullRound)
+            if rig.snap.tune?.kept == true { #expect(rig.snap.model.state == .idle) }
+        }
         seen = step("first new tune playing")
         p = try #require(seen.player)
         #expect(p.now.title == rig.snap.tune?.name && rig.snap.tune?.new == true && p.now.suffix == "")
@@ -335,9 +350,10 @@ struct Seen {
         #expect(p.composer.lines.map(\.text).contains("Writing again: the last plan had too few sung lines."))
         #expect(await rig.run { rig.snap.ready == 2 && rig.snap.model.state == .idle })
         p = try #require(see(rig).player)
-        let firstWaiting = p.next.rows.first { $0.state == .waiting }
-        #expect(firstWaiting?.sub.hasSuffix(" · sung") == true && firstWaiting?.tag == "new")
-        #expect(firstWaiting?.name == rig.snap.queue.first?.name)
+        // The new tunes join the end of the round, after the kept ones.
+        #expect(p.next.rows.suffix(2).allSatisfy { $0.tag == "new" && $0.sub.hasSuffix(" · sung") })
+        let firstNew = p.next.rows.first { $0.tag == "new" }
+        #expect(firstNew?.name == rig.snap.queue.first(where: \.new)?.name)
 
         // The user's words: made before the genre's own, shown as theirs.
         await rig.ace.set(runningPolls: 3)
@@ -347,11 +363,12 @@ struct Seen {
         let row = try #require(p.making?.rows.first { $0.kind == .job })
         #expect(row.name == "Evening Walk" && row.sub.hasPrefix("with your words · being written"))
         #expect(await rig.run { rig.snap.ready == 3 && rig.snap.job == nil })
-        #expect(see(rig).player?.next.rows.first { $0.state == .waiting }?.name == "Evening Walk")
-        #expect(rig.snap.queue.first?.name == "Evening Walk")
+        #expect(see(rig).player?.next.rows.last?.name == "Evening Walk")
+        let mine = try #require(rig.snap.queue.last)
+        #expect(mine.name == "Evening Walk" && mine.new)
 
-        // Played: its words show behind the Lyrics button.
-        await rig.send(.play)
+        // Played now from its row: its words show behind the Lyrics button.
+        await rig.send(.playQueued(index: rig.snap.queue.count - 1, name: mine.name))
         #expect(rig.snap.tune?.name == "Evening Walk" && rig.snap.tune?.sung == true)
         p = try #require(see(rig).player)
         #expect(p.now.lyricsButton?.text == "Lyrics" && p.now.meta.contains("sung"))
