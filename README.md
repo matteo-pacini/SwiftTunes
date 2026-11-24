@@ -104,7 +104,8 @@ version in `Support/Info.plist` and a section in `CHANGELOG.md`. The release
 workflow then tests, signs the app with the owner's Developer ID, notarizes
 and staples it, and makes a draft GitHub release with
 `SwiftTunes-<version>.zip`, its checksum and that section as the notes; the
-owner publishes the draft.
+owner publishes the draft. A tag with a hyphen, such as `v0.2.0-rc.1`, makes
+a pre-release of the version before the hyphen.
 
 ## Where files live
 

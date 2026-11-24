@@ -47,13 +47,16 @@ jobs:
             echo "::error::The commit of $GITHUB_REF_NAME is not on main."
             exit 1
           fi
+          # A pre-release tag (v0.2.0-rc.1) carries the plist's version before
+          # its hyphen; the zip and the title take the whole tag version.
+          numeric="${version%%-*}"
           short="$(/usr/bin/plutil -extract CFBundleShortVersionString raw -o - Support/Info.plist)"
           bundle="$(/usr/bin/plutil -extract CFBundleVersion raw -o - Support/Info.plist)"
-          if [ "$short" != "$version" ] || [ "$bundle" != "$version" ]; then
+          if [ "$short" != "$numeric" ] || [ "$bundle" != "$numeric" ]; then
             echo "::error::$GITHUB_REF_NAME does not match Support/Info.plist ($short, $bundle)."
             exit 1
           fi
-          Scripts/release-notes.sh "$version" >"$RUNNER_TEMP/notes.md"
+          Scripts/release-notes.sh "$numeric" >"$RUNNER_TEMP/notes.md"
           echo "VERSION=$version" >>"$GITHUB_ENV"
 
       - run: swift test
