@@ -1,7 +1,7 @@
 #!/bin/bash
 # Builds ace-server (acestep.cpp, Metal) at the revision pinned in
 # Config/pins.json and prints the path of the binary on stdout. Progress goes
-# to stderr.
+# to stderr. The server is built without its web page (see below).
 #
 # The source and build tree live in a cache outside the repository:
 # $SWIFTTUNES_BUILD_CACHE, default ~/Library/Caches/SwiftTunes-build.
@@ -55,8 +55,36 @@ if git -C "$src" submodule status --recursive | grep -q '^[-+U]'; then
     echo "build-ace-server: a submodule in $src is not at its pinned commit; delete that folder and run this again." >&2
     exit 1
 fi
-if [ -n "$(git -C "$src" status --porcelain --ignore-submodules=none --untracked-files=no)" ]; then
-    echo "build-ace-server: $src has local changes; delete that folder and run this again." >&2
+
+# The server is built without its web page: upstream serves "/" only when the
+# embedded page is not empty. Upstream's embedding step fails on an empty file
+# because one variable is unquoted, so that line is quoted too. These two are
+# the only local changes allowed in the checkout. Each file is written only
+# while it is as pinned, so a change made by hand is reported below rather
+# than overwritten, and a second run leaves the files and their dates alone.
+page="tools/public/index.html.gz"
+embed="tools/xxd.cmake"
+unquoted='string(LENGTH ${hex_data} hex_len)'
+quoted='string(LENGTH "${hex_data}" hex_len)'
+pinned_embed="$(git -C "$src" show "HEAD:$embed")"
+if [ "$(grep -c -x -F "$unquoted" <<<"$pinned_embed")" != 1 ]; then
+    echo "build-ace-server: $embed at the pinned revision does not have the one line this script quotes; the pin changed, so check this script against it." >&2
+    exit 1
+fi
+expected_embed="${pinned_embed//"$unquoted"/$quoted}"
+if [ -f "$src/$page" ] && git -C "$src" diff --quiet -- "$page"; then
+    : >"$src/$page"
+fi
+if [ -f "$src/$embed" ] && git -C "$src" diff --quiet -- "$embed"; then
+    printf '%s\n' "$expected_embed" >"$src/$embed"
+fi
+
+changes="$(git -C "$src" status --porcelain --ignore-submodules=none --untracked-files=no)"
+if [ "$changes" != " M $page"$'\n'" M $embed" ] \
+    || [ ! -f "$src/$page" ] || [ -s "$src/$page" ] \
+    || [ "$(cat "$src/$embed")" != "$expected_embed" ] \
+    || [ "$(git -C "$src" diff --numstat -- "$embed")" != $'1\t1\t'"$embed" ]; then
+    echo "build-ace-server: $src has local changes beyond emptying $page and quoting one line of $embed; delete that folder and run this again." >&2
     exit 1
 fi
 
