@@ -185,6 +185,7 @@ public enum Command: Sendable, Equatable {
     case next                          // only when canNext [R16]
     case previous                      // spec, "The round and Previous"; nothing when no tune plays
     case playPlayed(index: Int, name: String)   // index into `played`; ignored unless that tune is there
+    case scrapPlayed(index: Int, name: String)  // index into `played`; the tune leaves the round, with the usual undo
     case seek(to: Double)              // seconds, clamped to 0…length
     case setComposer(on: Bool)         // [R14]
     case setShuffle(on: Bool)          // [R8]
@@ -204,6 +205,7 @@ public enum Command: Sendable, Equatable {
 public struct TuneTarget: Sendable, Equatable {
     public var name: String            // the tune's name or its file stem
     public var index: Int?             // nil: the playing tune, else a queue index
+    public var inPlayed: Bool          // false by default; true: `index` is an index into `played`
 }
 ```
 
