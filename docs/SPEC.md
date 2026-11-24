@@ -440,10 +440,13 @@ round".
   empty `Unreleased`. `Scripts/release-notes.sh <version>` prints that
   version's section and fails when there is none; the release's text is its
   output.
-- **Signing in the script.** `Scripts/make-app.sh` signs ad hoc unless
-  `SWIFTTUNES_SIGN_IDENTITY` names an identity; with one it signs the two
-  helpers and then the bundle with it, `--options runtime --timestamp`. It
-  never notarizes: that is the workflow's.
+- **Signing in the scripts.** `Scripts/sign-app.sh <app>` signs an assembled
+  bundle, the two helpers and then the bundle: ad hoc unless
+  `SWIFTTUNES_SIGN_IDENTITY` names an identity, and with one,
+  `--options runtime --timestamp`. It builds nothing and runs nothing but
+  `codesign`. `Scripts/make-app.sh` builds, assembles and ends by calling
+  it, so a local build is one command as before. Neither notarizes: that is
+  the workflow's.
 - **Notices.** The bundle carries `LICENSE` and `ThirdPartyNotices.txt` in
   `Contents/Resources`: the notice and permission text of each project
   compiled into `ace-server` (acestep.cpp; ggml, with the copyright line of
@@ -455,19 +458,27 @@ round".
   its cached checkout: it empties that file, and it quotes the one variable
   in `tools/xxd.cmake` that makes the embedding step fail on an empty file.
   It checks that the file is empty and that `xxd.cmake` differs from the
-  pinned revision by that line alone; any other local change still stops
+  pinned revision by that line alone; any other change to a tracked file still stops
   it.
 - **The workflow** (`.github/workflows/release.yml`) runs on a pushed `v*`
-  tag, in the `release` environment, which holds the secrets and accepts
-  only `v*` tags. In order: the tag's commit is on `main`, the tag matches
-  the plist and the changelog has the section, all before any secret is
-  used; `swift test`; the signed build; notarize, staple, zip, checksum;
+  tag, in two jobs. The first runs in the `release` environment, which
+  holds the secrets and accepts only `v*` tags, with a token that can only
+  read the repository. In order: the tag's commit is on `main`, the tag
+  matches the plist and the changelog has the section, all before any
+  secret is used; `swift test`; `make-app.sh` with no identity, so every
+  build step and all code from elsewhere has run before the key exists;
+  then the identity is imported into a temporary keychain whose password is
+  made for the run, and `sign-app.sh` signs; notarize, staple, zip,
+  checksum; the zip is expanded again and that copy passes
   `codesign --verify --deep --strict`, `stapler validate` and `spctl
-  --assess`; a **draft** release with the notes and the two files. A tag
-  with a hyphen makes a pre-release: the plist and the changelog section
-  carry the part before the hyphen, the zip is named after the whole tag. The temporary keychain
-  and the key files are removed whatever happened. A run publishes nothing; one
-  that fails while uploading may leave a draft, which the owner deletes.
+  --assess`. Its build cache is the run's own folder. The keychain and the
+  key files are removed whatever happened. The second job has no secrets
+  and uses no action from outside GitHub: it takes the zip, the checksum
+  and the notes from the first and makes a **draft** release, with the one
+  token that can write. A tag with a hyphen makes a pre-release: the plist
+  and the changelog section carry the part before the hyphen, the zip is
+  named after the whole tag. A run publishes nothing; one that fails while
+  uploading may leave a draft, which the owner deletes.
 - **The same tools everywhere.** Xcode 27.2 builds, tests and
   releases, on the owner's Mac and on the runners: each workflow's first
   step selects it and fails when `xcodebuild -version` does not say
