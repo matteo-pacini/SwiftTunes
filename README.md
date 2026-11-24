@@ -13,7 +13,7 @@ a signed and notarized zip, for a Mac with Apple silicon and macOS 26 or
 later. To build it yourself, see [Building](#building).
 
 <p align="center">
-  <img src="docs/screenshots/playing.png" width="380" alt="The SwiftTunes popover playing a Jazz tune: its name, tempo and key, the tune's shape as columns of dots filled up to the position, and seven round controls with Previous left of the play button, and under them a volume slider between a quiet and a loud speaker. Below, This round reads 5 of 12 over a list of the whole round, scrolled so the playing tune sits second: tune 4, already played, dimmed at the top; tune 5 highlighted with a small level meter in place of its number; tunes 6 and 7 below, fading at the edge into the rest. Then the tune being made, and the composer bar.">
+  <img src="docs/screenshots/playing.png" width="380" alt="The SwiftTunes popover playing a Jazz tune: its name, tempo and key, the tune's shape as columns of dots filled up to the position, and seven round controls with Previous left of the play button, and under them a volume slider between a quiet and a loud speaker. Below, This round reads 5 of 12 over a list of the whole round, scrolled so the playing tune sits second: tune 4, already played, dimmed at the top; tune 5 highlighted, tagged NEW, with a small level meter in place of its number; tunes 6 and 7 below, kept tunes with no NEW tag, fading at the edge into the rest. Then the tune being made, and the composer bar.">
 </p>
 
 SwiftTunes is inspired by [Flowtunes](https://github.com/omacom/flowtunes)
@@ -58,13 +58,13 @@ from Omarchy.
 <table>
   <tr>
     <td><img src="docs/screenshots/composing.png" width="250" alt="Nothing playing yet in Synthwave: the hero shows a wave of dots that moves while the first tune is written, the round controls with the volume slider under them, This round has nothing in it yet, and a separate Being made list shows the tune being written and one not started."></td>
-    <td><img src="docs/screenshots/lyrics.png" width="250" alt="A sung tune playing, with tempo, key and the word sung under its name; the wave has shrunk to a thin strip and the words show in a scrolling box headed Lyrics as written. Under the round controls sits the volume slider; below it, This round reads 1 of 5: the playing tune highlighted at the top of the list and the next tunes under it, fading at the edge."></td>
+    <td><img src="docs/screenshots/lyrics.png" width="250" alt="A sung tune playing, with tempo, key and the word sung under its name; the wave has shrunk to a thin strip and the words show in a scrolling box headed Lyrics as written. Under the round controls sits the volume slider; below it, This round reads 1 of 5: the playing tune highlighted and tagged NEW at the top of the list, and tunes 2 to 4 under it, kept tunes with no NEW tag, fading at the edge."></td>
     <td><img src="docs/screenshots/genres.png" width="250" alt="The genre chooser: nine genres as tiles in their own colours, each with its kept count or what is playing, and a dashed tile to add a new genre."></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/own-words.png" width="250" alt="The sheet for a tune with your own words: buttons that insert verse, chorus, bridge and instrumental break marks, a text box with the words, a count of sung lines and characters, a suggested name, and Compose."></td>
     <td><img src="docs/screenshots/editor.png" width="250" alt="Editing a sung genre in grouped rows, its name selected for typing: prompt, variations, tempo range, the Singing switch with its explanation, four colour wells, and the buttons to delete, cancel or save."></td>
-    <td><img src="docs/screenshots/playing-light.png" width="250" alt="The playing state in light appearance: the same layout, volume slider under the round controls included, on a pale wash of the genre's colours with dark text."></td>
+    <td><img src="docs/screenshots/playing-light.png" width="250" alt="The playing state in light appearance: the same layout, volume slider under the round controls included, and the same list with only the playing tune 5 tagged NEW, on a pale wash of the genre's colours with dark text."></td>
   </tr>
 </table>
 
