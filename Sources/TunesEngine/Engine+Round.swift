@@ -11,8 +11,8 @@ struct QueueItem {
 
 /// The round is one list in a fixed order: `played`, the playing tune, then
 /// `upcoming`. Nothing leaves it when it ends; it changes only by a new tune
-/// inserted after the playing one, a scrap and its undo, and a redraw of
-/// what is still to come when shuffle changes.
+/// added at the end, a scrap and its undo, and a redraw of what is still to
+/// come when shuffle changes.
 extension Engine {
     /// The new tunes not yet played.
     var ready: [Tune] { upcoming.compactMap(\.tune) }
@@ -81,12 +81,11 @@ extension Engine {
         }
     }
 
-    /// Starts a round: its order drawn over the kept tunes, behind the new
-    /// tunes not yet played, never starting with `avoid`.
+    /// Starts a round: its order drawn over the kept tunes, never starting
+    /// with `avoid`, then the new tunes not yet played in the order made.
     func newRound(avoid: String? = nil) {
         played = []
         nextRound = nil
-        putBack = nil
         nextKeptCache = nil
         anchor = nil
         guard genre != nil else {
@@ -96,17 +95,16 @@ extension Engine {
         let new = upcoming.filter { $0.tune != nil }
         let newNames = Set(new.map(\.name))
         let order = Rounds.draw(keptNames().filter { !newNames.contains($0) }, shuffle: shuffle, anchor: nil, avoid: avoid, rng: &rng)
-        upcoming = new + order.map { QueueItem(name: $0, tune: nil) }
+        upcoming = order.map { QueueItem(name: $0, tune: nil) } + new
     }
 
-    /// Shuffle changed: only what is still to come is redrawn, new tunes
-    /// first as they were.
+    /// Shuffle changed: only the kept tunes still to come are redrawn; the
+    /// new tunes stay after them as they were.
     func redrawQueue(shuffle newShuffle: Bool) {
         let new = upcoming.filter { $0.tune != nil }
         let kept = upcoming.filter { $0.tune == nil }.map(\.name)
         let order = Rounds.draw(kept, shuffle: newShuffle, anchor: current?.file ?? anchor, avoid: nil, rng: &rng)
-        upcoming = new + order.map { QueueItem(name: $0, tune: nil) }
-        putBack = nil
+        upcoming = order.map { QueueItem(name: $0, tune: nil) } + new
         nextKeptCache = nil
         nextRound = nil
     }
@@ -146,12 +144,10 @@ extension Engine {
             if let c = current, c.path != path { played.append(c.file) }
             let t = first.tune ?? (current?.path == path ? current! : (cachedKept(name) ?? keptTune(path)))
             upcoming.removeFirst()
-            if putBack == name { putBack = nil }
             nextKeptCache = nil
             current = t
         } else if let next = nextRound, next.first == name {
             played = []
-            putBack = nil
             let t = cachedKept(name) ?? keptTune(path)
             upcoming = next.dropFirst().map { QueueItem(name: $0, tune: nil) }
             nextRound = nil
@@ -196,7 +192,6 @@ extension Engine {
         }
         played.removeLast()
         upcoming.insert(QueueItem(name: c.file, tune: nil), at: 0)
-        putBack = c.file
         nextRound = nil
         nextKeptCache = nil
         jump(to: keptTune(genreDir(g).appending(path: back)))
@@ -211,16 +206,8 @@ extension Engine {
         let back = Array(played[(i + 1)...]) + (current.map { [$0.file] } ?? [])
         played.removeSubrange(i...)
         upcoming = back.map { QueueItem(name: $0, tune: nil) } + upcoming
-        putBack = nil
         nextRound = nil
         nextKeptCache = nil
         jump(to: t)
-    }
-
-    /// Where a new tune goes: right after the playing one, behind a tune
-    /// Previous has just put back first.
-    var newTuneIndex: Int {
-        if let p = putBack, upcoming.first?.name == p { return 1 }
-        return 0
     }
 }

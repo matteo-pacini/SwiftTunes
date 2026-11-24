@@ -668,8 +668,7 @@ extension Engine {
         failures = 0
         retryAt = nil
         if self.genre?.id == g.id {
-            // The user's words play next when ready.
-            upcoming.insert(QueueItem(name: tune.file, tune: tune), at: newTuneIndex)
+            upcoming.append(QueueItem(name: tune.file, tune: tune))
         }
         syncPlaylist()
         changed()

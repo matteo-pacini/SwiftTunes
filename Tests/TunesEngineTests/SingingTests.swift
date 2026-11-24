@@ -134,15 +134,31 @@ import TunesRules
         await rig.close()
     }
 
-    @Test func ownWordsComeFirstEvenWithTheQueueFull() async throws {
+    @Test func ownWordsAreMadeEvenWithTheQueueFullAndJoinTheEnd() async throws {
         let rig = try await sungRig(ahead: 1)
         await rig.send(.stop)
         await rig.send(.setComposer(on: true))
         #expect(await rig.run { rig.snap.ready == 1 && rig.snap.model.state == .idle })
         #expect(refusal(await rig.engine.composeWithWords("hold on to me", name: "Mine")) == nil)
         #expect(await rig.run { rig.snap.ready == 2 })
-        #expect(rig.snap.queue.first?.name == "Mine")
+        #expect(rig.snap.queue.last?.name == "Mine")
         #expect(await rig.run { rig.snap.model.state == .idle && rig.launcher.running == 0 })
+        await rig.close()
+    }
+
+    @Test func anOwnWordsTuneJoinsTheEndOfTheRound() async throws {
+        let rig = try await Rig(genres: Self.sungGenres)
+        for d in 1...4 { try rig.keptTune("Jazz", day: d) }
+        rig.make()
+        await rig.send(.setShuffle(on: false))
+        await rig.send(.selectGenre(id: "jazz"))
+        let before = rig.snap.queue.map(\.file)
+        #expect(before.count == 3)
+        #expect(refusal(await rig.engine.composeWithWords("hold on to me", name: "Mine")) == nil)
+        #expect(await rig.run { rig.snap.ready == 1 && rig.snap.job == nil })
+        let made = try #require(rig.snap.queue.last)
+        #expect(made.name == "Mine" && made.new)
+        #expect(rig.snap.queue.dropLast().map(\.file) == before)
         await rig.close()
     }
 

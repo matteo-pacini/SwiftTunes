@@ -213,8 +213,6 @@ final class Engine: EngineAPI {
     /// The next round, drawn while the last tune of this one plays with
     /// repeat on, so the player knows what follows.
     var nextRound: [String]?
-    /// The tune Previous put back first: a new tune goes behind it.
-    var putBack: String?
     /// The tune that started last: a new round never starts with it.
     var lastStarted: String?
     var nextKeptCache: Tune?

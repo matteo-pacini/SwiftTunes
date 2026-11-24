@@ -346,7 +346,8 @@ import TunesRules
         await rig.send(.setComposer(on: true))
         #expect(await rig.run { rig.snap.ready == 1 })
         // Seven tunes, one pinned: six count and three may stay. Day 1 plays;
-        // the new one, days 2 to 4 are queued; days 5 and 6 are all that may go.
+        // days 2 to 4 are queued next and the new one waits; days 5 and 6 are
+        // all that may go.
         let left = rig.tunes("Jazz")
         #expect(left.count == 5)
         #expect(Set(k[0...3]).isSubset(of: Set(left)))

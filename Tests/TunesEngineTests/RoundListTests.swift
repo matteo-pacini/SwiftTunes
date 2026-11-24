@@ -44,18 +44,122 @@ import TunesRules
         await rig.close()
     }
 
-    @Test func aNewTuneGoesRightAfterThePlayingOne() async throws {
+    @Test func aNewTuneJoinsTheEndAndNothingListedMoves() async throws {
         let rig = try await rig(5, ahead: 1)
         await finish(rig, 2)
         let before = list(rig)
         await rig.send(.setComposer(on: true))
         #expect(await rig.run { rig.snap.ready == 1 })
         await rig.send(.setComposer(on: false))
-        let new = try #require(rig.snap.queue.first)
+        let new = try #require(rig.snap.queue.last)
         #expect(new.new)
-        var expected = before
-        expected.insert(new.file, at: 3)
-        #expect(list(rig) == expected)
+        #expect(list(rig) == before + [new.file])
+        await rig.close()
+    }
+
+    @Test func aGenreWithNoTunesNumbersItsTunesInTheOrderMade() async throws {
+        let rig = try await Rig(ahead: 2)
+        await rig.send(.selectGenre(id: "jazz"))
+        #expect(rig.snap.tune == nil && rig.snap.queue.isEmpty)
+        await rig.send(.setComposer(on: true))
+        var made: [String] = []
+        /// Waits for the next finished tune: it is the last of the list and
+        /// every tune before it keeps its place.
+        func nextMade(sourceLocation: SourceLocation = #_sourceLocation) async throws {
+            #expect(await rig.run { list(rig).count == made.count + 1 }, sourceLocation: sourceLocation)
+            let now = list(rig)
+            #expect(Array(now.prefix(made.count)) == made, sourceLocation: sourceLocation)
+            let new = try #require(now.last, sourceLocation: sourceLocation)
+            #expect(!made.contains(new), sourceLocation: sourceLocation)
+            made.append(new)
+        }
+        try await nextMade()
+        #expect(rig.snap.tune?.file == made[0] && rig.snap.played.isEmpty)
+        try await nextMade()
+        try await nextMade()
+        #expect(rig.snap.tune?.file == made[0] && rig.snap.queue.map(\.file) == Array(made[1...]))
+        await rig.send(.next)
+        #expect(list(rig) == made && rig.snap.played.map(\.file) == [made[0]] && rig.snap.tune?.file == made[1])
+        try await nextMade()
+        await rig.send(.next)
+        #expect(list(rig) == made && rig.snap.tune?.file == made[2])
+        try await nextMade()
+        await finish(rig)
+        #expect(list(rig) == made && rig.snap.played.map(\.file) == Array(made[0...2]) && rig.snap.tune?.file == made[3])
+        #expect(made.count == 5)
+        await rig.send(.setComposer(on: false))
+        await rig.close()
+    }
+
+    @Test func withNothingWaitingANewTunePlaysNextThenTheNextRound() async throws {
+        let rig = try await rig(3, shuffle: false, ahead: 1)
+        await finish(rig, 2)
+        let round = list(rig)
+        #expect(rig.snap.queue.isEmpty)
+        await rig.send(.setComposer(on: true))
+        #expect(await rig.run { rig.snap.ready == 1 })
+        await rig.send(.setComposer(on: false))
+        let new = try #require(rig.snap.queue.first)
+        #expect(new.new && rig.snap.queue.count == 1)
+        await finish(rig)
+        #expect(rig.snap.tune?.file == new.file && list(rig) == round + [new.file])
+        await finish(rig)
+        #expect(rig.snap.played.isEmpty && rig.snap.tune?.file == round[0])
+        await rig.close()
+    }
+
+    @Test func aNewTuneFinishedAfterARoundEndedWithRepeatOffPlays() async throws {
+        let rig = try await rig(3, repeat: .off, ahead: 1)
+        await finish(rig, 3)
+        #expect(rig.snap.ended && rig.snap.tune == nil)
+        await rig.send(.setComposer(on: true))
+        #expect(await rig.run { rig.snap.tune?.new == true })
+        #expect(!rig.snap.ended && rig.snap.player == .playing)
+        await rig.close()
+    }
+
+    @Test func withRepeatOneANewTuneWaitsLast() async throws {
+        let rig = try await rig(3, shuffle: false, repeat: .one, ahead: 1)
+        let before = list(rig)
+        await rig.send(.setComposer(on: true))
+        #expect(await rig.run { rig.snap.ready == 1 && rig.snap.model.state == .idle })
+        let new = try #require(rig.snap.queue.last)
+        #expect(new.new && list(rig) == before + [new.file])
+        await finish(rig)
+        #expect(rig.snap.tune?.file == before[0] && rig.snap.ready == 1)
+        await rig.close()
+    }
+
+    @Test(arguments: [true, false])
+    func aShuffleChangeKeepsWaitingNewTunesLastInTheOrderMade(startShuffled: Bool) async throws {
+        let rig = try await rig(6, shuffle: startShuffled, ahead: 2)
+        await rig.send(.setComposer(on: true))
+        #expect(await rig.run { rig.snap.ready == 1 })
+        let first = try #require(rig.snap.queue.last)
+        #expect(await rig.run { rig.snap.ready == 2 })
+        await rig.send(.setComposer(on: false))
+        let second = try #require(rig.snap.queue.last)
+        #expect(first.new && second.new && first.file != second.file)
+        let kept = Set(rig.snap.queue.dropLast(2).map(\.file))
+        await rig.send(.setShuffle(on: !startShuffled))
+        #expect(rig.snap.queue.suffix(2).map(\.file) == [first.file, second.file])
+        #expect(Set(rig.snap.queue.dropLast(2).map(\.file)) == kept)
+        await rig.close()
+    }
+
+    @Test func aNewRoundDrawnWhileNewTunesWaitPutsThemLast() async throws {
+        let rig = try await rig(4, shuffle: true, ahead: 2)
+        await rig.send(.setComposer(on: true))
+        #expect(await rig.run { rig.snap.ready == 2 })
+        await rig.send(.setComposer(on: false))
+        let new = rig.snap.queue.filter(\.new).map(\.file)
+        // No command draws a round while new tunes wait; the engine's own
+        // draw is called to hold it to the rule all the same.
+        rig.engine.newRound()
+        rig.engine.changed()
+        await rig.settle()
+        #expect(rig.snap.queue.suffix(2).map(\.file) == new)
+        #expect(rig.snap.queue.dropLast(2).allSatisfy { $0.kept })
         await rig.close()
     }
 
@@ -118,10 +222,12 @@ import TunesRules
         await rig.send(.previous)
         #expect(rig.snap.tune?.file == lastPlayed && rig.snap.queue.first?.file == wasPlaying)
         #expect(list(rig) == round && rig.snap.played.count == 1)
-        // A new tune made now goes behind the tune put back.
+        // A new tune made now joins the end; the tune put back stays first.
         await rig.send(.setComposer(on: true))
         #expect(await rig.run { rig.snap.ready == 1 })
-        #expect(rig.snap.queue.first?.file == wasPlaying && rig.snap.queue[1].new)
+        let new = try #require(rig.snap.queue.last)
+        #expect(rig.snap.queue.first?.file == wasPlaying && new.new)
+        #expect(list(rig) == round + [new.file])
         await rig.close()
     }
 

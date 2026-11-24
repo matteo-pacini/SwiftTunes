@@ -104,7 +104,7 @@ import TunesRules
         await rig.close()
     }
 
-    @Test func aNewTunePlaysFirstThenBelongsToTheNextRound() async throws {
+    @Test func aNewTunePlaysLastThenBelongsToTheNextRound() async throws {
         let rig = try await Rig(ahead: 1)
         for d in 1...3 { try rig.keptTune("Jazz", day: d) }
         rig.make()
@@ -114,12 +114,12 @@ import TunesRules
         await rig.send(.setComposer(on: true))
         #expect(await rig.run { rig.snap.ready == 1 && rig.snap.model.state == .idle })
         await rig.send(.setComposer(on: false))
-        let new = try #require(rig.snap.queue.first)
-        #expect(new.new && rig.snap.queue.dropFirst().map(\.file) == Array(k[1...]))
+        let new = try #require(rig.snap.queue.last)
+        #expect(new.new && rig.snap.queue.dropLast().map(\.file) == Array(k[1...]))
         let got = await play(rig, 7)
-        // The new tune, then the rest of this round, then a round of all four
-        // in the order made with the once-new tune last.
-        #expect(got == [k[0], new.file, k[1], k[2], k[0], k[1], k[2]])
+        // The rest of this round, the new tune at its end, then a round of
+        // all four in the order made with the once-new tune last.
+        #expect(got == [k[0], k[1], k[2], new.file, k[0], k[1], k[2]])
         #expect(await play(rig, 1) == [new.file])
         await rig.close()
     }

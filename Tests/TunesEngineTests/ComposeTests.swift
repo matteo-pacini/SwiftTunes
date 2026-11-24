@@ -67,6 +67,34 @@ import TunesRules
         await rig.close()
     }
 
+    @Test func theComposerRestsUntilANewTuneStarts() async throws {
+        let rig = try await Rig()
+        for d in 1...4 { try rig.keptTune("Jazz", day: d) }
+        rig.make()
+        await rig.send(.setShuffle(on: false))
+        await rig.send(.selectGenre(id: "jazz"))
+        await rig.send(.setComposer(on: true))
+        #expect(await rig.run { rig.snap.ready == 2 && rig.snap.model.state == .idle })
+        #expect(rig.snap.queue.map(\.new) == [false, false, false, true, true])
+        let launches = rig.launcher.launches.count
+        // The kept tunes waiting before the new ones play; the composer rests.
+        for _ in 1...3 {
+            rig.player.finish()
+            await rig.settle()
+            #expect(rig.snap.tune?.kept == true && rig.snap.ready == 2)
+            #expect(rig.snap.model.state == .idle && rig.launcher.running == 0)
+        }
+        #expect(rig.launcher.launches.count == launches)
+        // The first new tune starts: a place is free and the composer starts again.
+        rig.player.finish()
+        await rig.settle()
+        #expect(rig.snap.tune?.new == true && rig.snap.ready == 1)
+        #expect(rig.snap.model.state == .starting || rig.snap.model.state == .writing)
+        #expect(rig.launcher.running == 1)
+        await rig.send(.setComposer(on: false))
+        await rig.close()
+    }
+
     @Test func jobViewWhileWritingAndRendering() async throws {
         let rig = try await Rig()
         await rig.ace.set(runningPolls: 3)
