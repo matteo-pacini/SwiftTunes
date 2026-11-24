@@ -497,3 +497,21 @@ round".
 - **Done** for a release: the run is green, and the owner has opened the
   downloaded zip on a Mac with no Gatekeeper warning, composed a tune and
   heard it.
+
+## The icon
+
+- **The picture.** A white swift in a wide glide under a pair of lavender
+  beamed notes, on near-black. Its source is `Resources/AppIcon.png`:
+  1024 px square, the art filling the whole square, no rounded corners of
+  its own.
+- **The icon file.** `Resources/AppIcon.icns` is made from the source by
+  `Scripts/make-icon.sh`, with Apple's tools only: the art is clipped to the
+  macOS icon shape, a rounded square inset in the canvas, and written at
+  every size from 16 to 1024 points, at 1x and 2x. Both files are committed;
+  a build does not make the icon again. A new picture means running the
+  script and committing both.
+- **In the bundle.** `Support/Info.plist` names it (`CFBundleIconFile`),
+  `Scripts/make-app.sh` copies it into `Contents/Resources` and fails
+  without it.
+- The status item keeps its own symbol; the icon is what Finder, Login
+  Items and the release page show.
