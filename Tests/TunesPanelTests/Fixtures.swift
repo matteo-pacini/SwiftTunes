@@ -108,6 +108,11 @@ func rows(_ p: PlayerCard) -> [[String]] {
 }
 
 /// UP NEXT's rows, then BEING MADE's, as they read down the card.
+/// BEING MADE's rows.
+func made(_ p: PlayerCard) -> [PlayerCard.Row] {
+    p.making?.rows ?? []
+}
+
 func shown(_ p: PlayerCard) -> [PlayerCard.Row] {
     p.next.rows + (p.making?.rows ?? [])
 }

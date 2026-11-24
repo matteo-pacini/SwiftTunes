@@ -108,11 +108,14 @@ struct ArtworkTests {
         #expect(a.colors(field).allSatisfy { field.contains($0) })
     }
 
-    @Test("UP NEXT rows carry their tune's picture in the genre's palette")
+    @Test("THIS ROUND's rows carry their tune's picture in the genre's palette")
     func inUpNext() throws {
         let s = try Fixture.load("05-queue-full")
         let p = try player(s)
-        #expect(p.next.rows.map(\.artwork) == s.queue.map { Artwork.recipe(name: $0.name, bpm: $0.bpm, key: $0.key, palette: Decide.palette(s)) })
+        let t = try #require(s.tune)
+        let expected = [Artwork.recipe(name: t.name, bpm: t.bpm, key: t.key, palette: Decide.palette(s))]
+            + s.queue.prefix(2).map { Artwork.recipe(name: $0.name, bpm: $0.bpm, key: $0.key, palette: Decide.palette(s)) }
+        #expect(p.next.rows.map(\.artwork) == expected)
     }
 }
 
