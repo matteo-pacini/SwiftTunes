@@ -87,6 +87,14 @@ SwiftUI views draw the view state `TunesPanel` computes and send commands;
 they hold no rules. State reaches them through one `@Observable` main-actor
 model the shell owns.
 
+No SwiftUI `ScrollView`, `List`, `Form` or `TextEditor` in the popover: on
+macOS 26.7 each was measured stalling the main thread for seconds inside the
+renderer, which starves the engine too. Scrolling is an `NSScrollView`
+whose document is an `NSHostingView` of the SwiftUI rows, and multi-line
+text is an `NSTextView`, each through `NSViewRepresentable`. The demo's
+`--demo-probe` measures it; run it on any card that gains a scrolling
+region.
+
 ## Checks
 
 ```sh
