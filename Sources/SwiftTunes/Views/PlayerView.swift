@@ -155,13 +155,12 @@ struct Hero: View {
     }
 }
 
-/// The player's level: the system slider between two speaker marks. While
-/// the pointer holds it, it draws its own place and sends each change;
-/// on release, the last place.
+/// The player's level: the system slider between two speaker marks. What it
+/// draws and sends is `VolumeSlider`'s.
 struct VolumeRow: View {
     let volume: PlayerCard.Volume
     let model: PanelModel
-    @State private var drag: Double?
+    @State private var slider = VolumeSlider()
 
     var body: some View {
         HStack(spacing: 8) {
@@ -170,10 +169,9 @@ struct VolumeRow: View {
                 .accessibilityHidden(true)
             Slider(value: level, in: 0...1) { editing in
                 if editing {
-                    drag = volume.level
+                    slider.began()
                 } else {
-                    model.setVolume(fraction: drag ?? volume.level, dragging: false)
-                    drag = nil
+                    model.send(slider.ended())
                 }
             }
             .helped(Control(help: volume.help))
@@ -182,18 +180,11 @@ struct VolumeRow: View {
                 .accessibilityHidden(true)
         }
         .font(.system(size: 11))
+        .onChange(of: volume.level, initial: true) { _, level in slider.report(level) }
     }
 
     private var level: Binding<Double> {
-        Binding(get: { drag ?? volume.level }, set: { value in
-            // Not held by the pointer (a keyboard or accessibility step): final at once.
-            guard drag != nil else {
-                model.setVolume(fraction: value, dragging: false)
-                return
-            }
-            drag = value
-            model.setVolume(fraction: value, dragging: true)
-        })
+        Binding(get: { slider.drawn(volume.level) }, set: { model.send(slider.set($0)) })
     }
 }
 

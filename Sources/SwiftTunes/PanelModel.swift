@@ -140,7 +140,6 @@ final class PanelModel {
     func retry() { send(Actions.retry(snapshot)) }
     func undo() { send(Actions.undo(snapshot, now: Self.clock())) }
     func seek(fraction: Double) { send(Decide.seek(snapshot, fraction: fraction)) }
-    func setVolume(fraction: Double, dragging: Bool) { send(Decide.volume(fraction: fraction, dragging: dragging)) }
 
     /// Asks the popover to close.
     @ObservationIgnored var close: (() -> Void)?

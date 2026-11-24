@@ -63,6 +63,10 @@ struct EqualityTests {
         expectEachFieldCounts(PlayerCard.Volume(level: 0.5, help: "h"), [
             ("level", { $0.level += 0.01 }), ("help", { $0.help += "x" }),
         ] as [Change<PlayerCard.Volume>])
+        expectEachFieldCounts(VolumeSlider(), [
+            ("editing", { $0.editing.toggle() }), ("place", { flip(&$0.place, 0.5) }),
+            ("placeSetInHold", { $0.placeSetInHold.toggle() }), ("reported", { flip(&$0.reported, 0.5) }),
+        ] as [Change<VolumeSlider>])
     }
 
     @Test func playerCard() throws {
