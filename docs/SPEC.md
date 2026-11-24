@@ -310,3 +310,47 @@ global shortcut, a Nix package, measurements on any other Mac.
   switch is absent until the model is ready.
 - A failure to delete shows `could not remove the music model: <error>` in
   the strip; whatever was deleted stays deleted.
+
+## The round and Previous
+
+This section wins over "The queue" where they differ.
+
+- **The round is one list** in a fixed order: the tunes already played this
+  round (`played`, oldest first), the playing tune, then `queue`. A tune's
+  number is its place in that list and does not change as the round goes
+  on. Played tunes are not removed when they end.
+- **What moves.** A newly made tune is inserted right after the playing
+  tune (it plays next), so the tunes after it move down by one. A scrapped
+  tune leaves the list; undo puts it back where it was. Turning shuffle on
+  or off redraws only `queue`.
+- **Previous.** More than 3 seconds into a tune it restarts it. Within the
+  first 3 seconds it goes back one: the last of `played` becomes the
+  playing tune and the tune that was playing becomes the first of `queue`,
+  ahead of any new tune. With nothing in `played` it restarts. It never
+  reaches a scrapped tune or an earlier round. The Previous media key and
+  the Now Playing control do the same.
+- **Play it again.** Playing a tune of `played` jumps back to it: it becomes
+  the playing tune, and every tune after it in the list, the one that was
+  playing included, returns to `queue` in list order.
+- **The end.** With repeat all, when the last tune ends a new round is drawn
+  and `played` empties. With repeat off the round ends: nothing plays,
+  `ended` is true and `played` holds the whole round. Starting over draws a
+  new round. Repeat one is unchanged and adds nothing to `played`.
+- `played` is not saved; after a restart the round starts afresh.
+- **In the player.** The controls gain Previous, left of play (tooltip
+  `Previous`), dimmed when nothing plays. The list's heading is `THIS ROUND`
+  with `N of M` at the right (the playing tune's number, the round's
+  length). Three rows: the playing tune, highlighted, with a small level
+  meter in place of its number (still when paused), then the next two with
+  their numbers. With nothing playing: the next three, and the right-hand
+  text is `M tunes`. Under them `then N more this round · Show all` when
+  more follow. BEING MADE is unchanged.
+- **The queue card** becomes the round: label `THIS ROUND · M TUNES`, title
+  `This round`, at the right the modes (`shuffled` or `in the order made`,
+  then `repeat all`, `repeat one` or `repeat off`, joined by ` · `). Every
+  row in list order: played rows dimmed, the playing row highlighted, the
+  rest plain. Opening it, and each change of tune while it is open, brings
+  the playing row into view. Hover on a played row offers `Play it again`,
+  share and scrap; on a waiting row, play it now, share and scrap. Last
+  line: `after these, a new round is drawn`, or with repeat off `The round
+  ends after <t>.`

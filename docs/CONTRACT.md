@@ -97,6 +97,7 @@ seconds as `Double`. Sizes are bytes as `Int64`. A field marked optional is
 | `pos` | `pos` | `Double` | Position in seconds, true at `posAt`. |
 | `posAt` | `pos_at` | `Double` | When `pos` was sampled. |
 | `queue` | `queue` | `[QueuedTune]` | What plays next, in order [R1]. Command indexes refer to this array. |
+| `played` | `played` | `[QueuedTune]` | The tunes already played this round, oldest first; the playing tune is not in it (spec, "The round and Previous"). Decodes as empty when absent. |
 | `shuffle` | `shuffle` | `Bool` | |
 | `repeat` | `repeat` | `RepeatMode`: `all`, `one`, `off` | |
 | `ended` | `ended` | `Bool` | Repeat is off and every kept tune was played this round [R9]. |
@@ -182,6 +183,8 @@ public enum Command: Sendable, Equatable {
     case pause                         // nothing unless playing
     case stop                          // halts; `stopped` becomes true [R20]
     case next                          // only when canNext [R16]
+    case previous                      // spec, "The round and Previous"; nothing when no tune plays
+    case playPlayed(index: Int, name: String)   // index into `played`; ignored unless that tune is there
     case seek(to: Double)              // seconds, clamped to 0…length
     case setComposer(on: Bool)         // [R14]
     case setShuffle(on: Bool)          // [R8]
