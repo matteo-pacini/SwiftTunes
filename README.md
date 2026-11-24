@@ -5,8 +5,11 @@ by ACE-Step 1.5 Turbo through an embedded `ace-server` running on the GPU.
 Nothing is sent anywhere once the model is downloaded.
 
 <p align="center">
-  <img src="docs/screenshots/playing.png" width="380" alt="The SwiftTunes popover playing a Jazz tune: its name, tempo and key, the tune's shape as columns of dots filled up to the position, six round controls, the next three tunes numbered in play order, and the composer bar saying it is resting with the queue full.">
+  <img src="docs/screenshots/playing.png" width="380" alt="The SwiftTunes popover playing a Jazz tune: its name, tempo and key, the tune's shape as columns of dots filled up to the position, six round controls, the next three tunes numbered in play order with nine more this round, the tune being made, and the composer bar.">
 </p>
+
+SwiftTunes is inspired by [Flowtunes](https://github.com/omacom/flowtunes)
+from Omarchy.
 
 ## What it does
 
@@ -106,8 +109,10 @@ for now.
 SwiftTunes is licensed under the GNU General Public License, version 3 or
 later; see `LICENSE`.
 
-It bundles and downloads work by others under their own licences:
+Credits, and the work by others it bundles and downloads under their own
+licences:
 
+- Inspired by [Flowtunes](https://github.com/omacom/flowtunes) from Omarchy.
 - `ace-server` is built from [acestep.cpp](https://github.com/ServeurpersoCom/acestep.cpp)
   (MIT).
 - The model is [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) (MIT),
