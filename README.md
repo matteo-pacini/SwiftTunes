@@ -39,9 +39,6 @@ from Omarchy.
   the space back; your tunes stay and keep playing.
 - Every tune gets a picture drawn from its name, tempo and key.
 
-Not yet proven: media keys, Now Playing and Start at Login are built but
-untested.
-
 ## A look
 
 <table>
@@ -63,8 +60,7 @@ untested.
 - About 8 GiB of memory free while a tune is being composed.
 - 7.57 GiB of disk for the model, downloaded from Hugging Face on first use.
 
-To build: Xcode 27 (Swift 6.4), and `cmake`. Swift 6.3 from Xcode 26.6
-crashes while compiling the app's views, so Xcode 26 will not do. `cmake` is
+To build: Xcode 27 (Swift 6.4) and `cmake`. `cmake` is
 the one tool beyond Xcode, needed only to build `ace-server`; the build uses
 the Makefile generator, so nothing else. The scripts take `cmake` from
 `PATH` and stop with a sentence saying so when it is missing. They install
@@ -91,10 +87,6 @@ without `nix develop`. `swift build` and `swift test` need no `cmake`.
 revision pinned in `Config/pins.json` and builds `ace-server` with Metal,
 assembles `build/SwiftTunes.app`, signs it ad hoc, and checks it with
 `plutil -lint` and `codesign --verify --deep --strict`.
-
-The workflow in `.github/workflows/ci.yml` runs `swift build` and
-`swift test` with Xcode 27 on a macOS runner. It exists but is switched off
-for now.
 
 ## Where files live
 
