@@ -57,12 +57,21 @@ Read, in this order, before any work:
 
 ## Swift
 
-Load the matching skill before writing or reviewing Swift, and follow it
-where this file is silent:
+Load the matching skill before writing or reviewing Swift. Where a skill and
+this file differ, this file wins (the skills prefer `MenuBarExtra`,
+`ScrollView` and `List`, for instance; the rules here forbid them):
 
 - `swift-concurrency` for anything async, actor-isolated or `Sendable`.
 - `swift-testing-expert` for every test.
 - `swiftui-expert-skill` for every SwiftUI view.
+
+The three are in the repository, in `.claude/skills/`, so every checkout
+and worktree has them. They are third-party (MIT; sources and notices in
+`.claude/skills/NOTICE.md`), installed with the `skills` tool and pinned by
+commit in `skills-lock.json`. To restore them: `npx skills
+experimental_install`. To move to newer versions: `npx skills update -p`,
+then read the diff before committing it. Their helper scripts are theirs
+and are no part of the build or the tests.
 
 Concurrency is Swift 6 language mode with complete checking, set per target
 in `Package.swift` (swift-tools-version 6.2):
