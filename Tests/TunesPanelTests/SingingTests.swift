@@ -170,7 +170,7 @@ struct WordsTests {
         #expect(Panel.marks.map(\.mark) == ["[Verse]", "[Chorus]", "[Bridge]", "[Instrumental Break]"])
         #expect(c.counter == "0 sung lines · 0 of 2,000 characters")
         #expect(c.wordsError == "" && c.nameError == "" && !c.compose.enabled)
-        #expect(c.note == "It is made once, with the genre's sound, and plays next when ready. The model may not sing every word as written.")
+        #expect(c.note == "It is made once, with the genre's sound, and joins the end of the round when ready. The model may not sing every word as written.")
         #expect(Panel().openingWords(try Fixture.load("05-queue-full"), name: "x").mode == .player)
     }
 

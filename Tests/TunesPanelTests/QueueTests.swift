@@ -90,16 +90,47 @@ struct RoundTests {
         #expect(seen.map(\.head) == ["5 of 12", "6 of 12", "7 of 12", "6 of 12"])
     }
 
-    @Test("a new tune goes in after the playing one: only the tunes after it move down")
-    func insertion() throws {
+    @Test("a new tune joins the end, tagged new: every earlier row keeps its number, only the length grows")
+    func joining() throws {
         var s = try twelve()
-        let before = Decide.round(played: s.played, tune: s.tune, queue: s.queue)
-        s.queue.insert(QueuedTune(name: "Paper Kite", file: "20261124-090000-92bpm-E-minor", bpm: 92, key: "E minor", length: 171, kept: false, new: true, pinned: false, pos: nil), at: 0)
-        let after = Decide.round(played: s.played, tune: s.tune, queue: s.queue)
-        #expect(after.count == 13 && after[5].name == "Paper Kite" && after[5].number == 6)
-        #expect(Array(after.prefix(5)) == Array(before.prefix(5)))
-        #expect(after.dropFirst(6).map(\.number) == before.dropFirst(5).map { $0.number + 1 })
-        #expect(after.dropFirst(6).map(\.id) == before.dropFirst(5).map(\.id))
+        let before = try player(s).next
+        s.queue.append(QueuedTune(name: "Paper Kite", file: "20261124-090000-92bpm-E-minor", bpm: 92, key: "E minor", length: 171, kept: false, new: true, pinned: false, pos: nil))
+        s.ready = 1
+        let after = try player(s).next
+        let last = try #require(after.rows.last)
+        #expect(after.rows.count == 13 && last.name == "Paper Kite" && last.number == "13" && last.tag == "new" && last.state == .waiting)
+        #expect(Array(after.rows.prefix(12)) == before.rows)
+        #expect(after.head == "5 of 13" && after.playing == before.playing)
+    }
+
+    @Test("a genre that starts with no tunes: new tunes are numbered 1, 2, 3 in the order made, each keeping its number")
+    func fromNothing() throws {
+        var s = try Fixture.load("06-first-tune")
+        let made = ["Paper Kite", "Neon Harbour", "Slow Signal", "Brass Lantern"].enumerated().map { i, name in
+            QueuedTune(name: name, file: "20261124-09\(i)000-92bpm-E-minor", bpm: 92, key: "E minor", length: 171, kept: false, new: true, pinned: false, pos: nil)
+        }
+        var numbers: [String: String] = [:]
+        func check() throws {
+            for row in try player(s).next.rows {
+                if let was = numbers[row.id] { #expect(row.number == was, "\(row.name)") }
+                numbers[row.id] = row.number
+            }
+        }
+        #expect(try player(s).next.rows.isEmpty)
+        s.tune = playing(made[0]); s.player = .playing
+        try check()
+        s.queue.append(made[1])
+        try check()
+        s.queue.append(made[2])
+        try check()
+        s.played.append(queued(s.tune!)); s.tune = playing(s.queue.removeFirst())
+        try check()
+        s.queue.append(made[3])
+        try check()
+        let rows = try player(s).next.rows
+        #expect(rows.map(\.name) == made.map(\.name))
+        #expect(rows.map(\.number) == ["1", "2", "3", "4"])
+        #expect(rows.map(\.state) == [.played, .playing, .waiting, .waiting])
     }
 
     @Test("nothing playing: every tune still listed, M tunes at the right; an empty round reads nothing")
@@ -118,11 +149,11 @@ struct RoundTests {
         #expect(try player(one).next.head == "nothing" && player(one).next.rows.isEmpty)
     }
 
-    @Test("BEING MADE: the job and the places not started, plays next when ready; absent with the composer off")
+    @Test("BEING MADE: the job and the places not started, joins the round when ready; absent with the composer off")
     func making() throws {
         let first = try player(Fixture.load("06-first-tune"))
         let m = try #require(first.making)
-        #expect(m.head == "plays next when ready")
+        #expect(m.head == "joins the round when ready")
         #expect(m.rows.map(\.kind) == [.job, .placeholder])
         #expect(m.rows[0].stage == .rendering && m.rows[0].artwork == nil)
         #expect(m.rows.map(\.number) == ["", ""])
@@ -285,6 +316,13 @@ struct RoundFixtureTests {
         #expect(p.next.head == "5 of 12" && p.next.rows.count == 12 && p.next.playing == 4)
         #expect(p.next.rows[4].name == "Lazy Avenue")
         #expect(p.next.rows.prefix(4).allSatisfy { $0.state == .played && $0.dim })
+    }
+
+    @Test("twelve waiting: the kept tunes in the round's order, then the two new tunes last, tagged new")
+    func newLast() throws {
+        let rows = try player(Fixture.load("39-twelve-queue")).next.rows.filter { $0.state == .waiting }
+        #expect(rows.count == 12)
+        #expect(rows.map(\.tag) == Array(repeating: "", count: 10) + ["new", "new"])
     }
 
     @Test("a round of fifty: 11 of 50, every row listed, the list brought to the tenth")

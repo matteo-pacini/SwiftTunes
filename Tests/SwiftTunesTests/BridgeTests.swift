@@ -341,10 +341,10 @@ struct DemoRoundTests {
         let before = numbers(engine.snapshot)
         #expect(engine.snapshot.tune?.name == "Lazy Avenue")
         engine.send(.next)
-        #expect(engine.snapshot.tune?.name == "Brass Lantern" && engine.snapshot.played.count == 5)
+        #expect(engine.snapshot.tune?.name == "Smoky Lounge" && engine.snapshot.played.count == 5)
         #expect(numbers(engine.snapshot) == before)
         engine.send(.previous)
-        #expect(engine.snapshot.tune?.name == "Lazy Avenue" && engine.snapshot.queue.first?.name == "Brass Lantern")
+        #expect(engine.snapshot.tune?.name == "Lazy Avenue" && engine.snapshot.queue.first?.name == "Smoky Lounge")
         #expect(numbers(engine.snapshot) == before)
     }
 
@@ -362,7 +362,7 @@ struct DemoRoundTests {
         engine.send(.playPlayed(index: 1, name: "Blue Avenue"))
         let s = engine.snapshot
         #expect(s.tune?.name == "Blue Avenue" && s.played.map(\.name) == ["Late Lounge"])
-        #expect(s.queue.prefix(4).map(\.name) == ["Smoky Martini", "Easy Lounge", "Lazy Avenue", "Brass Lantern"])
+        #expect(s.queue.prefix(4).map(\.name) == ["Smoky Martini", "Easy Lounge", "Lazy Avenue", "Smoky Lounge"])
         #expect(numbers(s) == before)
     }
 

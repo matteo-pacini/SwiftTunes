@@ -13,7 +13,7 @@ public struct RoundEntry: Sendable, Equatable {
     /// Its index in `played` or `queue`; 0 for the playing tune.
     public var index: Int
     /// Stable while the same tune keeps its place in the list, even when a
-    /// new tune is inserted before it: the file and how many times the same
+    /// tune is put back before it: the file and how many times the same
     /// file came earlier in the list.
     public var id: String
     public var name: String

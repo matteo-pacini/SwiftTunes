@@ -378,7 +378,7 @@ struct ModeTests {
         s.repeat = c.mode
         s.composing = c.composing
         s.ended = c.ended
-        s.queue = c.ended ? [] : (c.fresh ? [fresh] : []) + kept
+        s.queue = c.ended ? [] : kept + (c.fresh ? [fresh] : [])
         s.ready = c.fresh ? 1 : 0
         s.keptPlaying = !c.fresh && !c.ended
         s.tune = c.ended ? nil : base.tune
@@ -392,8 +392,8 @@ struct ModeTests {
         let tunes = p.next.rows.filter { $0.kind == .tune }
         // The playing tune is never dimmed; under repeat one the rest are.
         #expect(tunes.map(\.dim) == tunes.map { $0.state == .waiting && c.mode == .one })
-        // The playing tune, then everything waiting.
-        #expect(tunes.dropFirst().map(\.tag) == s.queue.map { $0.new ? "new" : "" })
+        // The playing tune, then the kept tunes waiting, then the new one last.
+        #expect(tunes.dropFirst().map(\.tag) == (c.ended ? [] : kept.map { _ in "" } + (c.fresh ? ["new"] : [])))
         // Numbered from 1 in play order, new or kept alike.
         #expect(tunes.map(\.number) == (1...max(1, tunes.count)).prefix(tunes.count).map(String.init))
         #expect(lines(p).filter { $0.contains("until the repeat ends") } == (c.mode == .one && c.fresh ? ["1 new tune waits until the repeat ends."] : []))
@@ -516,7 +516,7 @@ struct ShareTests {
         let expected: TuneTarget
         switch where_ {
         case 0:
-            s.queue.insert(QueuedTune(name: "New One", file: "f", bpm: nil, key: nil, length: nil, kept: false, new: true, pinned: false, pos: nil), at: 0)
+            s.queue.insert(QueuedTune(name: "Put Back", file: "f", bpm: nil, key: nil, length: nil, kept: true, new: false, pinned: false, pos: nil), at: 0)
             expected = TuneTarget(name: "Brass Lantern", index: 1)
         case 1:
             let q = s.queue[0]
