@@ -57,6 +57,13 @@ extension Decide {
         return round.isEmpty ? "nothing" : Format.plural(round.count, "tune", "tunes")
     }
 
+    /// Whether a change of the player list from `old` to `new` row ids is
+    /// animated: only when rows join or leave, so the rows around them slide
+    /// to their places. A change that only reorders the rows is drawn at once.
+    public static func animatesRows(from old: [String], to new: [String]) -> Bool {
+        Set(old) != Set(new)
+    }
+
     /// Rows the player's list shows at once.
     public static let listRows = 4
 

@@ -349,3 +349,31 @@ struct DimRowTests {
         #expect(rows.allSatisfy { $0.contentOpacity(hovered: true) == 1 })
     }
 }
+
+@Suite("Rows that join and leave")
+struct RowMotionTests {
+    @Test("a change in the set of rows animates the neighbours' slide; a reorder or no change does not", arguments: [
+        (["a", "b", "c"], ["a", "b", "c", "d"], true),
+        (["a", "b", "c"], ["a", "c"], true),
+        (["a", "b", "c"], ["b", "c", "d"], true),
+        (["a", "b", "c"], ["c", "a", "b"], false),
+        (["a", "b", "c"], ["a", "b", "c"], false),
+    ])
+    func animates(_ old: [String], _ new: [String], _ expected: Bool) {
+        #expect(Decide.animatesRows(from: old, to: new) == expected)
+    }
+
+    @Test("a new tune in a genre at its keep limit: one row leaves, one joins")
+    func fullGenre() throws {
+        var s = try roundOf(50, playing: 10)
+        let before = try player(s).next.rows.map(\.id)
+        s.played.removeFirst()
+        s.queue.append(QueuedTune(name: "Paper Kite", file: "20261124-090000-92bpm-E-minor", bpm: 92, key: "E minor", length: 171, kept: false, new: true, pinned: false, pos: nil))
+        s.ready = 1
+        let after = try player(s).next.rows.map(\.id)
+        let diff = after.difference(from: before)
+        #expect(diff.removals.map { if case .remove(_, let id, _) = $0 { id } else { "" } } == [before[0]])
+        #expect(diff.insertions.map { if case .insert(_, let id, _) = $0 { id } else { "" } } == [after[49]])
+        #expect(Decide.animatesRows(from: before, to: after))
+    }
+}

@@ -195,6 +195,9 @@ struct UpNext: View {
     let palette: Palette
     let model: PanelModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The row ids last drawn: during the update that changes them, this
+    /// still holds the old list, so the animation can be chosen from both.
+    @State private var drawnIDs: [String] = []
 
     var body: some View {
         VStack(spacing: 6) {
@@ -203,6 +206,7 @@ struct UpNext: View {
                 Spacer()
                 Text(verbatim: next.head).font(.system(size: 11.5)).foregroundStyle(.secondary)
             }
+            let ids = next.rows.map(\.id)
             if !next.rows.isEmpty {
                 // The rows' glass has its own container inside the scroll
                 // view: a container outside it draws the glass in a layer the
@@ -213,15 +217,16 @@ struct UpNext: View {
                             ForEach(next.rows, id: \.id) { row in
                                 UpNextRow(row: row, palette: palette, model: model)
                                     .scrollMark(row.id)
-                                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                                    .transition(.identity)
                             }
                         }
-                        .animation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.2), value: next.rows.map(\.id))
+                        .animation(reduceMotion || !Decide.animatesRows(from: drawnIDs, to: ids) ? nil : .spring(duration: 0.45, bounce: 0.2), value: ids)
                     }
                 }
                 .frame(height: Self.height(rows: next.rows.count))
             }
         }
+        .onChange(of: next.rows.map(\.id), initial: true) { _, new in drawnIDs = new }
     }
 
     /// Rows are 48 pt and 6 apart; the list shows four and scrolls past
