@@ -117,6 +117,8 @@ seconds as `Double`. Sizes are bytes as `Int64`. A field marked optional is
 second), `error` (`String?`).
 
 `Need`: `downloadBytes` / `download_bytes` (`Int64`, still to fetch [R49]),
+`onDiskBytes` / `on_disk_bytes` (`Int64`: what the model files and parts take
+now, the figure removal would free),
 `diskFreeBytes` / `disk_free_bytes` (`Int64`), `ramBytes` / `ram_bytes`
 (`Int64`, 8 GiB: the figure the wording quotes).
 
@@ -192,6 +194,7 @@ public enum Command: Sendable, Equatable {
     case retry                         // only in failed or no_device [R42]
     case download
     case cancelDownload
+    case removeModel                   // spec, "Removing the music model"; ignored when nothing is on disk
     case refresh                       // re-reads the genres file and memory, then notifies
 }
 

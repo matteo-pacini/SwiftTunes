@@ -291,3 +291,22 @@ Targets:
 
 A release workflow, Developer ID signing and notarization, an updater, a
 global shortcut, a Nix package, measurements on any other Mac.
+
+## Removing the music model
+
+- The status item's menu has `Remove Music Model…`, enabled when any model
+  file or part file is on disk. It asks first, in an alert: title `Remove
+  the music model?`, text `It frees X.XX GiB. Composing stops until it is
+  downloaded again; your tunes stay.`, buttons `Remove` and `Cancel`.
+- Removing turns the composer off, cancels any job and any download, stops
+  the server, and deletes the model files and their part files from the
+  app's models folder: only the names the pins list, nothing else there.
+  `setup` becomes `missing`. Playback is not interrupted.
+- Without the model the player stays usable: kept tunes play as before. The
+  setup cards show only when no genre has a kept tune. Otherwise the
+  composer bar stands in for them: `The music model is not on this Mac.`
+  with a `Download` button and the size; while downloading, the progress
+  line, speed and `Cancel`; after a failure, the error and `Resume`. The
+  switch is absent until the model is ready.
+- A failure to delete shows `could not remove the music model: <error>` in
+  the strip; whatever was deleted stays deleted.
