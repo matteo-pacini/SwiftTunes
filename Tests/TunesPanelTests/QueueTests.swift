@@ -301,3 +301,13 @@ struct RoundFixtureTests {
         #expect(p.next.rows.allSatisfy { $0.state == .played })
     }
 }
+
+@Suite("Dim rows")
+struct DimRowTests {
+    @Test("a played row's content is drawn at 0.45, full while hovered; others always full")
+    func opacity() throws {
+        let rows = try player(Fixture.load("45-round-played")).next.rows
+        #expect(rows.map { $0.contentOpacity(hovered: false) } == Array(repeating: 0.45, count: 4) + Array(repeating: 1, count: 8))
+        #expect(rows.allSatisfy { $0.contentOpacity(hovered: true) == 1 })
+    }
+}

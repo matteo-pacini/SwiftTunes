@@ -268,6 +268,10 @@ struct UpNextRow: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+        // The content fades, not the glass view as a whole: inside a glass
+        // container an opacity on the glass view does not reach what it
+        // draws.
+        .opacity(row.contentOpacity(hovered: hovered))
         .background {
             if row.kind == .placeholder {
                 RoundedRectangle(cornerRadius: 11).strokeBorder(.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
@@ -279,13 +283,13 @@ struct UpNextRow: View {
                 RoundedRectangle(cornerRadius: 11).strokeBorder(.white.opacity(0.55), lineWidth: 1)
             }
         }
-        .opacity(row.dim ? 0.5 : 1)
         .onHover { hovered = $0 }
         .accessibilityElement(children: .contain)
     }
 
     private var glass: Glass {
         if row.kind == .placeholder { return .identity }
+        if row.dim { return .clear }
         return row.state == .playing ? .regular.tint(.white.opacity(0.22)) : .regular
     }
 

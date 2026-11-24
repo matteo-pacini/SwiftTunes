@@ -75,3 +75,12 @@ extension Decide {
         return max(0, min(playing - 1, count - listRows))
     }
 }
+
+extension PlayerCard.Row {
+    /// How opaque the row's content is drawn: a dim row's text, picture and
+    /// number at 0.45, back to full while the pointer is over it, so its
+    /// actions read clearly.
+    public func contentOpacity(hovered: Bool) -> Double {
+        dim && !hovered ? 0.45 : 1
+    }
+}
