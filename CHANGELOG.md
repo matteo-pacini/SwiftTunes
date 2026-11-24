@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.1
+
 - A new tune now joins the end of the round and plays when the round
   reaches it, like a playlist, instead of playing next. Nothing in the list
   moves or changes its number when one arrives. A tune sung with your own
