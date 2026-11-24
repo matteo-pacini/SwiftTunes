@@ -237,7 +237,7 @@ layout and `docs/CONTRACT.md` each have a single owner.
 | lead | `docs/SPEC.md`, `docs/CONTRACT.md`, `AGENTS.md`, merges |
 | repo | `Package.swift`, `Sources/TunesContract/` (a transcription of the contract; changed only on the lead's instruction), `Scripts/`, `Config/`, `Resources/`, `Support/` (Info.plist, entitlements), `README.md`, `LICENSE`, `.gitignore`, `.github/` |
 | engine | `Sources/TunesContract/GenreRules.swift` (the one file of that target with logic; the repo role leaves a stub), `Sources/TunesRules/`, `Sources/TunesEngine/`, `Sources/tunes-lifeline/`, `Tests/TunesRulesTests/`, `Tests/TunesEngineTests/`, `Tests/TunesFakes/` |
-| app | `Sources/TunesPanel/`, `Sources/SwiftTunes/`, `Tests/TunesPanelTests/` |
+| app | `Sources/TunesPanel/`, `Sources/SwiftTunes/`, `Tests/TunesPanelTests/`, `Tests/SwiftTunesTests/` |
 
 Targets:
 
