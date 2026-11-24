@@ -19,8 +19,8 @@ public enum Command: Sendable, Equatable {
     case setShuffle(on: Bool)
     case setRepeat(RepeatMode)
     /// The player's level, clamped to 0…1; a level that is not finite is
-    /// ignored. `dragging` is true while the pointer holds the slider; the
-    /// engine saves the level only for `dragging: false`.
+    /// ignored. `dragging` is true while the pointer holds the slider (spec,
+    /// "Volume").
     case setVolume(to: Double, dragging: Bool)
     case scrapPlaying(name: String)
     case scrapQueued(index: Int, name: String)
