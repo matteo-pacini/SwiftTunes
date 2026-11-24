@@ -338,15 +338,18 @@ struct ComposerBar: View {
                 Caps(text: "COMPOSER")
                 Spacer()
                 if let pill = composer.pill { Pill(text: pill) }
-                Toggle(isOn: Binding(get: { composer.on }, set: { _ in model.toggleComposer() })) {
-                    Text(verbatim: composer.toggle.help)
+                if composer.showsSwitch {
+                    Toggle(isOn: Binding(get: { composer.on }, set: { _ in model.toggleComposer() })) {
+                        Text(verbatim: composer.toggle.help)
+                    }
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .tint(composer.labelTone == .orange ? Tone.orange.color : composer.labelTone == .red ? Tone.red.color : .green)
+                    .helped(composer.toggle)
                 }
-                .toggleStyle(.switch)
-                .labelsHidden()
-                .controlSize(.small)
-                .tint(composer.labelTone == .orange ? Tone.orange.color : composer.labelTone == .red ? Tone.red.color : .green)
-                .helped(composer.toggle)
             }
+            if let stand = composer.standIn { StandInLine(stand: stand, model: model) }
             ForEach(Array(composer.lines.enumerated()), id: \.offset) { i, line in
                 HStack(alignment: .firstTextBaseline) {
                     Text("\(Text(verbatim: line.pre))\(Text(verbatim: line.em).bold())\(Text(verbatim: line.post))")
@@ -436,5 +439,31 @@ struct LyricsBox: View {
         }
         .padding(12)
         .glassEffect(.regular, in: .rect(cornerRadius: 13))
+    }
+}
+
+/// The composer bar without the model: one line, its detail and its button.
+struct StandInLine: View {
+    let stand: PlayerCard.StandIn
+    let model: PanelModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(verbatim: stand.text).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
+            if let progress = stand.progress {
+                ProgressView(value: progress).progressViewStyle(.linear)
+            }
+            HStack {
+                Text(verbatim: stand.detail)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+                Spacer()
+                Button { model.send(stand.command) } label: { Text(verbatim: stand.button.text) }
+                    .buttonStyle(stand.command == .cancelDownload ? AnyPrimitiveButtonStyle(.glass) : AnyPrimitiveButtonStyle(.glassProminent))
+                    .controlSize(.small)
+                    .helped(stand.button)
+            }
+        }
     }
 }

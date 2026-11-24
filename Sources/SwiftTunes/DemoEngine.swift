@@ -180,6 +180,16 @@ final class DemoEngine: EngineAPI {
         case .seek(let to):
             s.pos = to
             s.posAt = now
+        case .removeModel:
+            // The demo's model is a figure in a fixture; no file is touched.
+            guard s.need.onDiskBytes > 0 else { return }
+            s.composing = false
+            s.job = nil
+            s.download = nil
+            s.model.state = .unloaded
+            s.need.downloadBytes += s.need.onDiskBytes
+            s.need.onDiskBytes = 0
+            s.setup = .missing
         default:
             return
         }

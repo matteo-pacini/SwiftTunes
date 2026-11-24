@@ -34,6 +34,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         host.sizingOptions = .preferredContentSize
         popover.contentViewController = host
         menu.delegate = self
+        // Items say for themselves whether they act: Remove Music Model… is
+        // off with nothing on disk.
+        menu.autoenablesItems = false
         model.close = { [weak self] in self?.popover.performClose(nil) }
     }
 
@@ -102,8 +105,30 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             menu.addItem(line)
         }
         menu.addItem(.separator())
+        let removal = Decide.modelRemoval(model.snapshot)
+        let remove = NSMenuItem(title: removal.menuTitle, action: #selector(removeModel), keyEquivalent: "")
+        remove.target = self
+        remove.isEnabled = removal.enabled
+        menu.addItem(remove)
+        menu.addItem(.separator())
         let quit = NSMenuItem(title: "Quit SwiftTunes", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
+    }
+
+    /// Asks first; Cancel is the default, Remove the destructive choice.
+    @objc private func removeModel() {
+        let removal = Decide.modelRemoval(model.snapshot)
+        guard removal.enabled else { return }
+        let alert = NSAlert()
+        alert.messageText = removal.alertTitle
+        alert.informativeText = removal.alertText
+        alert.addButton(withTitle: removal.cancel)
+        let remove = alert.addButton(withTitle: removal.remove)
+        remove.hasDestructiveAction = true
+        NSApp.activate()
+        if alert.runModal() == .alertSecondButtonReturn {
+            model.send(removal.command)
+        }
     }
 
     @objc private func toggleLogin() {
