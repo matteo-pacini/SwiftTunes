@@ -14,6 +14,10 @@ for notice in LICENSE Resources/ThirdPartyNotices.txt; do
         exit 1
     fi
 done
+if [ ! -s Resources/AppIcon.icns ]; then
+    echo "make-app: Resources/AppIcon.icns is missing or empty; run Scripts/make-icon.sh and commit it." >&2
+    exit 1
+fi
 
 swift build -c release --product SwiftTunes
 swift build -c release --product tunes-lifeline
@@ -29,6 +33,7 @@ cp "$bin/SwiftTunes" "$app/Contents/MacOS/SwiftTunes"
 cp "$bin/tunes-lifeline" "$app/Contents/Helpers/tunes-lifeline"
 cp "$ace_server" "$app/Contents/Helpers/ace-server"
 cp Resources/genres.json "$app/Contents/Resources/genres.json"
+cp Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 cp Config/pins.json "$app/Contents/Resources/pins.json"
 cp LICENSE "$app/Contents/Resources/LICENSE"
 cp Resources/ThirdPartyNotices.txt "$app/Contents/Resources/ThirdPartyNotices.txt"

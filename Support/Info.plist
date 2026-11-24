@@ -6,6 +6,8 @@
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>SwiftTunes</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>me.matteopacini.SwiftTunes</string>
 	<key>CFBundleInfoDictionaryVersion</key>
