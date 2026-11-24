@@ -357,3 +357,32 @@ This section wins over "The queue" where they differ.
   share and scrap; on a waiting row, play it now, share and scrap. Last
   line: `after these, a new round is drawn`, or with repeat off `The round
   ends after <t>.`
+
+## The list is a playlist
+
+This section wins over "The round and Previous" and "The queue" where they
+differ. Everything about order, Previous, Play it again and what moves
+stays as written there.
+
+- **Nothing is hidden.** The player shows the whole round as one scrolling
+  list under `THIS ROUND`: every played tune (dimmed), the playing tune
+  (highlighted, with the level meter in place of its number), and every
+  waiting tune, each at its fixed number. There is no three-row window, no
+  `then N more` line and no separate round card; `Show all` is gone.
+- **The list area** is four rows tall and scrolls (the AppKit scroll box),
+  with the soft fade at an edge that has more beyond it. A round of four or
+  fewer shows whole, with no scrolling and no empty space kept for missing
+  rows.
+- **It follows the music, gently.** When the playing tune changes, the list
+  scrolls just enough to bring the playing row into view, placing it second
+  from the top when the round is long enough, so the one before it and the
+  two after it show. It does not scroll while the pointer is over the list
+  or within three seconds of the user scrolling it. Opening the popover
+  places it the same way.
+- **Rows never jump on their own.** A tune ending changes only which row is
+  highlighted. The only insertions and removals are the three causes
+  already listed (a new tune after the playing one, a scrap or its undo, a
+  redraw of what is waiting when shuffle changes), and each is animated in
+  place.
+- The right-hand text of the heading stays `N of M`, or `M tunes` with
+  nothing playing, or `nothing`. BEING MADE sits under the list, unchanged.
