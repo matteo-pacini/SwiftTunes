@@ -51,7 +51,7 @@ struct RealServerTests {
 
         var log: [String] = []
         var peak: Int64 = 0
-        var waiters: [(check: (Snapshot) -> Bool, cont: CheckedContinuation<Void, Never>)] = []
+        let waiter = Waiter()
         let t0 = Date()
         var lastState: ModelState?
         let token = engine.observe { s in
@@ -61,13 +61,13 @@ struct RealServerTests {
                 log.append(String(format: "%7.2f s  %@%@", Date().timeIntervalSince(t0), s.model.state.rawValue,
                                   s.model.detail.map { " (\($0))" } ?? ""))
             }
-            let ready = waiters.filter { $0.check(s) }
-            waiters.removeAll { $0.check(s) }
-            ready.forEach { $0.cont.resume() }
+            waiter.poke()
         }
+        // A first start of a new server build compiles its shaders for about
+        // a minute; a tune takes about one more. Ten minutes is a hang.
         func until(_ check: @escaping (Snapshot) -> Bool) async {
-            if check(engine.snapshot) { return }
-            await withCheckedContinuation { waiters.append((check, $0)) }
+            let ok = await waiter.until(.seconds(600)) { check(engine.snapshot) }
+            #expect(ok, "no tune within ten minutes; states: \(log)")
         }
 
         engine.send(.selectGenre(id: "lofi"))
@@ -122,7 +122,10 @@ struct RealPlansTests {
     /// The answer to a job once it is done, polling as the engine does.
     static func plan(_ client: ServerClient, _ body: JSONValue) async throws -> JSONValue {
         let id = try ServerClient.jobID(try await client.json("POST", "/lm", body: body))
+        // A plan takes about 40 s; four minutes is a hang.
+        let deadline = Date().addingTimeInterval(240)
         while true {
+            guard Date() < deadline else { throw ServerClient.Failure(description: "the plan was not done within 4 minutes") }
             let status = try await client.json("GET", ServerClient.jobPath(id))["status"]
             if status != .string("running") {
                 #expect(status == .string("done"))
@@ -169,7 +172,13 @@ struct RealPlansTests {
             arguments: ["--models", paths.models.path, "--device", ServerLog.device, "--host", "127.0.0.1", "--port", String(port)],
             onLine: { _ in }, onExit: { _ in }
         )
-        await tap.until { tap.lines.contains { ServerLog.isListening($0) } }
+        let up = await tap.until(.seconds(180)) { tap.lines.contains { ServerLog.isListening($0) } || !tap.exits.isEmpty }
+        guard up, tap.exits.isEmpty else {
+            Issue.record("the server did not listen within 3 minutes; exits \(tap.exits); last lines: \(tap.lines.suffix(20))")
+            process.stop()
+            await engine.shutdown()
+            return
+        }
         let client = ServerClient(host: "127.0.0.1", port: port)
         var log: [String] = []
         var calls = 0

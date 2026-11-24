@@ -11,7 +11,7 @@ final class TapLauncher: ServerLauncher {
     let inner: any ServerLauncher
     var lines: [String] = []
     var exits: [Int32] = []
-    private var waiters: [(check: () -> Bool, cont: CheckedContinuation<Void, Never>)] = []
+    private let waiter = Waiter()
 
     init(_ inner: any ServerLauncher) { self.inner = inner }
 
@@ -33,16 +33,14 @@ final class TapLauncher: ServerLauncher {
         )
     }
 
-    /// Returns once `check` holds, checked after every line and exit.
-    func until(_ check: @escaping () -> Bool) async {
-        if check() { return }
-        await withCheckedContinuation { waiters.append((check, $0)) }
+    /// True once `check` holds, checked after every line and exit; false
+    /// when `limit` passes first.
+    func until(_ limit: Duration = .seconds(30), _ check: @escaping () -> Bool) async -> Bool {
+        await waiter.until(limit, check)
     }
 
     private func wake() {
-        let ready = waiters.filter { $0.check() }
-        waiters.removeAll { $0.check() }
-        ready.forEach { $0.cont.resume() }
+        waiter.poke()
     }
 }
 
@@ -90,7 +88,8 @@ final class TapLauncher: ServerLauncher {
         rig.make()
         await rig.send(.selectGenre(id: "jazz"))
         rig.engine.send(.setComposer(on: true))
-        await tap.until { tap.lines.contains { $0.hasPrefix("[Server] Listening") } }
+        let up = await tap.until { tap.lines.contains { $0.hasPrefix("[Server] Listening") } || !tap.exits.isEmpty }
+        try #require(up && tap.exits.isEmpty, "the stand-in never listened; its lines: \(tap.lines), exits: \(tap.exits)")
         #expect(tap.lines.first?.hasPrefix("tunes-lifeline: started ") == true)
         let text = try #require(Files.read(rig.paths.models.appending(path: "pids")))
         let fields = text.split(whereSeparator: \.isWhitespace).compactMap { Int32($0) }
@@ -112,7 +111,7 @@ final class TapLauncher: ServerLauncher {
     @Test func composerOffStopsTheRealServer() async throws {
         let (rig, tap, pids) = try await startedServer()
         rig.engine.send(.setComposer(on: false))
-        await tap.until { tap.exits.count == 1 }
+        #expect(await tap.until { tap.exits.count == 1 }, "the server did not exit; its lines: \(tap.lines)")
         #expect(pids.allSatisfy { !Self.alive($0) })
         #expect(rig.engine.server == nil && rig.snap.model.state == .unloaded)
         await rig.close()
@@ -126,7 +125,7 @@ final class TapLauncher: ServerLauncher {
         rig.make()
         await rig.send(.selectGenre(id: "jazz"))
         rig.engine.send(.setComposer(on: true))
-        await tap.until { !tap.exits.isEmpty }
+        #expect(await tap.until { !tap.exits.isEmpty }, "the server did not exit; its lines: \(tap.lines)")
         await rig.settle()
         #expect(tap.exits == [127])
         #expect(rig.snap.model.state == .failed)
@@ -166,7 +165,8 @@ final class TapLauncher: ServerLauncher {
         await rig.ace.set(cancelPolls: 100_000)
         await rig.send(.selectGenre(id: "jazz"))
         rig.engine.send(.setComposer(on: true))
-        await tap.until { tap.lines.contains { $0.hasPrefix("[Server] Listening") } }
+        let up = await tap.until { tap.lines.contains { $0.hasPrefix("[Server] Listening") } || !tap.exits.isEmpty }
+        try #require(up && tap.exits.isEmpty, "the stand-in never listened; its lines: \(tap.lines), exits: \(tap.exits)")
         #expect(await rig.run { rig.snap.model.state == .writing })
         let text = try #require(Files.read(rig.paths.models.appending(path: "pids")))
         let pids = text.split(whereSeparator: \.isWhitespace).compactMap { Int32($0) }
@@ -176,7 +176,7 @@ final class TapLauncher: ServerLauncher {
         let t = rig.clock.now
         rig.engine.send(.setComposer(on: false))
         #expect(await rig.run { rig.engine.timers["drain:\(port)"] == nil })
-        await tap.until { !tap.exits.isEmpty }
+        #expect(await tap.until { !tap.exits.isEmpty }, "the server did not exit; its lines: \(tap.lines)")
         #expect(abs(rig.clock.now - t - 1) < 1e-6, "the wait is one second")
         // Killed by the engine, not ended by the shim: the shim's way starts
         // with a SIGTERM, which the stand-in would have noted.

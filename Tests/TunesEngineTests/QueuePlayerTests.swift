@@ -25,16 +25,15 @@ import Testing
 
         let player = QueuePlayer(muted: true)
         var events: [PlayerEvent] = []
-        var waiters: [(check: () -> Bool, cont: CheckedContinuation<Void, Never>)] = []
+        let waiter = Waiter()
         player.onEvent = { e in
             events.append(e)
-            let ready = waiters.filter { $0.check() }
-            waiters.removeAll { $0.check() }
-            ready.forEach { $0.cont.resume() }
+            waiter.poke()
         }
-        func until(_ check: @escaping () -> Bool) async {
-            if check() { return }
-            await withCheckedContinuation { waiters.append((check, $0)) }
+        // The real player: each wait is bounded, and a miss says what came.
+        func until(_ check: @escaping () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
+            let ok = await waiter.until(.seconds(10), check)
+            #expect(ok, "the player did not report in time; events: \(events)", sourceLocation: sourceLocation)
         }
 
         player.play(a, token: 1)
@@ -69,16 +68,15 @@ import Testing
 
         let player = QueuePlayer(muted: true)
         var events: [PlayerEvent] = []
-        var waiters: [(check: () -> Bool, cont: CheckedContinuation<Void, Never>)] = []
+        let waiter = Waiter()
         player.onEvent = { e in
             events.append(e)
-            let ready = waiters.filter { $0.check() }
-            waiters.removeAll { $0.check() }
-            ready.forEach { $0.cont.resume() }
+            waiter.poke()
         }
-        func until(_ check: @escaping () -> Bool) async {
-            if check() { return }
-            await withCheckedContinuation { waiters.append((check, $0)) }
+        // The real player: each wait is bounded, and a miss says what came.
+        func until(_ check: @escaping () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
+            let ok = await waiter.until(.seconds(10), check)
+            #expect(ok, "the player did not report in time; events: \(events)", sourceLocation: sourceLocation)
         }
         player.play(a, token: 1)
         player.setNext(broken, token: 2)
@@ -96,16 +94,15 @@ import Testing
         try Self.silence(a, seconds: 0.6)
         let player = QueuePlayer(muted: true)
         var events: [PlayerEvent] = []
-        var waiters: [(check: () -> Bool, cont: CheckedContinuation<Void, Never>)] = []
+        let waiter = Waiter()
         player.onEvent = { e in
             events.append(e)
-            let ready = waiters.filter { $0.check() }
-            waiters.removeAll { $0.check() }
-            ready.forEach { $0.cont.resume() }
+            waiter.poke()
         }
-        func until(_ check: @escaping () -> Bool) async {
-            if check() { return }
-            await withCheckedContinuation { waiters.append((check, $0)) }
+        // The real player: each wait is bounded, and a miss says what came.
+        func until(_ check: @escaping () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
+            let ok = await waiter.until(.seconds(10), check)
+            #expect(ok, "the player did not report in time; events: \(events)", sourceLocation: sourceLocation)
         }
         player.play(a, token: 1)
         await until { events.contains(.started(token: 1)) }
