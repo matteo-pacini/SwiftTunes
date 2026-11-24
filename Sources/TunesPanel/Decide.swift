@@ -446,7 +446,7 @@ public enum Decide {
                 playNowCommand: nil, scrapCommand: nil, shareRequest: nil
             ))
         }
-        return PlayerCard.Making(head: "plays next when ready", rows: rows)
+        return PlayerCard.Making(head: "joins the round when ready", rows: rows)
     }
 
     static func wordsCard(_ s: Snapshot, _ w: Panel.Words) -> WordsCard {
@@ -467,7 +467,7 @@ public enum Decide {
             nameLabel: "Name",
             name: w.name,
             nameError: nameError ?? "",
-            note: "It is made once, with the genre's sound, and plays next when ready. The model may not sing every word as written.",
+            note: "It is made once, with the genre's sound, and joins the end of the round when ready. The model may not sing every word as written.",
             refused: w.refused ?? "",
             cancel: Control(enabled: !w.busy, text: "Cancel", help: "Cancel"),
             compose: Control(enabled: !w.busy && wordsError == nil && nameError == nil, text: "Compose", help: "Compose")

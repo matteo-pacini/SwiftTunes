@@ -165,6 +165,36 @@ struct ScrollBoxTests {
         scroll.reflectScrolledClipView(scroll.contentView)
         #expect((scroll.layer?.mask != nil) == (height > 340))
     }
+
+    /// Whether the top and the bottom edge are faded, by the mask's alpha.
+    private func faded(_ scroll: FadingScrollView) throws -> (top: Bool, bottom: Bool) {
+        let mask = try #require(scroll.layer?.mask as? CAGradientLayer)
+        let colors = try #require(mask.colors as? [CGColor])
+        return (colors[0].alpha == 0, colors[3].alpha == 0)
+    }
+
+    @Test("a round of 100: the document is 100 rows tall; top and bottom are reached and never passed, the last row whole")
+    func hundred() throws {
+        let scroll = try box(100)
+        let document = try #require(scroll.documentView)
+        let height = CGFloat(100 * 54 - 6)
+        #expect(document.frame.height == height)
+        #expect(try faded(scroll) == (false, true))
+
+        scroll.scroll(toY: .greatestFiniteMagnitude, animated: false)
+        let visible = scroll.contentView.documentVisibleRect
+        #expect(visible.minY == height - 340 && visible.maxY == height)
+        #expect(visible.contains(CGRect(x: 0, y: CGFloat(99 * 54), width: 300, height: 48)))
+        #expect(try faded(scroll) == (true, false))
+
+        scroll.scroll(toY: CGFloat(50 * 54), animated: false)
+        #expect(scroll.contentView.bounds.minY == CGFloat(50 * 54))
+        #expect(try faded(scroll) == (true, true))
+
+        scroll.scroll(toY: -100, animated: false)
+        #expect(scroll.contentView.bounds.minY == 0)
+        #expect(try faded(scroll) == (false, true))
+    }
 }
 
 @Suite("Main menu")
@@ -261,16 +291,16 @@ struct PasteTests {
 @Suite("ScrollBox follows the playing row")
 @MainActor
 struct ScrollFollowTests {
-    /// Fifty 48 pt rows, 6 apart, in a box four rows tall.
-    private func host(playing: Int?) -> NSHostingView<AnyView> {
-        let host = NSHostingView(rootView: view(playing: playing))
+    /// `rows` 48 pt rows, 6 apart, in a box four rows tall.
+    private func host(playing: Int?, rows: Int = 50) -> NSHostingView<AnyView> {
+        let host = NSHostingView(rootView: view(playing: playing, rows: rows))
         host.frame = NSRect(x: 0, y: 0, width: 300, height: 210)
         host.layoutSubtreeIfNeeded()
         return host
     }
 
-    private func view(playing: Int?) -> AnyView {
-        let ids = (0..<50).map { "row \($0)" }
+    private func view(playing: Int?, rows: Int = 50) -> AnyView {
+        let ids = (0..<rows).map { "row \($0)" }
         return AnyView(ScrollBox(follow: ScrollFollow(ids: ids, playing: playing)) {
             VStack(spacing: 6) {
                 ForEach(ids, id: \.self) { id in
@@ -291,6 +321,15 @@ struct ScrollFollowTests {
     func opens(_ playing: Int, _ top: Int) throws {
         let s = try scroll(host(playing: playing))
         #expect(s.contentView.bounds.minY == CGFloat(top * 54))
+    }
+
+    @Test("a round of 100: the playing row second from the top, or as near as the end allows; it is always whole in view",
+          arguments: [(0, 0), (1, 0), (2, 1), (49, 48), (97, 96), (99, 96)])
+    func hundred(_ playing: Int, _ top: Int) throws {
+        let s = try scroll(host(playing: playing, rows: 100))
+        #expect(s.contentView.bounds.minY == CGFloat(top * 54))
+        #expect(s.contentView.documentVisibleRect.contains(CGRect(x: 0, y: CGFloat(playing * 54), width: 300, height: 48)))
+        #expect(s.contentView.bounds.maxY <= CGFloat(100 * 54 - 6))
     }
 
     @Test("nothing playing: the list stays at the top")
@@ -341,10 +380,10 @@ struct DemoRoundTests {
         let before = numbers(engine.snapshot)
         #expect(engine.snapshot.tune?.name == "Lazy Avenue")
         engine.send(.next)
-        #expect(engine.snapshot.tune?.name == "Brass Lantern" && engine.snapshot.played.count == 5)
+        #expect(engine.snapshot.tune?.name == "Smoky Lounge" && engine.snapshot.played.count == 5)
         #expect(numbers(engine.snapshot) == before)
         engine.send(.previous)
-        #expect(engine.snapshot.tune?.name == "Lazy Avenue" && engine.snapshot.queue.first?.name == "Brass Lantern")
+        #expect(engine.snapshot.tune?.name == "Lazy Avenue" && engine.snapshot.queue.first?.name == "Smoky Lounge")
         #expect(numbers(engine.snapshot) == before)
     }
 
@@ -362,7 +401,7 @@ struct DemoRoundTests {
         engine.send(.playPlayed(index: 1, name: "Blue Avenue"))
         let s = engine.snapshot
         #expect(s.tune?.name == "Blue Avenue" && s.played.map(\.name) == ["Late Lounge"])
-        #expect(s.queue.prefix(4).map(\.name) == ["Smoky Martini", "Easy Lounge", "Lazy Avenue", "Brass Lantern"])
+        #expect(s.queue.prefix(4).map(\.name) == ["Smoky Martini", "Easy Lounge", "Lazy Avenue", "Smoky Lounge"])
         #expect(numbers(s) == before)
     }
 
