@@ -621,6 +621,20 @@ public enum Decide {
         return s.composing && s.model.state == .failed && s.model.retryAt != nil
     }
 
+    /// `Remove Music Model…`: enabled while anything of the model is on
+    /// disk; its alert says how much removing frees.
+    public static func modelRemoval(_ s: Snapshot) -> ModelRemoval {
+        ModelRemoval(
+            menuTitle: "Remove Music Model…",
+            enabled: s.need.onDiskBytes > 0,
+            alertTitle: "Remove the music model?",
+            alertText: "It frees \(Format.gib(s.need.onDiskBytes, decimals: 2)). Composing stops until it is downloaded again; your tunes stay.",
+            remove: "Remove",
+            cancel: "Cancel",
+            command: .removeModel
+        )
+    }
+
     /// The menu bar item.
     public static func statusItem(_ s: Snapshot) -> StatusItem {
         let m = s.model.state

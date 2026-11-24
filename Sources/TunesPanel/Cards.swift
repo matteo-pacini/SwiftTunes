@@ -408,6 +408,18 @@ public enum Footer: Sendable, Equatable {
     case undo(text: String, button: Control)
 }
 
+/// The status item menu's `Remove Music Model…` and the alert it asks with.
+public struct ModelRemoval: Sendable, Equatable {
+    public var menuTitle: String
+    /// Some model file or part file is on disk.
+    public var enabled: Bool
+    public var alertTitle: String
+    public var alertText: String
+    public var remove: String
+    public var cancel: String
+    public var command: Command
+}
+
 /// The menu bar item: the note glyph, the genre's name while playing, the
 /// composer's dot.
 public struct StatusItem: Sendable, Equatable {
