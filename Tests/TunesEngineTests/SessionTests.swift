@@ -214,6 +214,19 @@ struct Seen {
         #expect(share.rows.last?.on == false && share.rows.last?.sub == "never removed by the newest-50 rule")
         #expect(share.rows.first { $0.action == .export }?.sub == "to \(info.exportPath.path)")
 
+        // The model removed: composing stops, what plays plays on.
+        let calls = rig.player.calls
+        await rig.send(.removeModel)
+        #expect(rig.snap.setup == .missing && rig.snap.need.onDiskBytes == 0 && !rig.snap.composing)
+        #expect(rig.snap.player == .playing && rig.player.calls == calls)
+        seen = step("model removed")
+        // With kept tunes the player stays; the composer bar stands in for
+        // the setup cards. Known: the panel still shows the setup card
+        // whenever the model is missing, until the app's change for it lands.
+        withKnownIssue("the panel's removal state is the app role's pending change", isIntermittent: true) {
+            #expect(seen.player != nil, "\(seen.dump)")
+        }
+
         // The whole session, kept for a reader of a failure.
         if ProcessInfo.processInfo.environment["TUNES_SESSION_LOG"] != nil {
             print(log.joined(separator: "\n"))

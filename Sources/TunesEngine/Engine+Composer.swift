@@ -722,6 +722,7 @@ extension Engine {
 
     func download() {
         guard dlTask == nil, setup != .ready, let pins else { return }
+        removeError = nil
         dlToken += 1
         let token = dlToken
         dl = Download(file: 1, files: pins.files.count, name: Rules.roleWords[pins.files[0].role] ?? "", done: 0,
@@ -789,6 +790,46 @@ extension Engine {
         dlTask = nil
         dl = nil
         cancelTimer("download_flush")
+        checkSetup()
+        changed()
+    }
+
+    // MARK: - Removing the model
+
+    /// What the model's files and their parts take on disk now.
+    func modelBytesOnDisk() -> Int64 {
+        (pins?.files ?? []).reduce(0) { sum, f in
+            sum + (Files.size(env.paths.models.appending(path: f.name)) ?? 0)
+                + (Files.size(env.paths.models.appending(path: f.name + ".part")) ?? 0)
+        }
+    }
+
+    /// Stops all composing and deletes the pinned files and their parts,
+    /// nothing else in the folder. What plays plays on.
+    func removeModel() {
+        // A download may not have written its first bytes yet: it counts.
+        guard pins != nil, modelBytesOnDisk() > 0 || dlTask != nil else { return }
+        dropOwnWords()
+        composerOff()
+        cancelDownload()
+        let writing = dlPrevious
+        spawn { [weak self] in
+            // A cancelled download may still hold a part open: it ends first.
+            await writing?.value
+            self?.deleteModelFiles()
+        }
+    }
+
+    func deleteModelFiles() {
+        var failure: Int32?
+        for f in pins?.files ?? [] {
+            for name in [f.name, f.name + ".part"] where unlink(env.paths.models.appending(path: name).path) != 0 {
+                if errno != ENOENT && failure == nil { failure = errno }
+            }
+        }
+        // Whatever was deleted stays deleted.
+        removeError = failure.map { "could not remove the music model: \(String(cString: strerror($0)))" }
+        dl = nil
         checkSetup()
         changed()
     }

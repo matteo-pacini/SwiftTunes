@@ -223,6 +223,8 @@ final class Engine: EngineAPI {
     var publishedRAM: Int64?
     var playError: String?
     var fileError: String?
+    /// Why the model's files could not all be removed.
+    var removeError: String?
     var metaPending: Set<String> = []
     var scrap: Scrap?
     var scrappedJobs: Set<Int> = []
@@ -542,7 +544,7 @@ final class Engine: EngineAPI {
             download: dl,
             need: Need(downloadBytes: TuneFiles.needBytes(files, present: present),
                        diskFreeBytes: env.probe.diskFree(near: env.paths.models),
-                       ramBytes: pins?.ramBytes ?? Rules.ramBytes),
+                       ramBytes: pins?.ramBytes ?? Rules.ramBytes, onDiskBytes: modelBytesOnDisk()),
             genres: genres.map { GenreSummary(id: $0.id, name: $0.name, kept: listTunes($0).count, palette: $0.palette, sung: $0.sung) },
             genre: genre?.id,
             keptTotal: order.count,
@@ -568,7 +570,7 @@ final class Engine: EngineAPI {
             model: Model(name: pins?.name ?? "ACE-Step 1.5 Turbo", variant: pins?.variant ?? "4B Q8",
                          device: lastDevice ?? "Metal", state: state, since: since, silenceS: silenceS, detail: detail,
                          failures: failures, retryAt: retryAt, ramUsedBytes: ram, ramFreeBytes: nil, thinWords: thinWords),
-            error: genresError ?? playError ?? fileError ?? pinsError
+            error: genresError ?? playError ?? fileError ?? pinsError ?? removeError
         )
     }
 
@@ -646,7 +648,7 @@ final class Engine: EngineAPI {
         case .download: download()
         case .cancelDownload: cancelDownload()
         case .removeModel:
-            break
+            removeModel()
         case .refresh:
             genresSig = nil
             readGenres()
