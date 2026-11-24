@@ -5,7 +5,7 @@ by ACE-Step 1.5 Turbo through an embedded `ace-server` running on the GPU.
 Nothing is sent anywhere once the model is downloaded.
 
 <p align="center">
-  <img src="docs/screenshots/playing.png" width="380" alt="The SwiftTunes popover playing a Jazz tune: its name, tempo and key, the tune's shape as columns of dots filled up to the position, and seven round controls with Previous left of the play button. Below, This round reads 5 of 12: the playing tune is highlighted with a small level meter in place of its number, followed by tunes 6 and 7 and five more this round; then the tune being made, and the composer bar.">
+  <img src="docs/screenshots/playing.png" width="380" alt="The SwiftTunes popover playing a Jazz tune: its name, tempo and key, the tune's shape as columns of dots filled up to the position, and seven round controls with Previous left of the play button. Below, This round reads 5 of 12 over a list of the whole round, scrolled so the playing tune sits second: tune 4, already played, dimmed at the top; tune 5 highlighted with a small level meter in place of its number; tunes 6 and 7 below, fading at the edge into the rest. Then the tune being made, and the composer bar.">
 </p>
 
 SwiftTunes is inspired by [Flowtunes](https://github.com/omacom/flowtunes)
@@ -20,7 +20,8 @@ from Omarchy.
   composer on and it writes new ones and keeps two ready ahead; a new tune
   plays next. The newest 50 of a genre are kept.
 - **The round, held in order.** This round lists every tune of the round in
-  one order: the ones already played, the playing one, then what waits. A
+  one order, in a list that scrolls in place to keep the playing tune in
+  view: the ones already played, the playing one, then what waits. A
   tune keeps its number as the round goes on; only a newly made tune, which
   plays next, moves the ones after it down by one. Played tunes stay in the
   list, dimmed, and any of them can be played again. Every kept tune plays
@@ -49,7 +50,7 @@ from Omarchy.
 <table>
   <tr>
     <td><img src="docs/screenshots/composing.png" width="250" alt="Nothing playing yet in Synthwave: the hero shows a wave of dots that moves while the first tune is written, This round has nothing in it yet, and a separate Being made list shows the tune being written and one not started."></td>
-    <td><img src="docs/screenshots/lyrics.png" width="250" alt="A sung tune playing, with tempo, key and the word sung under its name; the wave has shrunk to a thin strip and the words show in a scrolling box headed Lyrics as written. Below the controls, This round reads 1 of 5 with the playing tune highlighted."></td>
+    <td><img src="docs/screenshots/lyrics.png" width="250" alt="A sung tune playing, with tempo, key and the word sung under its name; the wave has shrunk to a thin strip and the words show in a scrolling box headed Lyrics as written. Below the controls, This round reads 1 of 5: the playing tune highlighted at the top of the list and the next tunes under it, fading at the edge."></td>
     <td><img src="docs/screenshots/genres.png" width="250" alt="The genre chooser: nine genres as tiles in their own colours, each with its kept count or what is playing, and a dashed tile to add a new genre."></td>
   </tr>
   <tr>
