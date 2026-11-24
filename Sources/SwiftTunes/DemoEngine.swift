@@ -9,8 +9,9 @@ import TunesPanel
 ///
 /// A time written "@-N" or "@+N" in the file is N seconds before or after
 /// the launch. CARD is `player`, `chooser`, `new`, `edit:<id>`, `ask:<id>`,
-/// `share` (the playing tune), `share:<queue index>`, `rename` or
-/// `rename:<text typed>`; the popover opens on it at launch.
+/// `share` (the playing tune), `share:<queue index>`, `rename`,
+/// `rename:<text typed>`, `lyrics`, `queue`, `words` or `words-sample`; the
+/// popover opens on it at launch.
 struct DemoOptions {
     var file: URL
     var line: Int?
@@ -27,6 +28,9 @@ struct DemoOptions {
         case share(Int?)
         /// The rename field, with this text typed if given.
         case rename(String?)
+        case lyrics, queue
+        /// The own-words sheet, empty or with sample words.
+        case words(sample: Bool)
 
         @MainActor func apply(to model: PanelModel) async {
             switch self {
@@ -44,6 +48,16 @@ struct DemoOptions {
                 // The question opens once the genre's fields have loaded.
                 try? await Task.sleep(for: .milliseconds(200))
                 model.askDelete()
+            case .lyrics: model.toggleLyrics()
+            case .queue: model.openQueue()
+            case .words(let sample):
+                model.openWords()
+                if sample {
+                    model.insertMark(0)
+                    model.typeWords("[Verse]\nHarbour lights on the water line\nCounting ships like I count the time\nEvery horn a name I knew\n", caret: 104)
+                    model.insertMark(1)
+                    model.typeWords("[Verse]\nHarbour lights on the water line\nCounting ships like I count the time\nEvery horn a name I knew\n[Chorus]\nBring the tide home\n(bring it home)\nBring the tide home tonight", caret: 186)
+                }
             case .rename(let text):
                 model.beginRename()
                 if let text { model.typeName(text) }
@@ -79,6 +93,10 @@ struct DemoOptions {
         case "new": open = .new
         case "share": open = .share(nil)
         case "rename": open = .rename(nil)
+        case "lyrics": open = .lyrics
+        case "queue": open = .queue
+        case "words": open = .words(sample: false)
+        case "words-sample": open = .words(sample: true)
         case let v?:
             let parts = v.split(separator: ":", maxSplits: 1).map(String.init)
             switch (parts.first, parts.count == 2 ? parts[1] : nil) {
@@ -174,7 +192,7 @@ final class DemoEngine: EngineAPI {
         guard let g = snapshot.genres.first(where: { $0.id == id }) else {
             return .failure(Refusal(field: nil, text: "That genre no longer exists."))
         }
-        return .success(GenreFields(name: g.name, caption: "small combo, warm and unhurried", turns: ["late set", "a slow ballad"], bpm: [80, 120]))
+        return .success(GenreFields(name: g.name, caption: "small combo, warm and unhurried", turns: ["late set", "a slow ballad"], bpm: [80, 120], palette: g.palette, sung: g.sung))
     }
 
     func saveGenre(id: String?, fields: GenreFields, base: GenreFields?) async -> Result<GenreSaved, Refusal> {
