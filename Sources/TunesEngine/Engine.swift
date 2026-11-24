@@ -645,6 +645,8 @@ final class Engine: EngineAPI {
         case .retry: retry()
         case .download: download()
         case .cancelDownload: cancelDownload()
+        case .removeModel:
+            break
         case .refresh:
             genresSig = nil
             readGenres()

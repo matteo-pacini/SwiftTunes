@@ -30,6 +30,8 @@ public enum Command: Sendable, Equatable {
     case cancelDownload
     /// Re-reads the genres file and memory, then notifies.
     case refresh
+    /// Removes the music model's files; ignored when nothing is on disk.
+    case removeModel
 }
 
 /// A tune for the async calls: the playing tune when `index` is nil, else

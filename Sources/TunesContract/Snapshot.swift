@@ -243,17 +243,29 @@ public struct Need: Codable, Equatable, Sendable {
     public var diskFreeBytes: Int64
     /// 8 GiB: the figure the wording quotes.
     public var ramBytes: Int64
+    /// What the model files and their parts take now: what removal frees.
+    public var onDiskBytes: Int64
 
-    public init(downloadBytes: Int64, diskFreeBytes: Int64, ramBytes: Int64) {
+    public init(downloadBytes: Int64, diskFreeBytes: Int64, ramBytes: Int64, onDiskBytes: Int64 = 0) {
         self.downloadBytes = downloadBytes
         self.diskFreeBytes = diskFreeBytes
         self.ramBytes = ramBytes
+        self.onDiskBytes = onDiskBytes
     }
 
     enum CodingKeys: String, CodingKey {
         case downloadBytes = "download_bytes"
         case diskFreeBytes = "disk_free_bytes"
         case ramBytes = "ram_bytes"
+        case onDiskBytes = "on_disk_bytes"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        downloadBytes = try c.decode(Int64.self, forKey: .downloadBytes)
+        diskFreeBytes = try c.decode(Int64.self, forKey: .diskFreeBytes)
+        ramBytes = try c.decode(Int64.self, forKey: .ramBytes)
+        onDiskBytes = try c.decodeIfPresent(Int64.self, forKey: .onDiskBytes) ?? 0
     }
 }
 
