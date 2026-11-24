@@ -649,7 +649,7 @@ final class Engine: EngineAPI {
         case .cancelDownload: cancelDownload()
         case .removeModel:
             removeModel()
-        case .previous, .playPlayed:
+        case .previous, .playPlayed, .scrapPlayed:
             break
         case .refresh:
             genresSig = nil

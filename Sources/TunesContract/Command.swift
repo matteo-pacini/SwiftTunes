@@ -37,6 +37,8 @@ public enum Command: Sendable, Equatable {
     case previous
     /// Plays `played[index]` again; ignored unless that tune is there.
     case playPlayed(index: Int, name: String)
+    /// Scraps `played[index]`: it leaves the round, with the usual undo.
+    case scrapPlayed(index: Int, name: String)
 }
 
 /// A tune for the async calls: the playing tune when `index` is nil, else
@@ -47,9 +49,12 @@ public struct TuneTarget: Sendable, Equatable {
     public var name: String
     /// nil: the playing tune, else a queue index.
     public var index: Int?
+    /// `index` is an index into `played`, not `queue`.
+    public var inPlayed: Bool
 
-    public init(name: String, index: Int?) {
+    public init(name: String, index: Int?, inPlayed: Bool = false) {
         self.name = name
         self.index = index
+        self.inPlayed = inPlayed
     }
 }
