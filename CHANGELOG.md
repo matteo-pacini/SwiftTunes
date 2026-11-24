@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- A new tune now joins the end of the round and plays when the round
+  reaches it, like a playlist, instead of playing next. Nothing in the list
+  moves or changes its number when one arrives. A tune sung with your own
+  words joins the end too.
+- Rows no longer stand empty for a moment when a tune joins or leaves the
+  list.
+- Turning shuffle on or off, or starting a new round, redraws the list at
+  once.
+
 ## 0.1.0
 
 SwiftTunes lives in the menu bar and plays endless music by genre,
@@ -26,7 +35,7 @@ model is downloaded, nothing is sent anywhere. This is the first release.
 ### The composer
 
 - Turn the composer on and it writes new tunes for the genre, about three
-  minutes each, and keeps two ready ahead. Each joins the end of the round.
+  minutes each, and keeps two ready ahead. A new tune plays next.
 - Its bar says what it is doing. Being made shows the tune being written,
   with a bar and the time left; while nothing plays yet, the first tune's
   shape forms in the player and it starts by itself when it is ready.
@@ -53,8 +62,8 @@ model is downloaded, nothing is sent anywhere. This is the first release.
 - Every kept tune of the genre plays once a round, shuffled or in the order
   made. A new round never starts with the tune that ended the last one.
 - This round lists the whole round: tunes already played, dimmed; the
-  playing one, highlighted; then what waits, new tunes last. Point at a tune
-  to play it now, share it or scrap it.
+  playing one, highlighted; then what waits. Point at a tune to play it now,
+  share it or scrap it.
 - Repeat all draws a new round at the end, Repeat off stops after the last
   tune, and Repeat one plays the same tune again. Previous goes back a tune
   within the first three seconds, and otherwise starts the tune again.
@@ -82,8 +91,7 @@ model is downloaded, nothing is sent anywhere. This is the first release.
 - Turn Singing on for a genre and its new tunes are sung, with words the
   model writes in English. Lyrics shows a sung tune's words.
 - Sing my words… makes one tune sung with words you write, up to 2,000
-  characters, even with the composer off. It is made before the genre's next
-  tune and joins the end of the round.
+  characters, before the genre's next tune, even with the composer off.
 
 ### Files and sharing
 
