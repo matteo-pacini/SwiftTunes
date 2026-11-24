@@ -37,6 +37,9 @@ public struct Snapshot: Codable, Equatable, Sendable {
     public var played: [QueuedTune]
     public var shuffle: Bool
     public var `repeat`: RepeatMode
+    /// The player's level, 0 (silent) to 1 (full): this app's sound, not the
+    /// Mac's output. Decodes as 1 when absent.
+    public var volume: Double
     /// Repeat is off and every kept tune was played this round.
     public var ended: Bool
     /// Kept tunes not yet played this round.
@@ -91,9 +94,11 @@ public struct Snapshot: Codable, Equatable, Sendable {
         undo: Undo?,
         model: Model,
         error: String?,
-        played: [QueuedTune] = []
+        played: [QueuedTune] = [],
+        volume: Double = 1
     ) {
         self.played = played
+        self.volume = volume
         self.version = version
         self.setup = setup
         self.download = download
@@ -143,6 +148,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
         case played
         case shuffle
         case `repeat`
+        case volume
         case ended
         case roundLeft = "round_left"
         case keep
@@ -187,6 +193,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
         model = try c.decode(Model.self, forKey: .model)
         error = try c.decodeIfPresent(String.self, forKey: .error)
         played = try c.decodeIfPresent([QueuedTune].self, forKey: .played) ?? []
+        volume = try c.decodeIfPresent(Double.self, forKey: .volume) ?? 1
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -209,6 +216,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
         try c.encode(played, forKey: .played)
         try c.encode(shuffle, forKey: .shuffle)
         try c.encode(`repeat`, forKey: .repeat)
+        try c.encode(volume, forKey: .volume)
         try c.encode(ended, forKey: .ended)
         try c.encode(roundLeft, forKey: .roundLeft)
         try c.encode(keep, forKey: .keep)
