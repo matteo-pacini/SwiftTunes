@@ -340,9 +340,12 @@ This section wins over "The queue" where they differ.
 - **In the player.** The controls gain Previous, left of play (tooltip
   `Previous`), dimmed when nothing plays. The list's heading is `THIS ROUND`
   with `N of M` at the right (the playing tune's number, the round's
-  length). Three rows: the playing tune, highlighted, with a small level
-  meter in place of its number (still when paused), then the next two with
-  their numbers. With nothing playing: the next three, and the right-hand
+  length). Three rows of the round, always consecutive: the playing tune,
+  highlighted, with a small level meter in place of its number (still when
+  paused), then the next two with their numbers. When fewer than two tunes
+  follow, the window keeps its three rows by reaching back: played rows,
+  dimmed, sit above the playing one (a round of two with the second playing
+  shows 1 and 2; the last of twelve shows 10, 11 and 12). With nothing playing: the next three, and the right-hand
   text is `M tunes`. Under them `then N more this round · Show all` when
   more follow. BEING MADE is unchanged.
 - **The queue card** becomes the round: label `THIS ROUND · M TUNES`, title
