@@ -430,7 +430,8 @@ round".
   zipped. The model files are not in it.
 - **The version** lives in `Support/Info.plist`
   (`CFBundleShortVersionString`, and `CFBundleVersion` equal to it). The tag
-  must be `v` followed by it.
+  is `v` followed by it, or by it and a hyphen and a suffix for a
+  pre-release (`v0.2.0-rc.1` with `0.2.0` in the plist).
 - **The changelog.** `CHANGELOG.md` is written for the people who use the
   app, newest first: `## Unreleased`, then one `## <version>` section per
   release. A change a user can notice adds a line under `Unreleased` as part
@@ -450,8 +451,7 @@ round".
   pinned sources. `make-app.sh` fails without either file. A new pin is not
   done until the notices were checked against it.
 - **No web page in the server.** `ace-server` is built with an empty
-  `tools/public/index.html.gz`, so it serves `/health`, `/lm` and `/synth`
-  and nothing at `/`. `Scripts/build-ace-server.sh` makes exactly two changes in
+  `tools/public/index.html.gz`, so it serves nothing at `/`. `Scripts/build-ace-server.sh` makes exactly two changes in
   its cached checkout: it empties that file, and it quotes the one variable
   in `tools/xxd.cmake` that makes the embedding step fail on an empty file.
   It checks that the file is empty and that `xxd.cmake` differs from the
@@ -464,9 +464,10 @@ round".
   used; `swift test`; the signed build; notarize, staple, zip, checksum;
   `codesign --verify --deep --strict`, `stapler validate` and `spctl
   --assess`; a **draft** release with the notes and the two files. A tag
-  with a hyphen (`v0.2.0-rc.1`) makes a pre-release. The temporary keychain
-  and the key files are removed whatever happened. A failed run makes no
-  release.
+  with a hyphen makes a pre-release: the plist and the changelog section
+  carry the part before the hyphen, the zip is named after the whole tag. The temporary keychain
+  and the key files are removed whatever happened. A run publishes nothing; one
+  that fails while uploading may leave a draft, which the owner deletes.
 - **The same tools everywhere.** Xcode 27.2 builds, tests and
   releases, on the owner's Mac and on the runners: each workflow's first
   step selects it and fails when `xcodebuild -version` does not say

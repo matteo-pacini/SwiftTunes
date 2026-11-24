@@ -140,7 +140,9 @@ the demo's flags: `docs/TESTING.md`.
   are invented data in the real formats. The one exception is the bundle
   identifier, `me.matteopacini.SwiftTunes`, which is the app's name to the
   system and stays as it is; a release's signature carries the owner's
-  name too, and that is Apple's doing.
+  name too, and that is Apple's doing. `Resources/ThirdPartyNotices.txt`
+  holds other projects' notices word for word, names and addresses
+  included, because their licences require it.
 - A change a user can notice adds a line under `Unreleased` in
   `CHANGELOG.md`, in plain words for someone who uses the app
   (`docs/SPEC.md`, "Releases").
