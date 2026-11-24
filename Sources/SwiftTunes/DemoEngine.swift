@@ -190,8 +190,9 @@ final class DemoEngine: EngineAPI {
         for h in handlers.values { h(snapshot) }
     }
 
-    /// Enough of each command for the controls to answer a click; nothing
-    /// is composed, played or moved.
+    /// Enough of each command for the controls to answer a click, and the
+    /// round's moves (next, previous, play again, scrap a played tune);
+    /// nothing is composed or played, and a scrap offers no undo.
     func send(_ command: Command) {
         let now = Date().timeIntervalSince1970
         var s = snapshot
@@ -212,6 +213,30 @@ final class DemoEngine: EngineAPI {
         case .seek(let to):
             s.pos = to
             s.posAt = now
+        case .next:
+            guard let t = s.tune, !s.queue.isEmpty else { return }
+            s.played.append(Self.queued(t))
+            s.tune = Self.playing(s.queue.removeFirst(), wave: t.wave)
+            s.pos = 0
+            s.posAt = now
+        case .previous:
+            guard let t = s.tune else { return }
+            if Decide.position(s, now: now) <= 3, let back = s.played.popLast() {
+                s.queue.insert(Self.queued(t), at: 0)
+                s.tune = Self.playing(back, wave: t.wave)
+            }
+            s.pos = 0
+            s.posAt = now
+        case .playPlayed(let index, let name):
+            guard let t = s.tune, s.played.indices.contains(index), s.played[index].name == name else { return }
+            s.queue = Array(s.played[(index + 1)...]) + [Self.queued(t)] + s.queue
+            s.tune = Self.playing(s.played[index], wave: t.wave)
+            s.played.removeSubrange(index...)
+            s.pos = 0
+            s.posAt = now
+        case .scrapPlayed(let index, let name):
+            guard s.played.indices.contains(index), s.played[index].name == name else { return }
+            s.played.remove(at: index)
         case .removeModel:
             // The demo's model is a figure in a fixture; no file is touched.
             guard s.need.onDiskBytes > 0 else { return }
@@ -228,6 +253,16 @@ final class DemoEngine: EngineAPI {
         guard s != snapshot else { return }
         snapshot = s
         changed()
+    }
+
+    private static func queued(_ t: PlayingTune) -> QueuedTune {
+        QueuedTune(name: t.name, file: t.file, bpm: t.bpm, key: t.key, length: t.length, kept: t.kept, new: t.new, pinned: t.pinned, pos: t.pos, sung: t.sung)
+    }
+
+    /// The demo has no files to read a wave from: the tune takes the wave
+    /// that was showing.
+    private static func playing(_ q: QueuedTune, wave: [Double]) -> PlayingTune {
+        PlayingTune(name: q.name, file: q.file, bpm: q.bpm, key: q.key, length: q.length, kept: q.kept, new: q.new, pinned: q.pinned, pos: q.pos, wave: wave, sung: q.sung)
     }
 
     func genre(id: String) async -> Result<GenreFields, Refusal> {

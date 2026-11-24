@@ -59,10 +59,10 @@ extension Decide {
     }
 
     /// The player list's right-hand text: `N of M` while a tune plays, else
-    /// `M tunes`.
+    /// `M tunes`, or `nothing` for an empty round.
     public static func roundCount(_ round: [RoundEntry]) -> String {
         if let playing = round.first(where: { $0.state == .playing }) { return "\(playing.number) of \(round.count)" }
-        return Format.plural(round.count, "tune", "tunes")
+        return round.isEmpty ? "nothing" : Format.plural(round.count, "tune", "tunes")
     }
 
     /// The round card's right-hand text: the order, then the repeat mode.

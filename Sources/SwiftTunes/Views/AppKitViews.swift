@@ -10,19 +10,74 @@ import TunesPanel
 /// scrollers, the rows as wide as the box and as tall as they need, and the
 /// bottom edge faded while more lies below it. The caller sets the box's
 /// height.
+///
+/// With a `target`, the row marked `.scrollMark(target)` is brought into
+/// view when the box first shows it and each time the target changes; the
+/// user's own scrolling is left alone otherwise.
 struct ScrollBox<Content: View>: NSViewRepresentable {
+    var target: String? = nil
     @ViewBuilder let content: Content
+
+    func makeCoordinator() -> ScrollMarks { ScrollMarks() }
 
     func makeNSView(context: Context) -> FadingScrollView {
         let scroll = FadingScrollView()
-        scroll.documentView = ScrollDocument(rootView: Fitted(content: content))
+        let marks = context.coordinator
+        scroll.documentView = ScrollDocument(rootView: Fitted(marks: marks, content: content))
+        marks.scroll = scroll
         return scroll
     }
 
     func updateNSView(_ scroll: FadingScrollView, context: Context) {
         guard let document = scroll.documentView as? ScrollDocument<Content> else { return }
-        document.rootView = Fitted(width: document.rootView.width, content: content)
+        document.rootView = Fitted(width: document.rootView.width, marks: context.coordinator, content: content)
         scroll.tile()
+        context.coordinator.target = target
+        context.coordinator.reveal()
+    }
+}
+
+/// Where the marked rows sit in a scroll box's document, and the row to
+/// bring into view.
+final class ScrollMarks {
+    nonisolated static let space = "ScrollBox"
+    weak var scroll: NSScrollView?
+    var frames: [String: CGRect] = [:]
+    var target: String?
+    /// The target last brought into view; a new target is revealed once.
+    private var revealed: String?
+
+    func reveal() {
+        guard let target, target != revealed, let frame = frames[target], let document = scroll?.documentView,
+              document.frame.height >= frame.maxY else { return }
+        revealed = target
+        // Half a row of margin, so the rows either side show they continue.
+        _ = document.scrollToVisible(frame.insetBy(dx: 0, dy: -frame.height / 2))
+    }
+}
+
+extension EnvironmentValues {
+    @Entry var scrollMarks: ScrollMarks?
+}
+
+extension View {
+    /// Marks this row in the enclosing scroll box, so the box can bring it
+    /// into view by `id`.
+    func scrollMark(_ id: String) -> some View {
+        modifier(ScrollMark(id: id))
+    }
+}
+
+private struct ScrollMark: ViewModifier {
+    let id: String
+    @Environment(\.scrollMarks) private var marks
+
+    func body(content: Content) -> some View {
+        content.onGeometryChange(for: CGRect.self) { $0.frame(in: .named(ScrollMarks.space)) } action: { frame in
+            guard let marks else { return }
+            marks.frames[id] = frame
+            if id == marks.target { marks.reveal() }
+        }
     }
 }
 
@@ -30,10 +85,14 @@ struct ScrollBox<Content: View>: NSViewRepresentable {
 /// measured at that width.
 struct Fitted<Content: View>: View {
     var width: CGFloat?
+    var marks: ScrollMarks?
     let content: Content
 
     var body: some View {
-        content.frame(width: width, alignment: .topLeading)
+        content
+            .frame(width: width, alignment: .topLeading)
+            .coordinateSpace(.named(ScrollMarks.space))
+            .environment(\.scrollMarks, marks)
     }
 }
 

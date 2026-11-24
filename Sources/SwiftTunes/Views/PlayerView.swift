@@ -131,6 +131,7 @@ struct Hero: View {
         HStack(spacing: 10) {
             RoundButton(symbol: "shuffle", control: now.shuffle, action: model.shuffle)
             RoundButton(symbol: now.repeatsOne ? "repeat.1" : "repeat", control: now.repeat, action: model.cycleRepeat)
+            RoundButton(symbol: "backward.end.fill", control: now.previous) { model.send(now.previousCommand) }
             Button(action: model.playPause) {
                 Image(systemName: now.showsPause ? "pause.fill" : "play.fill")
                     .font(.system(size: 21, weight: .bold))
@@ -153,7 +154,7 @@ struct Hero: View {
     }
 }
 
-/// UP NEXT: at most three rows, read top to bottom in play order.
+/// THIS ROUND: at most three rows, read top to bottom in play order.
 struct UpNext: View {
     let next: PlayerCard.Next
     let palette: Palette
@@ -163,7 +164,7 @@ struct UpNext: View {
     var body: some View {
         VStack(spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Caps(text: "UP NEXT")
+                Caps(text: next.label)
                 Spacer()
                 Text(verbatim: next.head).font(.system(size: 11.5)).foregroundStyle(.secondary)
             }
@@ -210,8 +211,8 @@ struct MakingBlock: View {
     }
 }
 
-/// Everything that will play this round, numbered, in a scrolling list,
-/// with BEING MADE under it.
+/// The whole round, numbered, in a scrolling list that keeps the playing
+/// row in view, with BEING MADE under it.
 struct QueueView: View {
     let card: QueueCard
     let model: PanelModel
@@ -231,11 +232,12 @@ struct QueueView: View {
             // The rows' glass has its own container inside the scroll view: a
             // container outside it draws the glass in a layer the scroll view
             // does not clip.
-            ScrollBox {
+            ScrollBox(target: card.scrollTo) {
                 GlassEffectContainer(spacing: 6) {
                     VStack(spacing: 6) {
                         ForEach(card.rows, id: \.id) { row in
                             UpNextRow(row: row, palette: card.palette, model: model)
+                                .scrollMark(row.id)
                         }
                         if let last = card.last {
                             Text(verbatim: last).font(.system(size: 11.5)).foregroundStyle(.secondary).padding(.top, 4)
@@ -262,7 +264,10 @@ struct UpNextRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            if row.kind == .tune {
+            if row.state == .playing {
+                LevelMeter().frame(minWidth: 14)
+                    .accessibilityLabel(Text(verbatim: row.number))
+            } else if row.kind == .tune {
                 Text(verbatim: row.number)
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(.secondary)
@@ -303,10 +308,20 @@ struct UpNextRow: View {
                 RoundedRectangle(cornerRadius: 11).strokeBorder(.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
             }
         }
-        .glassEffect(row.kind == .placeholder ? .identity : .regular, in: .rect(cornerRadius: 11))
+        .glassEffect(glass, in: .rect(cornerRadius: 11))
+        .overlay {
+            if row.state == .playing {
+                RoundedRectangle(cornerRadius: 11).strokeBorder(.white.opacity(0.55), lineWidth: 1)
+            }
+        }
         .opacity(row.dim ? 0.5 : 1)
         .onHover { hovered = $0 }
         .accessibilityElement(children: .contain)
+    }
+
+    private var glass: Glass {
+        if row.kind == .placeholder { return .identity }
+        return row.state == .playing ? .regular.tint(.white.opacity(0.22)) : .regular
     }
 
     @ViewBuilder private var art: some View {
@@ -418,6 +433,35 @@ struct RenameField: View {
             }
         }
         .onAppear { focused = true }
+    }
+}
+
+/// Three small bars in place of the playing row's number. They move while
+/// `Motion.meters` allows and stand still otherwise. They draw no real
+/// level: nothing measures the sound.
+struct LevelMeter: View {
+    @Environment(\.motion) private var motion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 20, paused: !motion.meters)) { context in
+            let t = motion.meters ? context.date.timeIntervalSinceReferenceDate : 0
+            HStack(alignment: .bottom, spacing: 1.5) {
+                ForEach(0..<3, id: \.self) { i in
+                    Capsule()
+                        .frame(width: 2.5, height: Self.height(bar: i, at: t))
+                }
+            }
+            .frame(height: 11, alignment: .bottom)
+            .foregroundStyle(.primary)
+        }
+    }
+
+    /// Still: rising 4, 7, 10 pt. Moving: each bar between 3 and 11 pt on a
+    /// sine of its own speed.
+    static func height(bar: Int, at t: Double) -> Double {
+        guard t != 0 else { return Double(4 + 3 * bar) }
+        let speeds = [5.3, 7.1, 4.2]
+        return 7 + 4 * sin(t * speeds[bar] + Double(bar) * 1.7)
     }
 }
 

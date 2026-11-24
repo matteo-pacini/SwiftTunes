@@ -19,11 +19,11 @@ final class NowPlayingController {
         center.pauseCommand.addTarget(handler: Self.handler { _ in send(.pause) })
         center.togglePlayPauseCommand.addTarget(handler: Self.handler { _ in send(.toggle) })
         center.nextTrackCommand.addTarget(handler: Self.handler { _ in send(.next) })
+        center.previousTrackCommand.addTarget(handler: Self.handler { _ in send(.previous) })
         center.stopCommand.addTarget(handler: Self.handler { _ in send(.stop) })
         center.changePlaybackPositionCommand.addTarget(handler: Self.handler { position in
             if let position { send(.seek(to: position)) }
         })
-        center.previousTrackCommand.isEnabled = false
     }
 
     /// A remote command handler that reads what it needs from the event,
@@ -43,6 +43,7 @@ final class NowPlayingController {
         let n = NowPlaying.of(s, now: PanelModel.clock())
         let info = MPNowPlayingInfoCenter.default()
         center.nextTrackCommand.isEnabled = n.canNext
+        center.previousTrackCommand.isEnabled = n.canPrevious
         center.changePlaybackPositionCommand.isEnabled = n.canSeek
         guard let title = n.title else {
             info.nowPlayingInfo = nil

@@ -253,3 +253,88 @@ struct PasteTests {
         #expect(card.counter == "2 sung lines · 17 of 2,000 characters")
     }
 }
+
+@Suite("ScrollBox target")
+@MainActor
+struct ScrollTargetTests {
+    private func box(target: String?) throws -> FadingScrollView {
+        let host = NSHostingView(rootView: ScrollBox(target: target) {
+            VStack(spacing: 6) {
+                ForEach(0..<50, id: \.self) { i in
+                    Text(verbatim: "Row \(i)").frame(maxWidth: .infinity, minHeight: 48, maxHeight: 48).scrollMark("row \(i)")
+                }
+            }
+        }
+        .frame(width: 300, height: 340))
+        host.frame = NSRect(x: 0, y: 0, width: 300, height: 340)
+        host.layoutSubtreeIfNeeded()
+        let scroll = try #require(find(FadingScrollView.self, in: host))
+        scroll.layoutSubtreeIfNeeded()
+        return scroll
+    }
+
+    @Test("the target row is brought into view; with none the list stays at the top")
+    func reveal() throws {
+        let scroll = try box(target: "row 40")
+        let visible = scroll.contentView.bounds
+        let row = CGRect(x: 0, y: 40 * 54, width: 300, height: 48)
+        #expect(visible.contains(row))
+        #expect(try box(target: nil).contentView.bounds.minY == 0)
+    }
+}
+
+@Suite("Demo round")
+@MainActor
+struct DemoRoundTests {
+    private func demo() throws -> DemoEngine {
+        let file = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "TunesPanelTests/Fixtures/45-round-played.jsonl")
+        return DemoEngine(options: try #require(DemoOptions(arguments: ["SwiftTunes", "--demo", file.path])))
+    }
+
+    private func numbers(_ s: TunesContract.Snapshot) -> [String: Int] {
+        Dictionary(uniqueKeysWithValues: Decide.round(played: s.played, tune: s.tune, queue: s.queue).map { ($0.file, $0.number) })
+    }
+
+    @Test("next, then previous within 3 s: the round walks and comes back, no number moving")
+    func walk() throws {
+        let engine = try demo()
+        let before = numbers(engine.snapshot)
+        #expect(engine.snapshot.tune?.name == "Lazy Avenue")
+        engine.send(.next)
+        #expect(engine.snapshot.tune?.name == "Brass Lantern" && engine.snapshot.played.count == 5)
+        #expect(numbers(engine.snapshot) == before)
+        engine.send(.previous)
+        #expect(engine.snapshot.tune?.name == "Lazy Avenue" && engine.snapshot.queue.first?.name == "Brass Lantern")
+        #expect(numbers(engine.snapshot) == before)
+    }
+
+    @Test("previous more than 3 s in restarts the tune")
+    func restart() throws {
+        let engine = try demo()
+        engine.send(.previous)
+        #expect(engine.snapshot.tune?.name == "Lazy Avenue" && engine.snapshot.played.count == 4 && engine.snapshot.pos == 0)
+    }
+
+    @Test("play it again: that tune plays, the ones after it wait again in list order")
+    func again() throws {
+        let engine = try demo()
+        let before = numbers(engine.snapshot)
+        engine.send(.playPlayed(index: 1, name: "Blue Avenue"))
+        let s = engine.snapshot
+        #expect(s.tune?.name == "Blue Avenue" && s.played.map(\.name) == ["Late Lounge"])
+        #expect(s.queue.prefix(4).map(\.name) == ["Smoky Martini", "Easy Lounge", "Lazy Avenue", "Brass Lantern"])
+        #expect(numbers(s) == before)
+    }
+
+    @Test("a command whose name no longer matches does nothing")
+    func stale() throws {
+        let engine = try demo()
+        let before = engine.snapshot
+        engine.send(.playPlayed(index: 1, name: "Late Lounge"))
+        engine.send(.scrapPlayed(index: 0, name: "Blue Avenue"))
+        #expect(engine.snapshot == before)
+        engine.send(.scrapPlayed(index: 0, name: "Late Lounge"))
+        #expect(engine.snapshot.played.map(\.name) == ["Blue Avenue", "Smoky Martini", "Easy Lounge"])
+    }
+}

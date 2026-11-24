@@ -49,6 +49,8 @@ struct Motion: Equatable {
     var drifts = false
     /// The forming waves.
     var forms = false
+    /// The playing row's level meter.
+    var meters = false
 }
 
 extension EnvironmentValues {

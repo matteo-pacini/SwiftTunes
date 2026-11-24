@@ -85,7 +85,7 @@ struct PlayerTests {
         #expect(p.now.titleTone == .soft)
         #expect(p.now.wave == nil && p.now.time == nil)
         #expect(!p.now.playPause.enabled && !p.now.next.enabled && !p.now.share.enabled && !p.now.scrap.enabled)
-        #expect(p.next.head == "0 tunes")
+        #expect(p.next.head == "nothing")
         // 58 s expected, 18 s spent: 40 s left.
         #expect(rows(p) == [["", "Being rendered", "about 0:40 left · written in 1:04", "composing"], ["", "Not started", "after the one above", ""]])
         let job = made(p)[0]
@@ -180,7 +180,7 @@ struct PlayerTests {
         let p = try player(s)
         #expect([p.now.genre.text, p.now.title, p.now.meta] == ["Synthwave", "No Synthwave tunes yet", "Turn the composer on to make some."])
         #expect(!p.now.playPause.enabled && !p.now.next.enabled && p.now.wave == nil)
-        #expect(p.next.head == "0 tunes")
+        #expect(p.next.head == "nothing")
         // 62 + 58 s is 2 min.
         #expect(lines(p) == ["On, it makes Synthwave and keeps 2 ahead.", "A tune takes about 2 min and 8 GiB of memory while it is made."])
         #expect(Decide.statusItem(s) == StatusItem(dim: true, text: "", dot: nil, help: "SwiftTunes"))
@@ -550,10 +550,10 @@ struct ActionTests {
     @Test("Now Playing follows the player")
     func nowPlaying() throws {
         let playing = NowPlaying.of(try Fixture.load("05-queue-full"), now: NOW + 2)
-        #expect(playing == NowPlaying(state: .playing, title: "Lazy Avenue", genre: "Jazz", duration: 177, elapsed: 147, rate: 1, canNext: true, canSeek: true))
+        #expect(playing == NowPlaying(state: .playing, title: "Lazy Avenue", genre: "Jazz", duration: 177, elapsed: 147, rate: 1, canNext: true, canPrevious: true, canSeek: true))
         let paused = NowPlaying.of(try Fixture.load("17-paused"), now: NOW)
         #expect(paused.state == .paused && paused.rate == 0 && paused.elapsed == 145)
         let none = NowPlaying.of(try Fixture.load("06-first-tune"), now: NOW)
-        #expect(none.state == .stopped && none.title == nil && !none.canNext)
+        #expect(none.state == .stopped && none.title == nil && !none.canNext && !none.canPrevious)
     }
 }

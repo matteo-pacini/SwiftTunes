@@ -34,7 +34,7 @@ struct PopoverView: View {
     private var motion: Motion {
         let a = Decide.animating(model.snapshot, model.panel, now: model.now, popoverOpen: model.isOpen,
                                  reduceMotion: reduceMotion, lowPower: model.lowPower || model.stillBackdrop)
-        return Motion(drifts: a.backdrop, forms: a.heroForming || a.jobForming)
+        return Motion(drifts: a.backdrop, forms: a.heroForming || a.jobForming, meters: a.meter)
     }
 
     @ViewBuilder private func backdrop(_ card: Card) -> some View {

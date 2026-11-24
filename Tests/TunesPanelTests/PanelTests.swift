@@ -388,7 +388,7 @@ struct ModeTests {
         let p = try player(s)
         #expect(p.now.suffix == (c.ended ? "" : c.mode == .one ? "repeating" : "kept tunes"))
         // The count is places in the round, whatever the modes.
-        #expect(p.next.head == (c.ended ? "0 tunes" : "1 of \(1 + s.queue.count)"))
+        #expect(p.next.head == (c.ended ? "nothing" : "1 of \(1 + s.queue.count)"))
         let tunes = p.next.rows.filter { $0.kind == .tune }
         // The playing tune is never dimmed; under repeat one the rest are.
         #expect(tunes.map(\.dim) == tunes.map { $0.state == .waiting && c.mode == .one })
@@ -416,7 +416,7 @@ struct ModeTests {
         #expect([p.now.title, p.now.meta] == ["Played all 14 Jazz tunes", "Play starts over. Repeat is off."])
         #expect(p.now.titleTone == .soft && !p.now.showsPause && p.now.playPause.enabled && !p.now.next.enabled)
         #expect(p.now.wave == nil && p.now.time == nil && !p.now.scrap.enabled)
-        #expect(p.next.head == "0 tunes" && p.next.rows.isEmpty)
+        #expect(p.next.head == "nothing" && p.next.rows.isEmpty)
         #expect(Decide.statusItem(s) == StatusItem(dim: true, text: "", dot: nil, help: "SwiftTunes"))
         #expect(!Decide.needsTick(s, Panel(), now: NOW))
         var one = s

@@ -190,6 +190,7 @@ struct RoundTests {
         s.tune = nil
         let q = Decide.queueCard(s, now: NOW)
         #expect(q.last == nil && q.scrollTo == nil && q.rows.isEmpty && q.label == "THIS ROUND · 0 TUNES")
+        #expect(try player(s).next.head == "nothing")
     }
 
     @Test("with the playing tune last, the last line names it")
@@ -311,5 +312,29 @@ struct RoundTests {
         let p = Panel().openingQueue()
         #expect(Decide.needsTick(try Fixture.load("10-writing"), p, now: NOW))
         #expect(!Decide.needsTick(try Fixture.load("07-composer-off-kept"), p, now: NOW))
+    }
+}
+
+@Suite("The round in the fixtures")
+struct RoundFixtureTests {
+    @Test("four played, the fifth playing: 5 of 12, the card scrolled to it")
+    func played() throws {
+        let s = try Fixture.load("45-round-played")
+        let p = try player(s)
+        #expect(p.next.head == "5 of 12" && p.next.rows.map(\.name) == ["Lazy Avenue", "Brass Lantern", "Quiet Ledger"])
+        #expect(p.next.more?.text == "then 5 more this round · Show all")
+        let q = Decide.queueCard(s, now: NOW)
+        #expect(q.label == "THIS ROUND · 12 TUNES" && q.head == "shuffled · repeat all")
+        #expect(q.rows.prefix(4).allSatisfy { $0.state == .played && $0.dim } && q.scrollTo == q.rows[4].id)
+    }
+
+    @Test("the round ended under repeat off: every tune played, none playing")
+    func ended() throws {
+        let s = try Fixture.load("46-round-ended")
+        let p = try player(s)
+        #expect(p.next.head == "12 tunes" && p.next.rows.isEmpty && p.next.more == nil)
+        let q = Decide.queueCard(s, now: NOW)
+        #expect(q.rows.count == 12 && q.rows.allSatisfy { $0.state == .played } && q.scrollTo == nil)
+        #expect(q.last == "The round ends after 20261105-090004-104bpm-A-minor.")
     }
 }
