@@ -66,7 +66,7 @@ from Omarchy.
 - About 8 GiB of memory free while a tune is being composed.
 - 7.57 GiB of disk for the model, downloaded from Hugging Face on first use.
 
-To build: Xcode 27 (Swift 6.4) and `cmake`. `cmake` is
+To build: Xcode 27.2 and `cmake`. `cmake` is
 the one tool beyond Xcode, needed only to build `ace-server`; the build uses
 the Makefile generator, so nothing else. The scripts take `cmake` from
 `PATH` and stop with a sentence saying so when it is missing. They install
@@ -92,7 +92,19 @@ without `nix develop`. `swift build` and `swift test` need no `cmake`.
 `Scripts/make-app.sh` builds the app in release, fetches acestep.cpp at the
 revision pinned in `Config/pins.json` and builds `ace-server` with Metal,
 assembles `build/SwiftTunes.app`, signs it ad hoc, and checks it with
-`plutil -lint` and `codesign --verify --deep --strict`.
+`plutil -lint` and `codesign --verify --deep --strict`. With
+`SWIFTTUNES_SIGN_IDENTITY` set to a signing identity in your keychain, it
+signs with that identity instead, with the hardened runtime and a secure
+timestamp; it never notarizes. The bundle carries `LICENSE` and
+`Resources/ThirdPartyNotices.txt`, the notices of the projects compiled into
+`ace-server`, in `Contents/Resources`; the script stops without either.
+
+A release starts when the owner pushes a tag `v<version>` matching the
+version in `Support/Info.plist` and a section in `CHANGELOG.md`. The release
+workflow then tests, signs the app with the owner's Developer ID, notarizes
+and staples it, and makes a draft GitHub release with
+`SwiftTunes-<version>.zip`, its checksum and that section as the notes; the
+owner publishes the draft.
 
 ## Where files live
 
