@@ -516,3 +516,35 @@ round".
   without it.
 - The status item keeps its own symbol; the icon is what Finder, Login
   Items and the release page show.
+
+## New tunes join the end
+
+This section wins over "The queue", "The round and Previous", "The list is a
+playlist" and "Singing" where they say a new tune plays next.
+
+- **Where a new tune goes.** A tune the composer finishes joins the end of
+  the round: it becomes the last of `queue`, after every tune already
+  waiting, and plays when the round reaches it. Nothing already listed
+  moves or changes its number; only the round's length grows by one. An
+  own-words tune is the same.
+- **With nothing waiting** the new tune is the whole of `queue`, so it is
+  what plays next: the first tune of a genre still starts by itself, and a
+  tune finished after a round ended with repeat off still plays.
+- **Shuffle and new rounds.** Changing shuffle redraws the kept tunes that
+  wait and leaves the waiting new tunes after them, in the order they were
+  made. A new round drawn while new tunes wait puts them last too.
+- **Previous** puts the playing tune back first in `queue`, as before; a new
+  tune no longer goes behind it, it goes last.
+- **The composer** is unchanged: it keeps `ahead` (2) finished new tunes
+  waiting and rests until one of them starts. With a long round that means
+  it rests for most of the round; that is accepted.
+- **The list's changes** are now: a new tune added at the end, a scrap or
+  its undo, a redraw of what is waiting when shuffle changes.
+- **Wording.** BEING MADE's right-hand text is `joins the round when ready`.
+  The own-words sheet says `It is made once, with the genre's sound, and
+  joins the end of the round when ready.` Repeat one's line about new tunes
+  waiting is unchanged.
+- **Done:** the tests of the engine and the panel that put a new tune first
+  expect it last; the panel fixtures whose `queue` shows new tunes first
+  show them last; the README's screenshots made from those fixtures are
+  taken again; `SessionTests` follows the engine's real snapshots.
