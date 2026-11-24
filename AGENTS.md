@@ -23,6 +23,10 @@ Read, in this order, before any work:
 
 - macOS 26 or later, Apple silicon. Liquid Glass is the base material: adopt
   it everywhere a surface floats, with no fallback path.
+- The development environment is Xcode 27.0 (Swift 6.4), on the owner's Mac
+  and on the runners alike. Every workflow selects it and stops when
+  `xcodebuild -version` reports anything else; nothing is built, tested or
+  released with another Xcode.
 - Swift 6. The shell is AppKit (`NSStatusItem`, `NSPopover`, the status
   item's menu); the popover's content is SwiftUI in an `NSHostingController`.
   No `MenuBarExtra`, no Catalyst, no Electron, no Xcode project file.

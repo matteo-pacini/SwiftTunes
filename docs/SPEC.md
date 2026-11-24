@@ -464,7 +464,10 @@ round".
   with a hyphen (`v0.2.0-rc.1`) makes a pre-release. The temporary keychain
   and the key files are removed whatever happened. A failed run makes no
   release.
-- **The same tools everywhere.** The workflows that build the app install
+- **The same tools everywhere.** Xcode 27.0 (Swift 6.4) builds, tests and
+  releases, on the owner's Mac and on the runners: each workflow's first
+  step selects it and fails when `xcodebuild -version` does not say
+  `Xcode 27.0`. The workflows that build the app install
   Nix and run `nix develop -c Scripts/make-app.sh`, so `cmake` is the one
   `flake.lock` pins. `ci.yml` builds the ad-hoc app on every push, and
   checks that the changelog has a section for the plist's version.
