@@ -198,15 +198,17 @@ struct Seen {
         await rig.send(.undo)
         seen = step("undone")
         #expect(seen.footer == nil)
-        // The first row is the playing tune; the tune brought back plays next.
-        #expect(seen.player?.next.rows.first?.name == rig.snap.tune?.name)
-        #expect(seen.player?.next.rows[1].name == playing.name)
+        // The tune brought back plays next, right after the playing row.
+        let undone = try #require(seen.player?.next)
+        let at = try #require(undone.playing)
+        #expect(undone.rows[at].name == rig.snap.tune?.name)
+        #expect(undone.rows[at + 1].name == playing.name)
 
         // Previous, within the first 3 s: the last played tune plays again.
         // The list does not move, so no tune's number changes.
         func numbers() -> [String: String] {
-            guard case .queue(let q) = see(rig, Panel().openingQueue()).card else { return [:] }
-            return Dictionary(q.rows.filter { !$0.number.isEmpty }.map { ($0.name, $0.number) }, uniquingKeysWith: { a, _ in a })
+            let rows = see(rig).player?.next.rows ?? []
+            return Dictionary(rows.filter { !$0.number.isEmpty }.map { ($0.name, $0.number) }, uniquingKeysWith: { a, _ in a })
         }
         let roundBefore = Self.round(rig.snap)
         let numbersBefore = numbers()
@@ -301,20 +303,13 @@ struct Seen {
         await rig.send(.setShuffle(on: false))
         await rig.send(.selectGenre(id: "jazz"))
 
-        // Twelve kept: one plays, eleven wait; the player shows three.
+        // Twelve kept: one plays, eleven wait; the player lists the whole
+        // round, numbered in play order, the playing tune first.
         var p = try #require(see(rig).player)
-        #expect(rig.snap.queue.count == 11 && rig.snap.roundLeft == 11)
-        #expect(p.next.rows.count == 3 && p.next.rows.map(\.number) == ["1", "2", "3"])
-        // Three rows: the playing tune and the next two; the rest behind Show all.
-        #expect(p.next.more?.text == "then \(Self.round(rig.snap).count - 3) more this round · Show all")
-        let queueSeen = see(rig, Panel().openingQueue())
-        guard case .queue(let q) = queueSeen.card else {
-            Issue.record("no queue card: \(queueSeen.dump)")
-            return
-        }
-        #expect(q.label == "THIS ROUND · \(Self.round(rig.snap).count) TUNES" && q.rows.count == Self.round(rig.snap).count)
-        #expect(q.rows.map(\.name) == Self.round(rig.snap))
-        #expect(q.last == "after these, a new round is drawn")
+        #expect(rig.snap.queue.count == 11 && rig.snap.roundLeft == 11 && rig.snap.played.isEmpty)
+        #expect(p.next.rows.map(\.number) == (1...Self.round(rig.snap).count).map(String.init))
+        #expect(p.next.playing == 0)
+        #expect(p.next.rows.map(\.name) == Self.round(rig.snap))
 
         // A sung tune: the first plan's words are too thin and it is written again.
         await rig.send(.stop)
@@ -326,7 +321,9 @@ struct Seen {
         #expect(p.composer.lines.map(\.text).contains("Writing again: the last plan had too few sung lines."))
         #expect(await rig.run { rig.snap.ready == 2 && rig.snap.model.state == .idle })
         p = try #require(see(rig).player)
-        #expect(p.next.rows.first?.sub.hasSuffix(" · sung") == true && p.next.rows.first?.tag == "new")
+        let firstWaiting = p.next.rows.first { $0.state == .waiting }
+        #expect(firstWaiting?.sub.hasSuffix(" · sung") == true && firstWaiting?.tag == "new")
+        #expect(firstWaiting?.name == rig.snap.queue.first?.name)
 
         // The user's words: made before the genre's own, shown as theirs.
         await rig.ace.set(runningPolls: 3)
@@ -336,7 +333,8 @@ struct Seen {
         let row = try #require(p.making?.rows.first { $0.kind == .job })
         #expect(row.name == "Evening Walk" && row.sub.hasPrefix("with your words · being written"))
         #expect(await rig.run { rig.snap.ready == 3 && rig.snap.job == nil })
-        #expect(see(rig).player?.next.rows.first?.name == "Evening Walk")
+        #expect(see(rig).player?.next.rows.first { $0.state == .waiting }?.name == "Evening Walk")
+        #expect(rig.snap.queue.first?.name == "Evening Walk")
 
         // Played: its words show behind the Lyrics button.
         await rig.send(.play)
