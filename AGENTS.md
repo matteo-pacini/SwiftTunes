@@ -15,6 +15,9 @@ Read, in this order, before any work:
 3. The working rule notes and wording table the lead hands you (untracked):
    every behaviour rule, numbered, and every sentence shown. The spec and the
    contract cite the numbers.
+4. `docs/TESTING.md`: the suites, the rules a test follows, the demo and
+   its flags, and the rules for anything that shows a window or makes a
+   sound.
 
 ## Rules
 
