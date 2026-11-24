@@ -291,8 +291,8 @@ public struct PlayerCard: Sendable, Equatable {
         public var help: String
     }
 
-    /// THIS ROUND: the playing tune and the next two, or the next three,
-    /// numbered by their place in the round.
+    /// THIS ROUND: three consecutive rows of the round around the playing
+    /// tune (or the next three with none playing), numbered by their place.
     public struct Next: Sendable, Equatable {
         public var label: String
         /// `N of M` while a tune plays, else `M tunes`.

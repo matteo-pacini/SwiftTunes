@@ -50,10 +50,17 @@ extension Decide {
         return entries
     }
 
-    /// The entries the player shows: the playing tune and the next two, or
-    /// with nothing playing the next three; and how many follow them.
+    /// The entries the player shows, always consecutive: the playing tune
+    /// and the next two, reaching back over played tunes when fewer than two
+    /// follow it, so the window keeps three rows while the round has them;
+    /// with nothing playing, the next three. And how many follow the window.
     public static func roundWindow(_ round: [RoundEntry]) -> (rows: ArraySlice<RoundEntry>, more: Int) {
-        let start = round.firstIndex { $0.state != .played } ?? round.endIndex
+        let start: Int
+        if let playing = round.firstIndex(where: { $0.state == .playing }) {
+            start = max(0, min(playing, round.endIndex - upNextRows))
+        } else {
+            start = round.firstIndex { $0.state != .played } ?? round.endIndex
+        }
         let rows = round[start..<min(round.endIndex, start + upNextRows)]
         return (rows, round.endIndex - rows.endIndex)
     }

@@ -338,3 +338,54 @@ struct RoundFixtureTests {
         #expect(q.last == "The round ends after 20261105-090004-104bpm-A-minor.")
     }
 }
+
+@Suite("The player's three rows")
+struct WindowTests {
+    /// A round of `size` kept tunes with the one at `position` (from 0) playing.
+    func round(size: Int, playing position: Int) throws -> Snapshot {
+        var s = try Fixture.load("05-queue-full")
+        let all = (1...size).map { kept($0) }
+        s.played = Array(all[..<position])
+        s.tune = TunesPanelTests.playing(all[position])
+        s.queue = Array(all[(position + 1)...])
+        s.ready = 0
+        return s
+    }
+
+    static let cases: [(Int, Int)] = [1, 2, 3, 4, 12].flatMap { size in (0..<size).map { (size, $0) } }
+
+    @Test("always consecutive, min(3, round) rows, the playing row among them, numbered by place", arguments: cases)
+    func window(_ size: Int, _ position: Int) throws {
+        let p = try player(round(size: size, playing: position))
+        let numbers = p.next.rows.map { Int($0.number)! }
+        #expect(numbers.count == min(3, size))
+        #expect(numbers == Array((numbers.first ?? 1)...(numbers.last ?? 0)))
+        #expect(numbers.contains(position + 1))
+        #expect(p.next.rows.map(\.name) == numbers.map { "Kept Tune \($0)" })
+        #expect(p.next.rows.map(\.state) == numbers.map { $0 < position + 1 ? .played : $0 == position + 1 ? .playing : .waiting })
+        #expect(p.next.rows.allSatisfy { $0.dim == ($0.state == .played) })
+        let after = size - (numbers.last ?? 0)
+        #expect(p.next.more == (after > 0 ? Control(text: "then \(after) more this round · Show all", help: "Show all") : nil))
+        #expect(p.next.head == "\(position + 1) of \(size)")
+    }
+
+    @Test("the last of twelve shows 10, 11 and 12")
+    func lastOfTwelve() throws {
+        #expect(try player(round(size: 12, playing: 11)).next.rows.map(\.number) == ["10", "11", "12"])
+    }
+
+    @Test("two tunes, the second played: rows 1 and 2, the first dimmed with its actions")
+    func twoTunes() throws {
+        var s = try round(size: 2, playing: 0)
+        #expect(try player(s).next.rows.map(\.number) == ["1", "2"])
+        // Next: the first tune is played, the second plays.
+        s.played.append(queued(s.tune!))
+        s.tune = TunesPanelTests.playing(s.queue.removeFirst())
+        let rows = try player(s).next.rows
+        #expect(rows.map(\.number) == ["1", "2"])
+        #expect(rows.map(\.state) == [.played, .playing] && rows[0].dim)
+        #expect(rows[0].playNow?.help == "Play it again" && rows[0].share != nil && rows[0].scrap != nil)
+        #expect(rows[0].playNowCommand == .playPlayed(index: 0, name: "Kept Tune 1"))
+        #expect(rows[0].scrapCommand == .scrapPlayed(index: 0, name: "Kept Tune 1"))
+    }
+}
