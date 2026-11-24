@@ -91,11 +91,11 @@ without `nix develop`. `swift build` and `swift test` need no `cmake`.
 
 `Scripts/make-app.sh` builds the app in release, fetches acestep.cpp at the
 revision pinned in `Config/pins.json` and builds `ace-server` with Metal,
-assembles `build/SwiftTunes.app`, signs it ad hoc, and checks it with
-`plutil -lint` and `codesign --verify --deep --strict`. With
-`SWIFTTUNES_SIGN_IDENTITY` set to a signing identity in your keychain, it
-signs with that identity instead, with the hardened runtime and a secure
-timestamp; it never notarizes. The bundle carries `LICENSE` and
+assembles `build/SwiftTunes.app`, and ends with `Scripts/sign-app.sh`,
+which signs it ad hoc and checks it with `plutil -lint` and `codesign
+--verify --deep --strict`. With `SWIFTTUNES_SIGN_IDENTITY` set to a signing
+identity in your keychain, it signs with that identity instead, with the
+hardened runtime and a secure timestamp; neither script notarizes. The bundle carries `LICENSE` and
 `Resources/ThirdPartyNotices.txt`, the notices of the projects compiled into
 `ace-server`, in `Contents/Resources`; the script stops without either.
 

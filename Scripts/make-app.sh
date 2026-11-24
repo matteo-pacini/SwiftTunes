@@ -1,11 +1,8 @@
 #!/bin/bash
-# Builds SwiftTunes in release, builds ace-server, and assembles a signed
-# build/SwiftTunes.app. Fails unless plutil and codesign both accept the
-# result.
-#
-# Signs ad hoc unless SWIFTTUNES_SIGN_IDENTITY names a signing identity in
-# the keychain; with one, it signs with the hardened runtime and a secure
-# timestamp. It never notarizes.
+# Builds SwiftTunes in release, builds ace-server, assembles
+# build/SwiftTunes.app and signs it with Scripts/sign-app.sh, which reads
+# SWIFTTUNES_SIGN_IDENTITY (ad hoc when unset). Fails unless plutil and
+# codesign both accept the result. It never notarizes.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -36,17 +33,5 @@ cp Config/pins.json "$app/Contents/Resources/pins.json"
 cp LICENSE "$app/Contents/Resources/LICENSE"
 cp Resources/ThirdPartyNotices.txt "$app/Contents/Resources/ThirdPartyNotices.txt"
 
-identity="${SWIFTTUNES_SIGN_IDENTITY:-}"
-if [ -n "$identity" ]; then
-    sign=(--force --sign "$identity" --options runtime --timestamp)
-else
-    sign=(--force --sign -)
-fi
-# Nested code first: signing the bundle seals the helpers' signatures.
-/usr/bin/codesign "${sign[@]}" "$app/Contents/Helpers/ace-server"
-/usr/bin/codesign "${sign[@]}" "$app/Contents/Helpers/tunes-lifeline"
-/usr/bin/codesign "${sign[@]}" "$app"
-
-/usr/bin/plutil -lint "$app/Contents/Info.plist"
-/usr/bin/codesign --verify --deep --strict --verbose=2 "$app"
+Scripts/sign-app.sh "$app"
 echo "$app"
