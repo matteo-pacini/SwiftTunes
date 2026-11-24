@@ -39,6 +39,12 @@ let package = Package(
             resources: [.copy("Fixtures")],
             swiftSettings: common
         ),
+        .testTarget(
+            name: "SwiftTunesTests",
+            dependencies: ["SwiftTunes", "TunesPanel", "TunesContract"],
+            path: "Tests/SwiftTunesTests",
+            swiftSettings: mainActor
+        ),
     ],
     swiftLanguageModes: [.v6]
 )

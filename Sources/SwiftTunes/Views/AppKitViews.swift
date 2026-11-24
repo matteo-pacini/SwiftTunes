@@ -162,9 +162,10 @@ struct PlainTextEditor: NSViewRepresentable {
         view.textColor = .labelColor
         view.string = text
         view.setAccessibilityLabel(label)
-        view.delegate = context.coordinator
         context.coordinator.view = view
         if let caret { context.coordinator.place(caret) }
+        // Attached last: the caller's own caret is not reported back to it.
+        view.delegate = context.coordinator
         return scroll
     }
 
