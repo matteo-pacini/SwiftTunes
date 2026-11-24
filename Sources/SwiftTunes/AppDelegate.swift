@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.statusItem = statusItem
         self.nowPlaying = nowPlaying
         if let demo {
+            statusItem.startProbe(demo)
             statusItem.applyDemo(demo)
         } else if CommandLine.arguments.contains("--open-on-launch") {
             statusItem.openOnLaunch()

@@ -166,78 +166,89 @@ struct EditorView: View {
                 if !card.chip.isEmpty { Pill(text: card.chip) }
             }
             Text(verbatim: card.title).font(.system(size: 20, weight: .bold, design: .rounded)).lineLimit(1)
-            Form {
-                Section {
-                    row(card.name, .name) {
-                        TextField(text: binding(.name), prompt: Text(verbatim: card.name.placeholder)) { Text(verbatim: card.name.label) }
-                            .labelsHidden()
-                            .multilineTextAlignment(.trailing)
-                            .focused($focus, equals: .name)
+            // Grouped rows drawn here rather than by a grouped Form, which is a
+            // scrolling list: in the popover, a scroll view was seen to block
+            // the main thread in the renderer's surface allocation
+            // (CAContext waitForCommitId), stalling main-actor work for
+            // seconds, and every time with a field focused in the Form.
+            VStack(spacing: 0) {
+                row(card.name, .name) {
+                    TextField(text: binding(.name), prompt: Text(verbatim: card.name.placeholder)) { Text(verbatim: card.name.label) }
+                        .labelsHidden()
+                        .multilineTextAlignment(.trailing)
+                        .focused($focus, equals: .name)
+                }
+                Divider()
+                row(card.caption, .caption) {
+                    TextField(text: binding(.caption), prompt: Text(verbatim: card.caption.placeholder), axis: .vertical) { Text(verbatim: card.caption.label) }
+                        .labelsHidden()
+                        .lineLimit(1...4)
+                        .multilineTextAlignment(.trailing)
+                        .focused($focus, equals: .caption)
+                }
+                Divider()
+                // Variations run to 120 characters a line: the box takes the
+                // row's whole width under its label, not the right-hand half.
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(verbatim: card.turns.label)
+                        Spacer()
+                        Text(verbatim: card.turns.side).font(.system(size: 10.5)).foregroundStyle(.secondary)
                     }
-                    row(card.caption, .caption) {
-                        TextField(text: binding(.caption), prompt: Text(verbatim: card.caption.placeholder), axis: .vertical) { Text(verbatim: card.caption.label) }
-                            .labelsHidden()
-                            .lineLimit(1...4)
-                            .multilineTextAlignment(.trailing)
-                            .focused($focus, equals: .caption)
-                    }
-                    // Variations run to 120 characters a line: the box takes the
-                    // row's whole width under its label, not the right-hand half.
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(verbatim: card.turns.label)
-                            Spacer()
-                            Text(verbatim: card.turns.side).font(.system(size: 10.5)).foregroundStyle(.secondary)
-                        }
-                        TextEditor(text: binding(.turns))
-                            .frame(height: 64)
-                            .scrollContentBackground(.hidden)
-                            .focused($focus, equals: .turns)
-                            .accessibilityLabel(Text(verbatim: card.turns.label))
-                            .overlay(alignment: .topLeading) {
-                                if card.values.turns.isEmpty {
-                                    Text(verbatim: card.turns.placeholder).foregroundStyle(.tertiary).padding(.leading, 5).allowsHitTesting(false)
-                                }
+                    TextEditor(text: binding(.turns))
+                        .frame(height: 64)
+                        .scrollContentBackground(.hidden)
+                        .focused($focus, equals: .turns)
+                        .accessibilityLabel(Text(verbatim: card.turns.label))
+                        .overlay(alignment: .topLeading) {
+                            if card.values.turns.isEmpty {
+                                Text(verbatim: card.turns.placeholder).foregroundStyle(.tertiary).padding(.leading, 5).allowsHitTesting(false)
                             }
-                        if !card.turns.error.isEmpty { error(card.turns.error) }
-                    }
-                    VStack(alignment: .leading, spacing: 3) {
-                        LabeledContent {
-                            HStack(spacing: 6) {
-                                tempo(.slowest, card.slowest)
-                                Text(verbatim: "to").foregroundStyle(.secondary)
-                                tempo(.fastest, card.fastest)
-                                Text(verbatim: "BPM").foregroundStyle(.secondary)
-                            }
-                        } label: {
-                            Text(verbatim: "Tempo")
                         }
-                        if !card.tempoError.isEmpty { error(card.tempoError) }
+                    if !card.turns.error.isEmpty { error(card.turns.error) }
+                }
+                .groupedRow()
+                Divider()
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Text(verbatim: "Tempo")
+                        Spacer()
+                        tempo(.slowest, card.slowest)
+                        Text(verbatim: "to").foregroundStyle(.secondary)
+                        tempo(.fastest, card.fastest)
+                        Text(verbatim: "BPM").foregroundStyle(.secondary)
                     }
-                    Toggle(isOn: Binding(get: { card.singing.on }, set: { _ in model.toggleSung() })) {
+                    if !card.tempoError.isEmpty { error(card.tempoError) }
+                }
+                .groupedRow()
+                Divider()
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(verbatim: card.singing.label)
-                        Text(verbatim: card.singing.sub)
+                        Text(verbatim: card.singing.sub).font(.system(size: 11.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
-                    .toggleStyle(.switch)
-                    LabeledContent {
-                        HStack(spacing: 6) {
-                            ForEach(0..<card.colours.count, id: \.self) { i in
-                                ColorPicker(selection: colour(i), supportsOpacity: false) { Text(verbatim: "\(card.coloursLabel) \(i + 1)") }
-                                    .labelsHidden()
-                                    .controlSize(.small)
-                            }
-                        }
-                    } label: {
-                        Text(verbatim: card.coloursLabel)
+                    Spacer()
+                    Toggle(isOn: Binding(get: { card.singing.on }, set: { _ in model.toggleSung() })) { Text(verbatim: card.singing.label) }
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .controlSize(.small)
+                }
+                .groupedRow()
+                Divider()
+                HStack {
+                    Text(verbatim: card.coloursLabel)
+                    Spacer()
+                    ForEach(0..<card.colours.count, id: \.self) { i in
+                        ColorPicker(selection: colour(i), supportsOpacity: false) { Text(verbatim: "\(card.coloursLabel) \(i + 1)") }
+                            .labelsHidden()
+                            .controlSize(.small)
                     }
                 }
+                .groupedRow()
             }
-            .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
-            .scrollDisabled(true)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, -20)
-            .padding(.vertical, -20)
+            .textFieldStyle(.plain)
+            .font(.system(size: 12.5))
+            .glassEffect(.regular, in: .rect(cornerRadius: 13))
             Text(verbatim: card.hint).font(.system(size: 11.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 if let delete = card.delete {
@@ -266,17 +277,19 @@ struct EditorView: View {
 
     private func row<C: View>(_ field: EditorCard.Field, _ which: EditorField, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            LabeledContent {
-                content()
-            } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(verbatim: field.label)
                     if !field.side.isEmpty { Text(verbatim: field.side).font(.system(size: 10.5)).foregroundStyle(.secondary) }
                 }
+                .fixedSize()
+                Spacer(minLength: 0)
+                content()
             }
             .accessibilityLabel(Text(verbatim: field.label))
             if !field.error.isEmpty { error(field.error) }
         }
+        .groupedRow()
     }
 
     private func error(_ text: String) -> some View {
@@ -446,5 +459,12 @@ struct ShareRow: View {
         .background(hovered && row.control.enabled ? Color.primary.opacity(0.08) : .clear)
         .contentShape(Rectangle())
         .opacity(row.control.enabled ? 1 : 0.5)
+    }
+}
+
+extension View {
+    /// The padding of one row in a glass group.
+    func groupedRow() -> some View {
+        padding(.horizontal, 12).padding(.vertical, 9).frame(maxWidth: .infinity, alignment: .leading)
     }
 }

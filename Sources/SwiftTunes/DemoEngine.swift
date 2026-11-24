@@ -22,6 +22,16 @@ struct DemoOptions {
     /// file every so many seconds, as if the engine had sent it.
     var step: Double?
     var stillBackdrop: Bool
+    /// `--demo-probe <file>`: a line per 100 ms main-actor tick, with how late
+    /// it came, the run loop mode, and whether the app and the popover are
+    /// active, written to the file.
+    var probe: URL?
+    /// `--demo-no-nap`: hold a user-initiated activity, so App Nap cannot
+    /// slow the process.
+    var noNap: Bool
+    /// `--demo-open-after <seconds>`: the card opens this long after the
+    /// popover, as a click would open it.
+    var openAfter: Double?
     /// `--demo-inactive`: the app gives up being active once the popover is
     /// open, to look at the cards in a window that is not key.
     var inactive: Bool
@@ -87,6 +97,9 @@ struct DemoOptions {
         inactive = arguments.contains("--demo-inactive")
         step = value("--demo-step").flatMap(Double.init)
         stillBackdrop = arguments.contains("--demo-still-backdrop")
+        probe = value("--demo-probe").map { URL(fileURLWithPath: $0) }
+        noNap = arguments.contains("--demo-no-nap")
+        openAfter = value("--demo-open-after").flatMap(Double.init)
         switch value("--demo-appearance") {
         case "light": appearance = .aqua
         case "dark": appearance = .darkAqua

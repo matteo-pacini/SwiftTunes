@@ -151,11 +151,56 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
     func applyDemo(_ demo: DemoOptions) {
         guard let open = demo.open else { return }
         openOnLaunch { [weak self] in
+            if let after = demo.openAfter { try? await Task.sleep(for: .seconds(after)) }
             guard let self else { return }
             await open.apply(to: model)
             if demo.inactive {
                 try? await Task.sleep(for: .milliseconds(300))
                 NSApp.deactivate()
+            }
+        }
+    }
+
+    private var probeTask: Task<Void, Never>?
+    private var activity: NSObjectProtocol?
+
+    /// The demo's probe: how late each 100 ms main-actor tick comes.
+    func startProbe(_ demo: DemoOptions) {
+        if demo.noNap {
+            activity = ProcessInfo.processInfo.beginActivity(options: .userInitiated, reason: "demo probe")
+        }
+        guard let url = demo.probe else { return }
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+        let file = try? FileHandle(forWritingTo: url)
+        // The run loop's own view, independent of the main actor: a timer in
+        // the common modes logs the mode it fires in.
+        let begun = Date()
+        let host = popover.contentViewController
+        let timer = Timer(timeInterval: 0.25, repeats: true) { _ in
+            MainActor.assumeIsolated {
+                let size = host?.preferredContentSize ?? .zero
+                let frame = host?.view.window?.frame.size ?? .zero
+                let line = String(format: "%.2f timer mode %@ preferred %.1f x %.1f window %.1f x %.1f\n", Date().timeIntervalSince(begun),
+                                  RunLoop.main.currentMode?.rawValue ?? "-", size.width, size.height, frame.width, frame.height)
+                file?.write(Data(line.utf8))
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        probeTask = Task { [weak self] in
+            let start = Date()
+            var expected = start
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(100))
+                expected += 0.1
+                let now = Date()
+                guard let self else { return }
+                let card = String(describing: model.card).prefix(while: { $0 != "(" })
+                let line = String(format: "%.2f late %4.0f ms mode %@ active %d key %d card %@\n",
+                                  now.timeIntervalSince(start), now.timeIntervalSince(expected) * 1000,
+                                  RunLoop.main.currentMode?.rawValue ?? "-", NSApp.isActive ? 1 : 0,
+                                  popover.contentViewController?.view.window?.isKeyWindow == true ? 1 : 0, String(card))
+                file?.write(Data(line.utf8))
+                expected = now
             }
         }
     }
