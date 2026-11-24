@@ -507,9 +507,10 @@ round".
 - **The icon file.** `Resources/AppIcon.icns` is made from the source by
   `Scripts/make-icon.sh`, with Apple's tools only: the art is clipped to the
   macOS icon shape, a rounded square inset in the canvas, and written at
-  every size from 16 to 1024 points, at 1x and 2x. Both files are committed;
+  every size from 16 to 1024 points, at 1x and 2x. It also writes `docs/screenshots/icon.png`, the
+  256-pixel member, for the README. All three files are committed;
   a build does not make the icon again. A new picture means running the
-  script and committing both.
+  script and committing all three.
 - **In the bundle.** `Support/Info.plist` names it (`CFBundleIconFile`),
   `Scripts/make-app.sh` copies it into `Contents/Resources` and fails
   without it.
