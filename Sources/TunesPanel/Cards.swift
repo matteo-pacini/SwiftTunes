@@ -67,12 +67,16 @@ public struct WordsCard: Sendable, Equatable {
 /// Everything that will play this round, in order.
 public struct QueueCard: Sendable, Equatable {
     public var back: Control
-    /// `QUEUE · N THIS ROUND`.
+    /// `THIS ROUND · N TUNES`.
     public var label: String
     public var title: String
+    /// The modes: `shuffled · repeat all` and the like.
     public var head: String
+    /// Every tune of the round, in list order.
     public var rows: [PlayerCard.Row]
-    /// Under the list: what happens after it, nil with nothing queued.
+    /// The row to bring into view: the playing tune's, nil when none plays.
+    public var scrollTo: String?
+    /// Under the list: what happens after it, nil with an empty round.
     public var last: String?
     public var making: PlayerCard.Making?
     public var palette: Palette
@@ -250,6 +254,9 @@ public struct PlayerCard: Sendable, Equatable {
         public var playPause: Control
         /// Whether the main button shows pause.
         public var showsPause: Bool
+        /// Enabled while there is a tune, paused included.
+        public var previous: Control
+        public var previousCommand: Command?
         public var next: Control
         public var shuffle: Control
         public var `repeat`: Control
@@ -284,8 +291,11 @@ public struct PlayerCard: Sendable, Equatable {
         public var help: String
     }
 
-    /// UP NEXT: finished tunes in play order, numbered from 1.
+    /// THIS ROUND: the playing tune and the next two, or the next three,
+    /// numbered by their place in the round.
     public struct Next: Sendable, Equatable {
+        public var label: String
+        /// `N of M` while a tune plays, else `M tunes`.
         public var head: String
         public var rows: [Row]
         /// `then N more this round · Show all`, opening the queue card, when
@@ -293,7 +303,7 @@ public struct PlayerCard: Sendable, Equatable {
         public var more: Control?
     }
 
-    /// BEING MADE: the job and what has not started, under UP NEXT.
+    /// BEING MADE: the job and what has not started, under THIS ROUND.
     public struct Making: Sendable, Equatable {
         public var head: String
         public var rows: [Row]
@@ -304,8 +314,11 @@ public struct PlayerCard: Sendable, Equatable {
         /// Stable while the row shows the same tune.
         public var id: String
         public var kind: Kind
-        /// A queue index for a tune row.
+        /// A tune row's index in `played` or `queue`, by its state.
         public var index: Int?
+        /// The tune's place in the round: played rows are dimmed, the
+        /// playing one highlighted with a level meter for its number.
+        public var state: RoundState = .waiting
         public var number: String
         public var name: String
         public var nameTone: Tone
@@ -415,6 +428,8 @@ public struct Animating: Sendable, Equatable {
     public var heroForming: Bool
     /// The job row's small forming wave moves.
     public var jobForming: Bool
+    /// The playing row's level meter moves.
+    public var meter: Bool
 }
 
 /// The status item menu's `Remove Music Model…` and the alert it asks with.

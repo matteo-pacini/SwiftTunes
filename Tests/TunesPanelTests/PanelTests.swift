@@ -387,21 +387,13 @@ struct ModeTests {
         s.model.state = c.composing ? .idle : .unloaded
         let p = try player(s)
         #expect(p.now.suffix == (c.ended ? "" : c.mode == .one ? "repeating" : "kept tunes"))
-        let head: String
-        if c.ended {
-            head = "nothing"
-        } else if c.mode == .one {
-            head = "after the repeat"
-        } else if c.fresh {
-            head = "1 new, then kept"
-        } else {
-            head = c.shuffle ? "from 14 kept, shuffled" : "14 kept, in the order made"
-        }
-        #expect(p.next.head == head)
+        // The count is places in the round, whatever the modes.
+        #expect(p.next.head == (c.ended ? "0 tunes" : "1 of \(1 + s.queue.count)"))
         let tunes = p.next.rows.filter { $0.kind == .tune }
-        #expect(tunes.allSatisfy { $0.dim == (c.mode == .one) })
-        // UP NEXT shows three rows.
-        #expect(tunes.map(\.tag) == s.queue.prefix(3).map { $0.new ? "new" : "" })
+        // The playing tune is never dimmed; under repeat one the rest are.
+        #expect(tunes.map(\.dim) == tunes.map { $0.state == .waiting && c.mode == .one })
+        // The playing tune and the next two.
+        #expect(tunes.dropFirst().map(\.tag) == s.queue.prefix(2).map { $0.new ? "new" : "" })
         // Numbered from 1 in play order, new or kept alike.
         #expect(tunes.map(\.number) == (1...max(1, tunes.count)).prefix(tunes.count).map(String.init))
         #expect(lines(p).filter { $0.contains("until the repeat ends") } == (c.mode == .one && c.fresh ? ["1 new tune waits until the repeat ends."] : []))
@@ -414,7 +406,7 @@ struct ModeTests {
     func twoWaiting() throws {
         let p = try player(Fixture.load("32-repeat-one"))
         #expect(lines(p) == ["Makes Jazz, keeps 2 ahead | resting, queue is full", "2 new tunes wait until the repeat ends."])
-        #expect(rows(p) == [["1", "Neon Harbour", "104 BPM · A minor", "2:55"], ["2", "Slow Signal", "118 BPM · E minor", "2:50"]])
+        #expect(rows(p) == [["1", "Lazy Avenue", "139 BPM · C major", "2:57"], ["2", "Neon Harbour", "104 BPM · A minor", "2:55"], ["3", "Slow Signal", "118 BPM · E minor", "2:50"]])
     }
 
     @Test("repeat off at the end of the round: the ended state")
@@ -424,7 +416,7 @@ struct ModeTests {
         #expect([p.now.title, p.now.meta] == ["Played all 14 Jazz tunes", "Play starts over. Repeat is off."])
         #expect(p.now.titleTone == .soft && !p.now.showsPause && p.now.playPause.enabled && !p.now.next.enabled)
         #expect(p.now.wave == nil && p.now.time == nil && !p.now.scrap.enabled)
-        #expect(p.next.head == "nothing" && p.next.rows.isEmpty)
+        #expect(p.next.head == "0 tunes" && p.next.rows.isEmpty)
         #expect(Decide.statusItem(s) == StatusItem(dim: true, text: "", dot: nil, help: "SwiftTunes"))
         #expect(!Decide.needsTick(s, Panel(), now: NOW))
         var one = s
@@ -437,11 +429,11 @@ struct ModeTests {
     func pinned() throws {
         let p = try player(Fixture.load("34-pinned"))
         #expect(p.now.badge == "★ kept for good")
-        #expect(p.next.rows.map { "\($0.name) \($0.star) \($0.tag) \($0.dim)" } == ["Brass Lantern true  false"])
+        #expect(p.next.rows.map { "\($0.name) \($0.star) \($0.tag) \($0.dim)" } == ["Lazy Avenue true  false", "Brass Lantern true  false"])
         let plain = try player(Fixture.load("30-modes-default"))
-        #expect(plain.now.badge == "" && plain.next.rows.map(\.star) == [false])
-        // Rows are numbered by their place in the queue, from 1.
-        #expect(try rows(player(Fixture.load("31-shuffle-off"))).map { [$0[0], $0[1]] } == [["1", "Brass Lantern"], ["2", "Quiet Ledger"], ["3", "Late Tram"]])
+        #expect(plain.now.badge == "" && plain.next.rows.allSatisfy { !$0.star })
+        // Rows are numbered by their place in the round, from 1.
+        #expect(try player(Fixture.load("31-shuffle-off")).next.rows.dropFirst().map { [$0.number, $0.name] } == [["2", "Brass Lantern"], ["3", "Quiet Ledger"]])
     }
 }
 

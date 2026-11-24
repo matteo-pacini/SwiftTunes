@@ -428,12 +428,13 @@ extension Panel {
     public func shareTargetNow(_ snapshot: Snapshot) -> TuneTarget? {
         guard let s = share else { return nil }
         let same = { (name: String, file: String) in name == s.target.name || (!s.file.isEmpty && file == s.file) }
-        if s.target.index != nil, let j = snapshot.queue.firstIndex(where: { same($0.name, $0.file) }) {
-            return TuneTarget(name: snapshot.queue[j].name, index: j)
-        }
-        if let t = snapshot.tune, same(t.name, t.file) {
-            return TuneTarget(name: t.name, index: nil)
-        }
+        let playing = { snapshot.tune.flatMap { same($0.name, $0.file) ? TuneTarget(name: $0.name, index: nil) : nil } }
+        let queued = { snapshot.queue.firstIndex { same($0.name, $0.file) }.map { TuneTarget(name: snapshot.queue[$0].name, index: $0) } }
+        let played = { snapshot.played.firstIndex { same($0.name, $0.file) }.map { TuneTarget(name: snapshot.played[$0].name, index: $0, inPlayed: true) } }
+        // The round moves on while the sheet is open: where the tune was
+        // first, then wherever it is now.
+        let places = s.target.inPlayed ? [played, playing, queued] : s.target.index != nil ? [queued, playing, played] : [playing, queued, played]
+        for place in places { if let t = place() { return t } }
         return TuneTarget(name: s.file.isEmpty ? s.target.name : s.file, index: nil)
     }
 

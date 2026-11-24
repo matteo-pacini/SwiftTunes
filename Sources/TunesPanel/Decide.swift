@@ -325,6 +325,8 @@ public enum Decide {
             time: time,
             playPause: Control(enabled: t != nil || canPlay(s) || s.ended, help: playing ? "Pause" : "Play"),
             showsPause: playing,
+            previous: Control(enabled: t != nil, help: "Previous"),
+            previousCommand: t == nil ? nil : .previous,
             next: Control(enabled: s.canNext, help: "Next"),
             shuffle: Control(lit: s.shuffle, help: "Shuffle"),
             repeat: Control(lit: s.repeat != .off, text: s.repeat.rawValue, help: "Repeat \(nextMode.rawValue)"),
@@ -343,45 +345,62 @@ public enum Decide {
         return "about \(Format.clock(max(10, (left / 10).rounded() * 10))) left"
     }
 
-    /// Rows UP NEXT shows in the player.
+    /// Rows THIS ROUND shows in the player.
     public static let upNextRows = 3
 
-    /// Every queued tune as a row, numbered from 1 in play order.
-    static func queueRows(_ s: Snapshot) -> [PlayerCard.Row] {
-        let waits = s.repeat == .one
+    /// The round's entries as rows. Each row's commands and share target
+    /// carry its index and name as drawn.
+    static func roundRows(_ s: Snapshot, _ entries: some Sequence<RoundEntry>) -> [PlayerCard.Row] {
         let colours = palette(s)
-        return s.queue.enumerated().map { i, q in
-            PlayerCard.Row(
-                id: "tune \(q.file) \(i)", kind: .tune, index: i, number: String(i + 1), name: q.name, nameTone: .normal,
-                tag: q.new ? "new" : "", star: q.pinned, dim: waits,
-                sub: metaOf(bpm: q.bpm, key: q.key, sung: q.sung), right: q.length.map { Format.clock($0) } ?? "", rightTone: .dim, bar: nil,
-                artwork: Artwork.recipe(name: q.name, bpm: q.bpm, key: q.key, palette: colours), stage: nil,
-                playNow: Control(help: "Play it now"), share: Control(help: "Share"), scrap: Control(help: "Scrap \(q.name)"),
-                playNowCommand: .playQueued(index: i, name: q.name),
-                scrapCommand: .scrapQueued(index: i, name: q.name),
-                shareRequest: ShareRequest(target: TuneTarget(name: q.name, index: i), file: q.file, sung: q.sung)
+        return entries.map { e in
+            let playNow: Control?
+            let playNowCommand: Command?
+            let scrapCommand: Command
+            let target: TuneTarget
+            switch e.state {
+            case .played:
+                playNow = Control(help: "Play it again")
+                playNowCommand = .playPlayed(index: e.index, name: e.name)
+                scrapCommand = .scrapPlayed(index: e.index, name: e.name)
+                target = TuneTarget(name: e.name, index: e.index, inPlayed: true)
+            case .playing:
+                playNow = nil
+                playNowCommand = nil
+                scrapCommand = .scrapPlaying(name: e.name)
+                target = TuneTarget(name: e.name, index: nil)
+            case .waiting:
+                playNow = Control(help: "Play it now")
+                playNowCommand = .playQueued(index: e.index, name: e.name)
+                scrapCommand = .scrapQueued(index: e.index, name: e.name)
+                target = TuneTarget(name: e.name, index: e.index)
+            }
+            return PlayerCard.Row(
+                id: "tune \(e.id)", kind: .tune, index: e.state == .playing ? nil : e.index, state: e.state, number: String(e.number),
+                name: e.name, nameTone: .normal, tag: e.new ? "new" : "", star: e.pinned,
+                // Under repeat one the waiting tunes wait behind the repeat.
+                dim: e.state == .played || (e.state == .waiting && s.repeat == .one),
+                sub: metaOf(bpm: e.bpm, key: e.key, sung: e.sung), right: e.length.map { Format.clock($0) } ?? "", rightTone: .dim, bar: nil,
+                artwork: Artwork.recipe(name: e.name, bpm: e.bpm, key: e.key, palette: colours), stage: nil,
+                playNow: playNow, share: Control(help: "Share"), scrap: Control(help: "Scrap \(e.name)"),
+                playNowCommand: playNowCommand,
+                scrapCommand: scrapCommand,
+                shareRequest: ShareRequest(target: target, file: e.file, sung: e.sung)
             )
         }
     }
 
-    /// UP NEXT's and the queue card's right-hand text.
-    static func queueHead(_ s: Snapshot) -> String {
-        if s.queue.isEmpty { return "nothing" }
-        if s.repeat == .one { return "after the repeat" }
-        let fresh = s.queue.filter(\.new).count
-        let keptFollow = s.queue.contains { $0.kept }
-        if fresh > 0 { return keptFollow ? "\(fresh) new, then kept" : "\(fresh) new" }
-        let kept = keptCount(s)
-        return s.shuffle ? "from \(kept) kept, shuffled" : "\(kept) kept, in the order made"
+    static func round(_ s: Snapshot) -> [RoundEntry] {
+        round(played: s.played, tune: s.tune, queue: s.queue)
     }
 
     static func nextSection(_ s: Snapshot, now: Double) -> PlayerCard.Next {
-        let rows = queueRows(s)
-        let hidden = rows.count - upNextRows
+        let entries = round(s)
+        let window = roundWindow(entries)
         return PlayerCard.Next(
-            head: queueHead(s),
-            rows: Array(rows.prefix(upNextRows)),
-            more: hidden > 0 ? Control(text: "then \(hidden) more this round · Show all", help: "Show all") : nil
+            label: "THIS ROUND",
+            head: roundCount(entries),
+            rows: roundRows(s, window.rows),
+            more: window.more > 0 ? Control(text: "then \(window.more) more this round · Show all", help: "Show all") : nil
         )
     }
 
@@ -452,15 +471,18 @@ public enum Decide {
     }
 
     static func queueCard(_ s: Snapshot, now: Double) -> QueueCard {
-        let last: String? = s.queue.last.map { t in
-            s.repeat == .off ? "The round ends after \(t.name)." : "after these, the round starts over"
+        let entries = round(s)
+        let last: String? = entries.last.map { t in
+            s.repeat == .off ? "The round ends after \(t.name)." : "after these, a new round is drawn"
         }
+        let rows = roundRows(s, entries)
         return QueueCard(
             back: Control(text: genreName(s), help: "Back"),
-            label: "QUEUE · \(s.queue.count) THIS ROUND",
-            title: "Up next",
-            head: queueHead(s),
-            rows: queueRows(s),
+            label: "THIS ROUND · \(Format.plural(entries.count, "tune", "tunes").uppercased())",
+            title: "This round",
+            head: roundModes(shuffle: s.shuffle, repeat: s.repeat),
+            rows: rows,
+            scrollTo: roundScrollTarget(rows),
             last: last,
             making: making(s, now: now),
             palette: palette(s)
@@ -629,16 +651,20 @@ public enum Decide {
         let allowed = popoverOpen && !reduceMotion
         var hero = false
         var job = false
+        var meterShown = false
         switch card(s, p, now: now, home: "") {
         case .player(let c):
             hero = c.now.forming != nil
             job = c.making?.rows.contains { $0.kind == .job } ?? false
+            meterShown = c.next.rows.contains { $0.state == .playing }
         case .queue(let c):
             job = c.making?.rows.contains { $0.kind == .job } ?? false
+            meterShown = c.rows.contains { $0.state == .playing }
         default:
             break
         }
-        return Animating(backdrop: allowed && !lowPower, heroForming: allowed && hero, jobForming: allowed && job)
+        return Animating(backdrop: allowed && !lowPower, heroForming: allowed && hero, jobForming: allowed && job,
+                         meter: allowed && meterShown && s.player == .playing)
     }
 
     /// `Remove Music Model…`: enabled while anything of the model is on

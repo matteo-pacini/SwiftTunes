@@ -19,7 +19,7 @@ struct SingingTests {
         let s = try sungSnapshot()
         let p = try player(s)
         #expect(p.now.meta == "139 BPM · C major · sung")
-        #expect(p.next.rows.map(\.sub) == ["112 BPM · F major · sung", "96 BPM · D minor"])
+        #expect(p.next.rows.map(\.sub) == ["139 BPM · C major · sung", "112 BPM · F major · sung", "96 BPM · D minor"])
         var paused = s
         paused.player = .paused
         #expect(try player(paused).now.meta == "139 BPM · C major · sung · paused")

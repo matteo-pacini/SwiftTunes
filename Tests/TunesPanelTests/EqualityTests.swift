@@ -42,7 +42,8 @@ struct EqualityTests {
             ("wave", { flip(&$0.wave, PlayerCard.Wave(levels: [], played: 0, help: "")) }),
             ("forming", { $0.forming = other($0.forming) }), ("repeatsOne", { $0.repeatsOne.toggle() }),
             ("time", { flip(&$0.time, PlayerCard.Clock(left: "1", right: "2")) }),
-            ("playPause", { $0.playPause.lit.toggle() }), ("showsPause", { $0.showsPause.toggle() }), ("next", { $0.next.lit.toggle() }),
+            ("playPause", { $0.playPause.lit.toggle() }), ("showsPause", { $0.showsPause.toggle() }),
+            ("previous", { $0.previous.lit.toggle() }), ("previousCommand", { flip(&$0.previousCommand, .next) }), ("next", { $0.next.lit.toggle() }),
             ("shuffle", { $0.shuffle.text += "x" }), ("repeat", { $0.repeat.text += "x" }), ("share", { $0.share.text += "x" }),
             ("scrap", { $0.scrap.text += "x" }),
             ("shareRequest", { flip(&$0.shareRequest, ShareRequest(target: TuneTarget(name: "x", index: 3), file: "f")) }),
@@ -67,14 +68,15 @@ struct EqualityTests {
             ("now", { $0.now.title += "x" }), ("next", { $0.next.head += "x" }), ("making", { flip(&$0.making, PlayerCard.Making(head: "", rows: [])) }),
             ("composer", { $0.composer.label += "x" }),
         ] as [Change<PlayerCard>])
-        expectEachFieldCounts(base.next, [("head", { $0.head += "x" }), ("rows", { $0.rows.append(base.making!.rows[0]) }), ("more", { flip(&$0.more, anyControl) })] as [Change<PlayerCard.Next>])
+        expectEachFieldCounts(base.next, [("label", { $0.label += "x" }), ("head", { $0.head += "x" }), ("rows", { $0.rows.append(base.making!.rows[0]) }), ("more", { flip(&$0.more, anyControl) })] as [Change<PlayerCard.Next>])
         expectEachFieldCounts(try #require(base.making), [("head", { $0.head += "x" }), ("rows", { $0.rows.removeLast() })] as [Change<PlayerCard.Making>])
     }
 
     @Test func row() throws {
         let base = try player(Fixture.load("05-queue-full")).next.rows[0]
         expectEachFieldCounts(base, [
-            ("id", { $0.id += "x" }), ("kind", { $0.kind = .job }), ("index", { flip(&$0.index, 7) }), ("number", { $0.number += "x" }),
+            ("id", { $0.id += "x" }), ("kind", { $0.kind = .job }), ("index", { flip(&$0.index, 7) }),
+            ("state", { $0.state = $0.state == .playing ? .played : .playing }), ("number", { $0.number += "x" }),
             ("name", { $0.name += "x" }), ("nameTone", { $0.nameTone = other($0.nameTone) }), ("tag", { $0.tag += "x" }),
             ("star", { $0.star.toggle() }), ("dim", { $0.dim.toggle() }), ("sub", { $0.sub += "x" }), ("right", { $0.right += "x" }),
             ("rightTone", { $0.rightTone = other($0.rightTone) }), ("bar", { flip(&$0.bar, 0.5) }),
@@ -172,7 +174,7 @@ struct EqualityTests {
         let base = Decide.queueCard(try Fixture.load("10-writing"), now: NOW)
         expectEachFieldCounts(base, [
             ("back", { $0.back.lit.toggle() }), ("label", { $0.label += "x" }), ("title", { $0.title += "x" }), ("head", { $0.head += "x" }),
-            ("rows", { $0.rows.append(base.making!.rows[0]) }), ("last", { flip(&$0.last, "l") }),
+            ("rows", { $0.rows.append(base.making!.rows[0]) }), ("scrollTo", { flip(&$0.scrollTo, "x") }), ("last", { flip(&$0.last, "l") }),
             ("making", { flip(&$0.making, PlayerCard.Making(head: "", rows: [])) }), ("palette", { $0.palette = Palette.made(from: "else") }),
         ] as [Change<QueueCard>])
     }
@@ -198,8 +200,9 @@ struct EqualityTests {
             ("menuTitle", { $0.menuTitle += "x" }), ("enabled", { $0.enabled.toggle() }), ("alertTitle", { $0.alertTitle += "x" }),
             ("alertText", { $0.alertText += "x" }), ("remove", { $0.remove += "x" }), ("cancel", { $0.cancel += "x" }), ("command", { $0.command = .refresh }),
         ] as [Change<ModelRemoval>])
-        expectEachFieldCounts(Animating(backdrop: false, heroForming: false, jobForming: false), [
+        expectEachFieldCounts(Animating(backdrop: false, heroForming: false, jobForming: false, meter: false), [
             ("backdrop", { $0.backdrop.toggle() }), ("heroForming", { $0.heroForming.toggle() }), ("jobForming", { $0.jobForming.toggle() }),
+            ("meter", { $0.meter.toggle() }),
         ] as [Change<Animating>])
     }
 }
@@ -227,10 +230,10 @@ struct AnimatingTests {
     }
 
     @Test("nothing moves with the popover closed or Reduce Motion on; Low Power stills only the backdrop", arguments: [
-        (false, false, false, Animating(backdrop: false, heroForming: false, jobForming: false)),
-        (true, true, false, Animating(backdrop: false, heroForming: false, jobForming: false)),
-        (true, false, true, Animating(backdrop: false, heroForming: true, jobForming: true)),
-        (true, false, false, Animating(backdrop: true, heroForming: true, jobForming: true)),
+        (false, false, false, Animating(backdrop: false, heroForming: false, jobForming: false, meter: false)),
+        (true, true, false, Animating(backdrop: false, heroForming: false, jobForming: false, meter: false)),
+        (true, false, true, Animating(backdrop: false, heroForming: true, jobForming: true, meter: false)),
+        (true, false, false, Animating(backdrop: true, heroForming: true, jobForming: true, meter: false)),
     ])
     func flags(_ open: Bool, _ reduce: Bool, _ lowPower: Bool, _ expected: Animating) throws {
         let writing = try sequence()[2]
