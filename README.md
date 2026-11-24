@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Resources/AppIcon.png" width="96" alt="The SwiftTunes icon: a white swift in a wide glide under a pair of lavender beamed notes, on near-black.">
+  <img src="docs/screenshots/icon.png" width="96" alt="The SwiftTunes icon: a white swift in a wide glide under a pair of lavender beamed notes, on near-black.">
 </p>
 
 # SwiftTunes
