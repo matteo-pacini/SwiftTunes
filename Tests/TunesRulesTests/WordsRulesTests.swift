@@ -58,3 +58,12 @@ import TunesContract
         #expect(summary.contains(#""sung":true"#))
     }
 }
+
+@Suite struct NeedDecodeTests {
+    @Test func onDiskBytesReadsAsZeroWhenAbsentAndIsWritten() throws {
+        let old = try JSONDecoder().decode(Need.self, from: Data(#"{"download_bytes": 1, "disk_free_bytes": 2, "ram_bytes": 3}"#.utf8))
+        #expect(old.onDiskBytes == 0)
+        let text = String(decoding: try JSONEncoder().encode(Need(downloadBytes: 1, diskFreeBytes: 2, ramBytes: 3, onDiskBytes: 4)), as: UTF8.self)
+        #expect(text.contains(#""on_disk_bytes":4"#))
+    }
+}
