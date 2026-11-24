@@ -24,8 +24,8 @@ GPL-3.0-or-later.
 | 2 | Language and UI | Swift 6, complete concurrency checking. macOS 26 is the oldest system it runs on; Liquid Glass is the base material. The shell is AppKit; the popover's content is SwiftUI in an `NSHostingController`. The lifeline shim is C. |
 | 2a | Dependencies | Apple frameworks and tools only, in the app and in the tests. The exceptions are `ace-server` itself, the model, and `cmake` to build the server. |
 | 3 | Who owns `ace-server` | The app, through the lifeline shim: the shim holds the read end of a pipe whose write end only the app holds, and kills the server's process group when the pipe closes. |
-| 4 | Where `ace-server` comes from | Built from the pinned acestep.cpp revision and embedded in `SwiftTunes.app/Contents/Helpers`. |
-| 5 | Signing, releases | Local builds only, ad-hoc signed. No release workflow yet. |
+| 4 | Where `ace-server` comes from | Built from the pinned acestep.cpp revision, without its web page (see "Releases"), and embedded in `SwiftTunes.app/Contents/Helpers`. |
+| 5 | Signing, releases | Local builds are ad-hoc signed. A `v*` tag makes a release: signed with the owner's Developer ID, notarized, a zip on a draft GitHub release (see "Releases"). |
 | 6 | Repository | Private on GitHub; nothing is pushed without the owner's word. |
 | 7 | Kept format | AAC, 256 kbit/s, `.m4a`, encoded by the system. |
 | 8 | Holds | Memory pressure (warn or critical), Low Power Mode, thermal state serious or critical. All three are checked before each job and every 30 s while held. While a job runs only power and heat are checked, every 10 s: the server's own load raises memory pressure, so that check would hold every tune. |
@@ -235,7 +235,7 @@ layout and `docs/CONTRACT.md` each have a single owner.
 | Role | Owns |
 |---|---|
 | lead | `docs/SPEC.md`, `docs/CONTRACT.md`, `AGENTS.md`, merges |
-| repo | `Package.swift`, `Sources/TunesContract/` (a transcription of the contract; changed only on the lead's instruction), `Scripts/`, `Config/`, `Resources/`, `Support/` (Info.plist, entitlements), `README.md`, `LICENSE`, `.gitignore`, `.github/` |
+| repo | `Package.swift`, `Sources/TunesContract/` (a transcription of the contract; changed only on the lead's instruction), `Scripts/`, `Config/`, `Resources/`, `Support/` (Info.plist, entitlements), `README.md`, `LICENSE`, `CHANGELOG.md`, `.gitignore`, `.github/` |
 | engine | `Sources/TunesContract/GenreRules.swift` (the one file of that target with logic; the repo role leaves a stub), `Sources/TunesRules/`, `Sources/TunesEngine/`, `Sources/tunes-lifeline/`, `Tests/TunesRulesTests/`, `Tests/TunesEngineTests/`, `Tests/TunesFakes/` |
 | app | `Sources/TunesPanel/`, `Sources/SwiftTunes/`, `Tests/TunesPanelTests/`, `Tests/SwiftTunesTests/` |
 
@@ -289,7 +289,7 @@ Targets:
 
 ## Not in this round
 
-A release workflow, Developer ID signing and notarization, an updater, a
+An updater, a
 global shortcut, a Nix package, measurements on any other Mac.
 
 ## Removing the music model
@@ -415,3 +415,65 @@ This section adds to "Layout of the popover" and wins where they differ.
 - The level holds across tunes, stop and play, genres and rounds. Muting
   in tests is separate from it. Now Playing and the media keys have no
   part in it.
+
+## Releases
+
+This section wins over decision 5 as first written and over "Not in this
+round".
+
+- **What a release is.** `SwiftTunes-<version>.zip` holding only
+  `SwiftTunes.app` (arm64, macOS 26 or later), and
+  `SwiftTunes-<version>.zip.sha256`, on a GitHub release of the tag
+  `v<version>`. The app and both helpers are signed with the owner's
+  Developer ID with the hardened runtime and a secure timestamp, with no
+  entitlements; the app is notarized and the ticket stapled before it is
+  zipped. The model files are not in it.
+- **The version** lives in `Support/Info.plist`
+  (`CFBundleShortVersionString`, and `CFBundleVersion` equal to it). The tag
+  must be `v` followed by it.
+- **The changelog.** `CHANGELOG.md` is written for the people who use the
+  app, newest first: `## Unreleased`, then one `## <version>` section per
+  release. A change a user can notice adds a line under `Unreleased` as part
+  of its own work. Releasing is one commit on `main` that renames
+  `Unreleased` to the version, sets the version in the plist and opens a new
+  empty `Unreleased`. `Scripts/release-notes.sh <version>` prints that
+  version's section and fails when there is none; the release's text is its
+  output.
+- **Signing in the script.** `Scripts/make-app.sh` signs ad hoc unless
+  `SWIFTTUNES_SIGN_IDENTITY` names an identity; with one it signs the two
+  helpers and then the bundle with it, `--options runtime --timestamp`. It
+  never notarizes: that is the workflow's.
+- **Notices.** The bundle carries `LICENSE` and `ThirdPartyNotices.txt` in
+  `Contents/Resources`: the notice and permission text of each project
+  compiled into `ace-server` (acestep.cpp; ggml, with the copyright line of
+  the code it carries from others; cpp-httplib; yyjson), copied from the
+  pinned sources. `make-app.sh` fails without either file. A new pin is not
+  done until the notices were checked against it.
+- **No web page in the server.** `ace-server` is built with an empty
+  `tools/public/index.html.gz`, so it serves `/health`, `/lm` and `/synth`
+  and nothing at `/`. `Scripts/build-ace-server.sh` empties that one file in
+  its cached checkout and accepts that one change; any other local change
+  still stops it.
+- **The workflow** (`.github/workflows/release.yml`) runs on a pushed `v*`
+  tag, in the `release` environment, which holds the secrets and accepts
+  only `v*` tags. In order: the tag's commit is on `main`, the tag matches
+  the plist and the changelog has the section, all before any secret is
+  used; `swift test`; the signed build; notarize, staple, zip, checksum;
+  `codesign --verify --deep --strict`, `stapler validate` and `spctl
+  --assess`; a **draft** release with the notes and the two files. A tag
+  with a hyphen (`v0.2.0-rc.1`) makes a pre-release. The temporary keychain
+  and the key files are removed whatever happened. A failed run makes no
+  release.
+- **The same tools everywhere.** The workflows that build the app install
+  Nix and run `nix develop -c Scripts/make-app.sh`, so `cmake` is the one
+  `flake.lock` pins. `ci.yml` builds the ad-hoc app on every push, and
+  checks that the changelog has a section for the plist's version.
+- **Secrets.** No workflow uses `pull_request_target`. No secret is echoed,
+  passed on a command line or written into an uploaded file. Every action a
+  job with secrets uses is pinned to a full commit hash.
+- **Tags.** The owner pushes the tag and publishes the draft. A tag whose
+  run failed, or whose draft was thrown away, may be deleted and pushed
+  again; a tag with a published release never moves.
+- **Done** for a release: the run is green, and the owner has opened the
+  downloaded zip on a Mac with no Gatekeeper warning, composed a tune and
+  heard it.

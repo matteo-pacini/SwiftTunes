@@ -133,7 +133,15 @@ the demo's flags: `docs/TESTING.md`.
   `app: …`, `build: …`, `docs: …`.
 - The repository will be public one day: no personal names, emails, host
   names or home paths in files, commits, test data or web requests. Fixtures
-  are invented data in the real formats.
+  are invented data in the real formats. The one exception is the bundle
+  identifier, `me.matteopacini.SwiftTunes`, which is the app's name to the
+  system and stays as it is; a release's signature carries the owner's
+  name too, and that is Apple's doing.
+- A change a user can notice adds a line under `Unreleased` in
+  `CHANGELOG.md`, in plain words for someone who uses the app
+  (`docs/SPEC.md`, "Releases").
+- No workflow uses `pull_request_target`, and none prints a secret or
+  passes one on a command line.
 - Comments say what the code cannot: why, an invariant, a workaround with its
   reference. Never what the line below does, never how the code got here.
 - In every report keep three things apart: what was proven on the real Mac,
