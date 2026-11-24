@@ -33,6 +33,8 @@ public enum Rules {
     public static let drainPoll = 0.1
     /// The footprint change that is worth a new snapshot: 0.1 GiB.
     public static let ramStep: Int64 = 107_374_182
+    /// Within this many seconds of a tune's start, Previous goes back one.
+    public static let previousGrace = 3.0
     /// Kept tunes the queue shows with shuffle off.
     public static let keptShown = 3
     public static let gone = "That tune is no longer there."

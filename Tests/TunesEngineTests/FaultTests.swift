@@ -172,10 +172,12 @@ import TunesRules
         rig.clock.now += 5
         let q = rig.snap.queue[1]
         rig.engine.send(.playQueued(index: 1, name: q.name))
-        // The old item plays on until the new one starts.
+        // The old item plays on until the new one starts; its position is
+        // not read: the chosen tune shows from its start.
         rig.player.position = 47
         await rig.engine.quiet()
-        #expect(rig.snap.pos == 42 && rig.snap.posAt == t)
+        #expect(rig.snap.tune?.file == q.file && rig.snap.pos == 0 && rig.snap.posAt == rig.clock.now)
+        _ = t
         await rig.settle()
         #expect(rig.snap.tune?.file == q.file && rig.snap.pos == 0 && rig.snap.posAt == rig.clock.now)
         await rig.close()
