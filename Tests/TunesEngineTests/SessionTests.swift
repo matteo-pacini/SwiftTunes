@@ -131,6 +131,20 @@ struct Seen {
         #expect(p.next.head == Self.place(rig.snap) && p.next.head == "1 of 3")
         #expect(seen.composerText.first == "On, it makes new Jazz and keeps 2 ahead.")
         #expect(seen.status.text == "Jazz" && !seen.status.dim && seen.status.dot == nil)
+        #expect(p.now.volume.level == 1 && p.now.volume.help == "Volume")
+
+        // The slider dragged and let go: the panel's command, through the
+        // engine, to the player and back on the card.
+        await rig.send(try #require(Decide.volume(fraction: 0.437, dragging: true)))
+        seen = step("volume dragged")
+        p = try #require(seen.player)
+        #expect(rig.player.volume == 0.44 && rig.snap.volume == 0.44)
+        #expect(p.now.volume.level == 0.44 && p.now.volume.help == "Volume")
+        await rig.send(try #require(Decide.volume(fraction: 0.3, dragging: false)))
+        seen = step("volume let go")
+        p = try #require(seen.player)
+        #expect(rig.player.volume == 0.3 && p.now.volume.level == 0.3)
+        #expect(SavedState.parse(Files.read(rig.paths.support.appending(path: "state.json"))).volume == 0.3)
 
         await rig.ace.set(runningPolls: 3)
         await rig.send(.setComposer(on: true))
