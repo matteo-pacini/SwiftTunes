@@ -22,6 +22,8 @@ struct DemoOptions {
     /// file every so many seconds, as if the engine had sent it.
     var step: Double?
     var stillBackdrop: Bool
+    /// `--demo-still`: the clock and every animation held still.
+    var still: Bool
     /// `--demo-probe <file>`: a line per 100 ms main-actor tick, with how late
     /// it came, the run loop mode, and whether the app and the popover are
     /// active, written to the file.
@@ -97,6 +99,7 @@ struct DemoOptions {
         inactive = arguments.contains("--demo-inactive")
         step = value("--demo-step").flatMap(Double.init)
         stillBackdrop = arguments.contains("--demo-still-backdrop")
+        still = arguments.contains("--demo-still")
         probe = value("--demo-probe").map { URL(fileURLWithPath: $0) }
         noNap = arguments.contains("--demo-no-nap")
         openAfter = value("--demo-open-after").flatMap(Double.init)

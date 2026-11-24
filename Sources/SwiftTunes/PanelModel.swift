@@ -23,6 +23,9 @@ final class PanelModel {
     /// The demo's `--demo-still-backdrop`: the backdrop holds still as in
     /// Low Power Mode, so a screenshot shows only what else moves.
     var stillBackdrop = false
+    /// The demo's `--demo-still`: the clock stays where the demo started and
+    /// nothing in the popover moves, so a screenshot catches no transition.
+    var still = false
 
     /// Called after every new snapshot, for the status item and Now Playing.
     @ObservationIgnored var onSnapshot: ((Snapshot) -> Void)?
@@ -43,7 +46,7 @@ final class PanelModel {
             guard let self else { return }
             snapshot = s
             panel = panel.following(s)
-            now = Self.clock()
+            advance()
             updateTick()
             onSnapshot?(s)
         }
@@ -56,6 +59,10 @@ final class PanelModel {
 
     static func clock() -> Double { Date().timeIntervalSince1970 }
 
+    private func advance() {
+        if !still { now = Self.clock() }
+    }
+
     var card: Card { Decide.card(snapshot, panel, now: now, home: home) }
     var footer: Footer? { Decide.footer(snapshot, panel, now: now) }
 
@@ -65,7 +72,7 @@ final class PanelModel {
     func opened() {
         cancelCalls()
         panel = Panel()
-        now = Self.clock()
+        advance()
         isOpen = true
         engine.send(.refresh)
     }
@@ -102,7 +109,7 @@ final class PanelModel {
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(1))
                     guard let self, !Task.isCancelled else { return }
-                    now = Self.clock()
+                    advance()
                     updateTick()
                 }
             }
@@ -114,7 +121,7 @@ final class PanelModel {
 
     private func set(_ p: Panel) {
         panel = p
-        now = Self.clock()
+        advance()
         updateTick()
     }
 

@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let model = PanelModel(engine: engine, home: NSHomeDirectory())
         model.stillBackdrop = demo?.stillBackdrop ?? false
+        model.still = demo?.still ?? false
         let statusItem = StatusItemController(model: model)
         let nowPlaying = NowPlayingController(model: model)
         model.onSnapshot = { [weak statusItem, weak nowPlaying] s in
