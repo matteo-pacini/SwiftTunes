@@ -7,15 +7,15 @@ import TunesPanel
 // (AGENTS.md, "No SwiftUI ScrollView, List, Form or TextEditor").
 
 /// SwiftUI rows in a vertical `NSScrollView`: transparent, with overlay
-/// scrollers, the rows as wide as the box and as tall as they need, and the
-/// bottom edge faded while more lies below it. The caller sets the box's
-/// height.
+/// scrollers, the rows as wide as the box and as tall as they need, and an
+/// edge faded while more lies beyond it. The caller sets the box's height.
 ///
-/// With a `target`, the row marked `.scrollMark(target)` is brought into
-/// view when the box first shows it and each time the target changes; the
-/// user's own scrolling is left alone otherwise.
+/// With `follow`, the box places the playing row as `Decide.listTop` says
+/// when it first shows and each time the playing row changes; the rows are
+/// marked with `.scrollMark(id)`. Otherwise the user's scrolling is left
+/// alone.
 struct ScrollBox<Content: View>: NSViewRepresentable {
-    var target: String? = nil
+    var follow: ScrollFollow? = nil
     @ViewBuilder let content: Content
 
     func makeCoordinator() -> ScrollMarks { ScrollMarks() }
@@ -32,27 +32,43 @@ struct ScrollBox<Content: View>: NSViewRepresentable {
         guard let document = scroll.documentView as? ScrollDocument<Content> else { return }
         document.rootView = Fitted(width: document.rootView.width, marks: context.coordinator, content: content)
         scroll.tile()
-        context.coordinator.target = target
-        context.coordinator.reveal()
+        context.coordinator.follow = follow
+        context.coordinator.place()
     }
 }
 
-/// Where the marked rows sit in a scroll box's document, and the row to
-/// bring into view.
+/// The rows of a list in order, and which one is playing.
+struct ScrollFollow: Equatable {
+    var ids: [String]
+    var playing: Int?
+}
+
+/// Where the marked rows sit in a scroll box's document, and the following
+/// of the playing row.
 final class ScrollMarks {
     nonisolated static let space = "ScrollBox"
-    weak var scroll: NSScrollView?
+    weak var scroll: FadingScrollView?
     var frames: [String: CGRect] = [:]
-    var target: String?
-    /// The target last brought into view; a new target is revealed once.
-    private var revealed: String?
+    var follow: ScrollFollow?
+    /// The playing row last placed (or left alone), so each change of tune
+    /// is acted on once; nil before the first placing.
+    private var placed: String??
 
-    func reveal() {
-        guard let target, target != revealed, let frame = frames[target], let document = scroll?.documentView,
-              document.frame.height >= frame.maxY else { return }
-        revealed = target
-        // Half a row of margin, so the rows either side show they continue.
-        _ = document.scrollToVisible(frame.insetBy(dx: 0, dy: -frame.height / 2))
+    func place() {
+        guard let follow, let scroll, let document = scroll.documentView else { return }
+        let playing = follow.playing.map { follow.ids[$0] }
+        if let placed, placed == playing { return }
+        let first = placed == nil
+        guard let top = Decide.listTop(count: follow.ids.count, playing: follow.playing, pointerInside: scroll.pointerInside,
+                                       userScrolledAt: scroll.userScrolledAt, now: Date().timeIntervalSince1970) else {
+            placed = .some(playing)
+            return
+        }
+        // Until the rows are laid out there is nowhere to scroll to; their
+        // geometry reports call this again.
+        guard let frame = frames[follow.ids[top]], document.frame.height >= frame.maxY else { return }
+        placed = .some(playing)
+        scroll.scroll(toY: frame.minY, animated: !first)
     }
 }
 
@@ -76,7 +92,7 @@ private struct ScrollMark: ViewModifier {
         content.onGeometryChange(for: CGRect.self) { $0.frame(in: .named(ScrollMarks.space)) } action: { frame in
             guard let marks else { return }
             marks.frames[id] = frame
-            if id == marks.target { marks.reveal() }
+            marks.place()
         }
     }
 }
@@ -125,10 +141,15 @@ protocol FitsWidth: NSView {
 }
 
 /// A transparent vertical scroll view whose document fills its width, with
-/// the bottom edge faded while there is more below it.
+/// an edge faded while there is more beyond it. It knows whether the
+/// pointer is over it and when the user last scrolled it.
 final class FadingScrollView: NSScrollView {
     private static let fade: CGFloat = 18
     private let fadeMask = CAGradientLayer()
+    private var tracking: NSTrackingArea?
+    private(set) var pointerInside = false
+    /// When the user last scrolled, by wheel, trackpad or scroller.
+    private(set) var userScrolledAt: Double?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -140,11 +161,51 @@ final class FadingScrollView: NSScrollView {
         autohidesScrollers = true
         scrollerStyle = .overlay
         wantsLayer = true
-        fadeMask.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
+        // Trackpad and scroller drags; a mouse wheel's discrete steps post
+        // none of these, so `scrollWheel(with:)` notes those.
+        NotificationCenter.default.addObserver(self, selector: #selector(userScrolled), name: NSScrollView.willStartLiveScrollNotification, object: self)
+        NotificationCenter.default.addObserver(self, selector: #selector(userScrolled), name: NSScrollView.didLiveScrollNotification, object: self)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    @objc private func userScrolled() {
+        userScrolledAt = Date().timeIntervalSince1970
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        userScrolled()
+        super.scrollWheel(with: event)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { pointerInside = true }
+    override func mouseExited(with event: NSEvent) { pointerInside = false }
+
+    /// Scrolls so `y` of the document is at the top, as far as it can go;
+    /// eased unless `animated` is false or Reduce Motion is on.
+    func scroll(toY y: CGFloat, animated: Bool) {
+        guard let document = documentView else { return }
+        let target = NSPoint(x: 0, y: max(0, min(y, document.frame.height - contentView.bounds.height)))
+        if animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.35
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                contentView.animator().setBoundsOrigin(target)
+            }
+        } else {
+            contentView.setBoundsOrigin(target)
+        }
+        reflectScrolledClipView(contentView)
+    }
 
     override func tile() {
         super.tile()
@@ -159,8 +220,9 @@ final class FadingScrollView: NSScrollView {
 
     private func updateFade() {
         guard let layer, let document = documentView else { return }
-        let below = document.frame.height - contentView.bounds.maxY
-        guard below > 1, bounds.height > Self.fade else {
+        let above = contentView.bounds.minY > 1
+        let below = document.frame.height - contentView.bounds.maxY > 1
+        guard above || below, bounds.height > 2 * Self.fade else {
             if layer.mask != nil { layer.mask = nil }
             return
         }
@@ -172,7 +234,9 @@ final class FadingScrollView: NSScrollView {
         let top: CGFloat = layer.isGeometryFlipped ? 0 : 1
         fadeMask.startPoint = CGPoint(x: 0.5, y: top)
         fadeMask.endPoint = CGPoint(x: 0.5, y: 1 - top)
-        fadeMask.locations = [0, NSNumber(value: Double(1 - Self.fade / bounds.height)), 1]
+        let edge = NSNumber(value: Double(Self.fade / bounds.height))
+        fadeMask.colors = [(above ? NSColor.clear : .black).cgColor, NSColor.black.cgColor, NSColor.black.cgColor, (below ? NSColor.clear : .black).cgColor]
+        fadeMask.locations = [0, edge, NSNumber(value: 1 - edge.doubleValue), 1]
         if layer.mask !== fadeMask { layer.mask = fadeMask }
         CATransaction.commit()
     }

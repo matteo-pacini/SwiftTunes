@@ -392,8 +392,8 @@ struct ModeTests {
         let tunes = p.next.rows.filter { $0.kind == .tune }
         // The playing tune is never dimmed; under repeat one the rest are.
         #expect(tunes.map(\.dim) == tunes.map { $0.state == .waiting && c.mode == .one })
-        // The playing tune and the next two.
-        #expect(tunes.dropFirst().map(\.tag) == s.queue.prefix(2).map { $0.new ? "new" : "" })
+        // The playing tune, then everything waiting.
+        #expect(tunes.dropFirst().map(\.tag) == s.queue.map { $0.new ? "new" : "" })
         // Numbered from 1 in play order, new or kept alike.
         #expect(tunes.map(\.number) == (1...max(1, tunes.count)).prefix(tunes.count).map(String.init))
         #expect(lines(p).filter { $0.contains("until the repeat ends") } == (c.mode == .one && c.fresh ? ["1 new tune waits until the repeat ends."] : []))
@@ -433,7 +433,7 @@ struct ModeTests {
         let plain = try player(Fixture.load("30-modes-default"))
         #expect(plain.now.badge == "" && plain.next.rows.allSatisfy { !$0.star })
         // Rows are numbered by their place in the round, from 1.
-        #expect(try player(Fixture.load("31-shuffle-off")).next.rows.dropFirst().map { [$0.number, $0.name] } == [["2", "Brass Lantern"], ["3", "Quiet Ledger"]])
+        #expect(try player(Fixture.load("31-shuffle-off")).next.rows.dropFirst().prefix(2).map { [$0.number, $0.name] } == [["2", "Brass Lantern"], ["3", "Quiet Ledger"]])
     }
 }
 

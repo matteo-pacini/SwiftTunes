@@ -68,7 +68,7 @@ struct EqualityTests {
             ("now", { $0.now.title += "x" }), ("next", { $0.next.head += "x" }), ("making", { flip(&$0.making, PlayerCard.Making(head: "", rows: [])) }),
             ("composer", { $0.composer.label += "x" }),
         ] as [Change<PlayerCard>])
-        expectEachFieldCounts(base.next, [("label", { $0.label += "x" }), ("head", { $0.head += "x" }), ("rows", { $0.rows.append(base.making!.rows[0]) }), ("more", { flip(&$0.more, anyControl) })] as [Change<PlayerCard.Next>])
+        expectEachFieldCounts(base.next, [("label", { $0.label += "x" }), ("head", { $0.head += "x" }), ("rows", { $0.rows.append(base.making!.rows[0]) }), ("playing", { flip(&$0.playing, 7) })] as [Change<PlayerCard.Next>])
         expectEachFieldCounts(try #require(base.making), [("head", { $0.head += "x" }), ("rows", { $0.rows.removeLast() })] as [Change<PlayerCard.Making>])
     }
 
@@ -170,15 +170,6 @@ struct EqualityTests {
         ] as [Change<ShareRequest>])
     }
 
-    @Test func queueCard() throws {
-        let base = Decide.queueCard(try Fixture.load("10-writing"), now: NOW)
-        expectEachFieldCounts(base, [
-            ("back", { $0.back.lit.toggle() }), ("label", { $0.label += "x" }), ("title", { $0.title += "x" }), ("head", { $0.head += "x" }),
-            ("rows", { $0.rows.append(base.making!.rows[0]) }), ("scrollTo", { flip(&$0.scrollTo, "x") }), ("last", { flip(&$0.last, "l") }),
-            ("making", { flip(&$0.making, PlayerCard.Making(head: "", rows: [])) }), ("palette", { $0.palette = Palette.made(from: "else") }),
-        ] as [Change<QueueCard>])
-    }
-
     @Test func wordsCard() throws {
         let s = try sungSnapshot()
         guard case .words(let base) = card(s, Panel().openingWords(s, name: "n")) else { Issue.record("not the sheet"); return }
@@ -245,7 +236,5 @@ struct AnimatingTests {
         let s = try Fixture.load("10-writing")
         let a = Decide.animating(s, Panel(), now: NOW, popoverOpen: true, reduceMotion: false, lowPower: false)
         #expect(!a.heroForming && a.jobForming)
-        let q = Decide.animating(s, Panel().openingQueue(), now: NOW, popoverOpen: true, reduceMotion: false, lowPower: false)
-        #expect(!q.heroForming && q.jobForming)
     }
 }

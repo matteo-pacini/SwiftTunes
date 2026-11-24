@@ -2,7 +2,7 @@ import SwiftUI
 import TunesContract
 import TunesPanel
 
-/// NOW PLAYING as the hero, UP NEXT as a list, COMPOSER as a glass bar.
+/// NOW PLAYING as the hero, THIS ROUND as a list, COMPOSER as a glass bar.
 struct PlayerView: View {
     let card: PlayerCard
     let model: PanelModel
@@ -154,7 +154,8 @@ struct Hero: View {
     }
 }
 
-/// THIS ROUND: at most three rows, read top to bottom in play order.
+/// THIS ROUND: the whole round in play order, four rows tall, scrolling to
+/// keep the playing row in view as the music moves on.
 struct UpNext: View {
     let next: PlayerCard.Next
     let palette: Palette
@@ -168,23 +169,32 @@ struct UpNext: View {
                 Spacer()
                 Text(verbatim: next.head).font(.system(size: 11.5)).foregroundStyle(.secondary)
             }
-            ForEach(next.rows, id: \.id) { row in
-                UpNextRow(row: row, palette: palette, model: model)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-            if let more = next.more {
-                Button(action: model.openQueue) {
-                    Text(verbatim: more.text)
-                        .font(.system(size: 11.5, weight: .medium))
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 3)
+            if !next.rows.isEmpty {
+                // The rows' glass has its own container inside the scroll
+                // view: a container outside it draws the glass in a layer the
+                // scroll view does not clip.
+                ScrollBox(follow: ScrollFollow(ids: next.rows.map(\.id), playing: next.playing)) {
+                    GlassEffectContainer(spacing: 6) {
+                        VStack(spacing: 6) {
+                            ForEach(next.rows, id: \.id) { row in
+                                UpNextRow(row: row, palette: palette, model: model)
+                                    .scrollMark(row.id)
+                                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                            }
+                        }
+                        .animation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.2), value: next.rows.map(\.id))
+                    }
                 }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .capsule)
-                .helped(more)
+                .frame(height: Self.height(rows: next.rows.count))
             }
         }
-        .animation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.2), value: next.rows.map(\.id))
+    }
+
+    /// Rows are 48 pt and 6 apart; the list shows four and scrolls past
+    /// them, and a shorter round takes only the room its rows need.
+    static func height(rows: Int) -> Double {
+        let shown = Double(min(rows, Decide.listRows))
+        return shown * 48 + max(0, shown - 1) * 6
     }
 }
 
@@ -208,51 +218,6 @@ struct MakingBlock: View {
             }
         }
         .animation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.2), value: making.rows.map(\.id))
-    }
-}
-
-/// The whole round, numbered, in a scrolling list that keeps the playing
-/// row in view, with BEING MADE under it.
-struct QueueView: View {
-    let card: QueueCard
-    let model: PanelModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                BackLink(control: card.back, action: model.backToPlayer)
-                Spacer()
-                Caps(text: card.label)
-            }
-            HStack(alignment: .firstTextBaseline) {
-                Text(verbatim: card.title).font(.system(size: 20, weight: .bold, design: .rounded))
-                Spacer()
-                Text(verbatim: card.head).font(.system(size: 11.5)).foregroundStyle(.secondary)
-            }
-            // The rows' glass has its own container inside the scroll view: a
-            // container outside it draws the glass in a layer the scroll view
-            // does not clip.
-            ScrollBox(target: card.scrollTo) {
-                GlassEffectContainer(spacing: 6) {
-                    VStack(spacing: 6) {
-                        ForEach(card.rows, id: \.id) { row in
-                            UpNextRow(row: row, palette: card.palette, model: model)
-                                .scrollMark(row.id)
-                        }
-                        if let last = card.last {
-                            Text(verbatim: last).font(.system(size: 11.5)).foregroundStyle(.secondary).padding(.top, 4)
-                        }
-                    }
-                }
-            }
-            // A row is 48 pt and 6 apart; the list scrolls past six of them.
-            .frame(height: min(340, Double(card.rows.count) * 54 + (card.last == nil ? 0 : 26)))
-            if let making = card.making {
-                GlassEffectContainer(spacing: 6) {
-                    MakingBlock(making: making, palette: card.palette, model: model)
-                }
-            }
-        }
     }
 }
 

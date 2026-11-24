@@ -212,7 +212,6 @@ final class PanelModel {
     // MARK: Chooser
 
     func openChooser() { set(panel.openingChooser()) }
-    func openQueue() { set(panel.openingQueue()) }
     func backToPlayer() { set(panel.backToPlayer()) }
 
     func pick(_ id: String) {

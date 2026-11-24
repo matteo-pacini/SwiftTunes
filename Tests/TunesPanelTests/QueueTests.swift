@@ -19,29 +19,22 @@ func queued(_ t: PlayingTune) -> QueuedTune {
     QueuedTune(name: t.name, file: t.file, bpm: t.bpm, key: t.key, length: t.length, kept: t.kept, new: t.new, pinned: t.pinned, pos: t.pos)
 }
 
+/// A round of `size` kept tunes with the one at `position` (from 0) playing.
+func roundOf(_ size: Int, playing position: Int) throws -> Snapshot {
+    var s = try Fixture.load("05-queue-full")
+    let all = (1...size).map { kept($0) }
+    s.played = Array(all[..<position])
+    s.tune = playing(all[position])
+    s.queue = Array(all[(position + 1)...])
+    s.ready = 0
+    return s
+}
+
 @Suite("The round")
 struct RoundTests {
-    /// Jazz: `played` kept tunes played, Lazy Avenue playing, then `fresh`
-    /// new tunes and `keptCount` kept ones queued.
-    func snapshot(played: Int = 0, fresh: Int, keptCount: Int, shuffle: Bool = true, repeatMode: RepeatMode = .all) throws -> Snapshot {
-        var s = try Fixture.load("05-queue-full")
-        s.played = (0..<played).map { kept(100 + $0) }
-        s.queue = Array(s.queue.prefix(fresh)) + (0..<keptCount).map { kept($0 + 1) }
-        s.ready = fresh
-        s.shuffle = shuffle
-        s.repeat = repeatMode
-        s.roundLeft = keptCount
-        return s
-    }
-
     /// Twelve kept tunes: the fifth playing, four played before it.
     func twelve() throws -> Snapshot {
-        var s = try snapshot(fresh: 0, keptCount: 0)
-        let all = (1...12).map { kept($0) }
-        s.played = Array(all[0..<4])
-        s.tune = playing(all[4])
-        s.queue = Array(all[5...])
-        return s
+        try roundOf(12, playing: 4)
     }
 
     @Test("the round is played, then playing, then queued, numbered from 1 in that order")
@@ -64,12 +57,21 @@ struct RoundTests {
         #expect(round.map(\.id) == ["\(a.file)#0", "\(a.file)#1"])
     }
 
-    @Test("walking a round of twelve forwards two and back one: no tune's number changes")
+    @Test("the player lists the whole round: every row, fixed numbers, the playing one marked", arguments: [1, 2, 3, 4, 5, 12, 50])
+    func whole(_ size: Int) throws {
+        for position in 0..<size {
+            let next = try player(roundOf(size, playing: position)).next
+            #expect(next.rows.map(\.number) == (1...size).map(String.init))
+            #expect(next.rows.map(\.name) == (1...size).map { "Kept Tune \($0)" })
+            #expect(next.playing == position && next.rows[position].state == .playing)
+            #expect(next.rows.map(\.dim) == (0..<size).map { $0 < position })
+            #expect(next.head == "\(position + 1) of \(size)")
+        }
+    }
+
+    @Test("walking forwards two and back one: the same rows in the same order, only the highlight moves")
     func walk() throws {
         var s = try twelve()
-        func numbers() -> [String: Int] {
-            Dictionary(uniqueKeysWithValues: Decide.round(played: s.played, tune: s.tune, queue: s.queue).map { ($0.file, $0.number) })
-        }
         func next() {
             s.played.append(queued(s.tune!))
             s.tune = playing(s.queue.removeFirst())
@@ -78,13 +80,14 @@ struct RoundTests {
             s.queue.insert(queued(s.tune!), at: 0)
             s.tune = playing(s.played.removeLast())
         }
-        let before = numbers()
-        var heads = [try player(s).next.head]
-        next(); #expect(numbers() == before); heads.append(try player(s).next.head)
-        next(); #expect(numbers() == before); heads.append(try player(s).next.head)
-        previous(); #expect(numbers() == before); heads.append(try player(s).next.head)
-        #expect(heads == ["5 of 12", "6 of 12", "7 of 12", "6 of 12"])
-        #expect(try player(s).next.rows.map(\.number) == ["6", "7", "8"])
+        let order = try player(s).next.rows.map(\.id)
+        var seen = [try player(s).next]
+        next(); seen.append(try player(s).next)
+        next(); seen.append(try player(s).next)
+        previous(); seen.append(try player(s).next)
+        #expect(seen.allSatisfy { $0.rows.map(\.id) == order && $0.rows.map(\.number) == (1...12).map(String.init) })
+        #expect(seen.map(\.playing) == [4, 5, 6, 5])
+        #expect(seen.map(\.head) == ["5 of 12", "6 of 12", "7 of 12", "6 of 12"])
     }
 
     @Test("a new tune goes in after the playing one: only the tunes after it move down")
@@ -99,38 +102,20 @@ struct RoundTests {
         #expect(after.dropFirst(6).map(\.id) == before.dropFirst(5).map(\.id))
     }
 
-    @Test("the player: the playing tune and the next two, N of M at the right")
-    func window() throws {
-        let p = try player(twelve())
-        #expect(p.next.label == "THIS ROUND" && p.next.head == "5 of 12")
-        #expect(p.next.rows.map(\.number) == ["5", "6", "7"])
-        #expect(p.next.rows.map(\.state) == [.playing, .waiting, .waiting])
-        #expect(p.next.rows.map(\.dim) == [false, false, false])
-        #expect(p.next.more == Control(text: "then 5 more this round · Show all", help: "Show all"))
-    }
-
-    @Test("nothing playing: the next three, M tunes at the right")
-    func windowIdle() throws {
+    @Test("nothing playing: every tune still listed, M tunes at the right; an empty round reads nothing")
+    func idle() throws {
         var s = try twelve()
         s.tune = nil
         s.player = .none
         let p = try player(s)
-        #expect(p.next.head == "11 tunes")
-        #expect(p.next.rows.map(\.number) == ["5", "6", "7"])
-        #expect(p.next.rows.allSatisfy { $0.state == .waiting })
-        #expect(p.next.more == Control(text: "then 4 more this round · Show all", help: "Show all"))
+        #expect(p.next.head == "11 tunes" && p.next.rows.count == 11 && p.next.playing == nil)
+        #expect(p.next.rows.map(\.dim) == Array(repeating: true, count: 4) + Array(repeating: false, count: 7))
         var one = s
         one.played = []
         one.queue = [kept(1)]
         #expect(try player(one).next.head == "1 tune")
-    }
-
-    @Test("then N more this round · Show all, only when more follow the window", arguments: [
-        (0, 0, 1, nil), (0, 2, 0, nil), (0, 2, 1, 1), (3, 2, 10, 10), (0, 0, 50, 48),
-    ] as [(Int, Int, Int, Int?)])
-    func more(_ played: Int, _ fresh: Int, _ keptCount: Int, _ hidden: Int?) throws {
-        let p = try player(snapshot(played: played, fresh: fresh, keptCount: keptCount))
-        #expect(p.next.more == hidden.map { Control(text: "then \($0) more this round · Show all", help: "Show all") })
+        one.queue = []
+        #expect(try player(one).next.head == "nothing" && player(one).next.rows.isEmpty)
     }
 
     @Test("BEING MADE: the job and the places not started, plays next when ready; absent with the composer off")
@@ -150,63 +135,10 @@ struct RoundTests {
         #expect(try player(off).making == nil)
     }
 
-    @Test("the round card: label, title, the modes, every row in list order, played dimmed, the playing one to scroll to")
-    func card() throws {
-        let s = try twelve()
-        let p = Panel().openingQueue()
-        guard case .queue(let q) = Decide.card(s, p, now: NOW, home: HOME) else { Issue.record("not the round"); return }
-        #expect(q.label == "THIS ROUND · 12 TUNES")
-        #expect(q.title == "This round" && q.back == Control(text: "Jazz", help: "Back"))
-        #expect(q.head == "shuffled · repeat all")
-        #expect(q.rows.map(\.number) == (1...12).map(String.init))
-        #expect(q.rows.map(\.dim) == Array(repeating: true, count: 4) + Array(repeating: false, count: 8))
-        #expect(q.scrollTo == q.rows[4].id)
-        #expect(Decide.roundScrollTarget(q.rows) == q.rows[4].id)
-        #expect(q.making?.head == "plays next when ready")
-        #expect(q.last == "after these, a new round is drawn")
-        let (back, close) = p.escaping(s)
-        #expect(!close && back.mode == .player)
-        #expect(p.backToPlayer().mode == .player)
-        #expect(Panel().openingChooser().openingQueue().mode == .chooser)
-    }
-
-    @Test("the modes", arguments: [
-        (true, RepeatMode.all, "shuffled · repeat all"), (false, .one, "in the order made · repeat one"), (true, .off, "shuffled · repeat off"),
-    ])
-    func modes(_ shuffle: Bool, _ mode: RepeatMode, _ text: String) throws {
-        #expect(Decide.queueCard(try snapshot(fresh: 0, keptCount: 2, shuffle: shuffle, repeatMode: mode), now: NOW).head == text)
-    }
-
-    @Test("its last line: a new round is drawn, or with repeat off where it ends", arguments: [
-        (RepeatMode.all, "after these, a new round is drawn"), (.one, "after these, a new round is drawn"), (.off, "The round ends after Kept Tune 12."),
-    ])
-    func last(_ mode: RepeatMode, _ line: String) throws {
-        #expect(Decide.queueCard(try snapshot(fresh: 0, keptCount: 12, repeatMode: mode), now: NOW).last == line)
-    }
-
-    @Test("an empty round has no last line and nothing to scroll to")
-    func empty() throws {
-        var s = try snapshot(fresh: 0, keptCount: 0)
-        s.tune = nil
-        let q = Decide.queueCard(s, now: NOW)
-        #expect(q.last == nil && q.scrollTo == nil && q.rows.isEmpty && q.label == "THIS ROUND · 0 TUNES")
-        #expect(try player(s).next.head == "nothing")
-    }
-
-    @Test("with the playing tune last, the last line names it")
-    func lastPlaying() throws {
-        var s = try twelve()
-        s.repeat = .off
-        s.played += [queued(s.tune!)] + s.queue.dropLast()
-        s.tune = playing(s.queue.last!)
-        s.queue = []
-        #expect(Decide.queueCard(s, now: NOW).last == "The round ends after Kept Tune 12.")
-    }
-
     @Test("a row's actions by its state, each carrying its index and name as drawn")
     func actions() throws {
-        let q = Decide.queueCard(try twelve(), now: NOW)
-        let played = q.rows[1], now = q.rows[4], waiting = q.rows[6]
+        let rows = try player(twelve()).next.rows
+        let played = rows[1], now = rows[4], waiting = rows[6]
         #expect(played.playNow?.help == "Play it again")
         #expect(played.playNowCommand == .playPlayed(index: 1, name: "Kept Tune 2"))
         #expect(played.scrapCommand == .scrapPlayed(index: 1, name: "Kept Tune 2"))
@@ -218,13 +150,13 @@ struct RoundTests {
         #expect(waiting.playNowCommand == .playQueued(index: 1, name: "Kept Tune 7"))
         #expect(waiting.scrapCommand == .scrapQueued(index: 1, name: "Kept Tune 7"))
         #expect(waiting.shareRequest?.target == TuneTarget(name: "Kept Tune 7", index: 1))
-        #expect(q.rows.allSatisfy { $0.share != nil && $0.scrap != nil })
+        #expect(rows.allSatisfy { $0.share != nil && $0.scrap != nil })
     }
 
     @Test("Play it again drawn before the round moved still carries the name it showed")
     func renderedName() throws {
         var s = try twelve()
-        let drawn = Decide.queueCard(s, now: NOW).rows[3]
+        let drawn = try player(s).next.rows[3]
         // Previous: the last played tune plays again, so played[3] is gone.
         s.queue.insert(queued(s.tune!), at: 0)
         s.tune = playing(s.played.removeLast())
@@ -235,7 +167,7 @@ struct RoundTests {
     @Test("a share sheet opened on a played tune finds it wherever it is now")
     func shareMoves() throws {
         var s = try twelve()
-        let row = Decide.queueCard(s, now: NOW).rows[2]
+        let row = try player(s).next.rows[2]
         let opened = Panel().openingShare(try #require(row.shareRequest))
         #expect(opened.shareTargetNow(s) == TuneTarget(name: "Kept Tune 3", index: 2, inPlayed: true))
         // Played again: it is the playing tune, the rest back in the queue.
@@ -244,7 +176,7 @@ struct RoundTests {
         s.played = Array(s.played[..<2])
         #expect(opened.shareTargetNow(s) == TuneTarget(name: "Kept Tune 3", index: nil))
         // A queued tune that has since been played is found in played.
-        let waiting = Panel().openingShare(try #require(Decide.queueCard(try twelve(), now: NOW).rows[5].shareRequest))
+        let waiting = Panel().openingShare(try #require(player(twelve()).next.rows[5].shareRequest))
         var later = try twelve()
         later.played.append(queued(later.tune!))
         later.played.append(later.queue.removeFirst())
@@ -268,13 +200,12 @@ struct RoundTests {
     func repeatOne() throws {
         var s = try twelve()
         s.repeat = .one
-        let q = Decide.queueCard(s, now: NOW)
-        #expect(q.rows.map(\.dim) == Array(repeating: true, count: 4) + [false] + Array(repeating: true, count: 7))
+        #expect(try player(s).next.rows.map(\.dim) == Array(repeating: true, count: 4) + [false] + Array(repeating: true, count: 7))
     }
 
     @Test("the edge cases: a pinned star, a long name, an unread tune showing its stem and no length")
     func edges() throws {
-        var s = try snapshot(fresh: 0, keptCount: 0)
+        var s = try Fixture.load("05-queue-full")
         let long = "A Much Longer Name Than The List Has Room For Tonight"
         s.tune = nil
         s.queue = [kept(1, pinned: true), kept(2, name: long), kept(3, read: false)]
@@ -285,107 +216,88 @@ struct RoundTests {
         #expect(rows[2].sub == "90 BPM · C major")
     }
 
-    @Test("fifty in the round: three in the player, all on the card, ids distinct", arguments: [12, 50])
-    func many(_ n: Int) throws {
-        let s = try snapshot(played: 4, fresh: 0, keptCount: n - 5)
-        #expect(try player(s).next.rows.count == 3)
-        let q = Decide.queueCard(s, now: NOW)
-        #expect(q.rows.count == n && q.label == "THIS ROUND · \(n) TUNES")
-        #expect(Set(q.rows.map(\.id)).count == n)
-    }
-
     @Test("the level meter moves only while playing with the popover open, and not under Reduce Motion", arguments: [
         (PlayerState.playing, true, false, true), (.paused, true, false, false), (.playing, false, false, false), (.playing, true, true, false),
     ])
     func meter(_ state: PlayerState, _ open: Bool, _ reduce: Bool, _ moves: Bool) throws {
         var s = try twelve()
         s.player = state
-        for p in [Panel(), Panel().openingQueue()] {
-            #expect(Decide.animating(s, p, now: NOW, popoverOpen: open, reduceMotion: reduce, lowPower: false).meter == moves)
-        }
+        #expect(Decide.animating(s, Panel(), now: NOW, popoverOpen: open, reduceMotion: reduce, lowPower: false).meter == moves)
         s.tune = nil
         #expect(!Decide.animating(s, Panel(), now: NOW, popoverOpen: true, reduceMotion: false, lowPower: false).meter)
     }
+}
 
-    @Test("the tick runs on the round card while a job's time counts")
-    func tick() throws {
-        let p = Panel().openingQueue()
-        #expect(Decide.needsTick(try Fixture.load("10-writing"), p, now: NOW))
-        #expect(!Decide.needsTick(try Fixture.load("07-composer-off-kept"), p, now: NOW))
+@Suite("Where the list scrolls")
+struct ListScrollTests {
+    /// The rows in view after the decision: from the row it brings to the
+    /// top, else from the top of the list, four at most.
+    func visible(_ size: Int, _ top: Int?) -> Range<Int> {
+        let first = top ?? 0
+        return first..<min(size, first + Decide.listRows)
+    }
+
+    static let cases: [(Int, Int)] = [1, 2, 3, 4, 5, 12, 50].flatMap { size in (0..<size).map { (size, $0) } }
+
+    @Test("the playing row always ends in view; second from the top when the round is long enough", arguments: cases)
+    func follows(_ size: Int, _ position: Int) throws {
+        let next = try player(roundOf(size, playing: position)).next
+        let top = Decide.listTop(count: next.rows.count, playing: next.playing, pointerInside: false, userScrolledAt: nil, now: NOW)
+        #expect(visible(size, top).contains(position))
+        if size <= Decide.listRows {
+            #expect(top == nil)
+        } else {
+            let wanted = position - 1
+            #expect(top == max(0, min(wanted, size - Decide.listRows)))
+            if wanted >= 0 && wanted <= size - Decide.listRows { #expect(top == wanted) }
+        }
+    }
+
+    @Test("two tunes, the second playing: both rows shown, nothing to scroll")
+    func ownersCase() throws {
+        var s = try roundOf(2, playing: 0)
+        s.played.append(queued(s.tune!))
+        s.tune = playing(s.queue.removeFirst())
+        let next = try player(s).next
+        #expect(next.rows.map(\.number) == ["1", "2"] && next.rows.map(\.state) == [.played, .playing])
+        #expect(next.rows[0].playNow?.help == "Play it again" && next.rows[0].scrap != nil && next.rows[0].share != nil)
+        #expect(Decide.listTop(count: 2, playing: next.playing, pointerInside: false, userScrolledAt: nil, now: NOW) == nil)
+    }
+
+    @Test("hands off while the pointer is over the list or within 3 s of the user scrolling it", arguments: [
+        (false, Double?.none, Int?.some(4)), (true, nil, nil), (false, NOW - 0.5, nil), (false, NOW - 2.99, nil), (false, NOW - 3, 4), (false, NOW - 60, 4),
+    ])
+    func handsOff(_ pointer: Bool, _ scrolledAt: Double?, _ top: Int?) {
+        #expect(Decide.listTop(count: 12, playing: 5, pointerInside: pointer, userScrolledAt: scrolledAt, now: NOW) == top)
+    }
+
+    @Test("nothing playing: the list is left where it is")
+    func idle() {
+        #expect(Decide.listTop(count: 12, playing: nil, pointerInside: false, userScrolledAt: nil, now: NOW) == nil)
     }
 }
 
 @Suite("The round in the fixtures")
 struct RoundFixtureTests {
-    @Test("four played, the fifth playing: 5 of 12, the card scrolled to it")
+    @Test("four played, the fifth playing: 5 of 12, every row listed")
     func played() throws {
-        let s = try Fixture.load("45-round-played")
-        let p = try player(s)
-        #expect(p.next.head == "5 of 12" && p.next.rows.map(\.name) == ["Lazy Avenue", "Brass Lantern", "Quiet Ledger"])
-        #expect(p.next.more?.text == "then 5 more this round · Show all")
-        let q = Decide.queueCard(s, now: NOW)
-        #expect(q.label == "THIS ROUND · 12 TUNES" && q.head == "shuffled · repeat all")
-        #expect(q.rows.prefix(4).allSatisfy { $0.state == .played && $0.dim } && q.scrollTo == q.rows[4].id)
+        let p = try player(Fixture.load("45-round-played"))
+        #expect(p.next.head == "5 of 12" && p.next.rows.count == 12 && p.next.playing == 4)
+        #expect(p.next.rows[4].name == "Lazy Avenue")
+        #expect(p.next.rows.prefix(4).allSatisfy { $0.state == .played && $0.dim })
+    }
+
+    @Test("a round of fifty: 11 of 50, every row listed, the list brought to the tenth")
+    func fifty() throws {
+        let p = try player(Fixture.load("47-round-fifty"))
+        #expect(p.next.head == "11 of 50" && p.next.rows.count == 50 && p.next.playing == 10)
+        #expect(Decide.listTop(count: 50, playing: p.next.playing, pointerInside: false, userScrolledAt: nil, now: NOW) == 9)
     }
 
     @Test("the round ended under repeat off: every tune played, none playing")
     func ended() throws {
-        let s = try Fixture.load("46-round-ended")
-        let p = try player(s)
-        #expect(p.next.head == "12 tunes" && p.next.rows.isEmpty && p.next.more == nil)
-        let q = Decide.queueCard(s, now: NOW)
-        #expect(q.rows.count == 12 && q.rows.allSatisfy { $0.state == .played } && q.scrollTo == nil)
-        #expect(q.last == "The round ends after 20261105-090004-104bpm-A-minor.")
-    }
-}
-
-@Suite("The player's three rows")
-struct WindowTests {
-    /// A round of `size` kept tunes with the one at `position` (from 0) playing.
-    func round(size: Int, playing position: Int) throws -> Snapshot {
-        var s = try Fixture.load("05-queue-full")
-        let all = (1...size).map { kept($0) }
-        s.played = Array(all[..<position])
-        s.tune = TunesPanelTests.playing(all[position])
-        s.queue = Array(all[(position + 1)...])
-        s.ready = 0
-        return s
-    }
-
-    static let cases: [(Int, Int)] = [1, 2, 3, 4, 12].flatMap { size in (0..<size).map { (size, $0) } }
-
-    @Test("always consecutive, min(3, round) rows, the playing row among them, numbered by place", arguments: cases)
-    func window(_ size: Int, _ position: Int) throws {
-        let p = try player(round(size: size, playing: position))
-        let numbers = p.next.rows.map { Int($0.number)! }
-        #expect(numbers.count == min(3, size))
-        #expect(numbers == Array((numbers.first ?? 1)...(numbers.last ?? 0)))
-        #expect(numbers.contains(position + 1))
-        #expect(p.next.rows.map(\.name) == numbers.map { "Kept Tune \($0)" })
-        #expect(p.next.rows.map(\.state) == numbers.map { $0 < position + 1 ? .played : $0 == position + 1 ? .playing : .waiting })
-        #expect(p.next.rows.allSatisfy { $0.dim == ($0.state == .played) })
-        let after = size - (numbers.last ?? 0)
-        #expect(p.next.more == (after > 0 ? Control(text: "then \(after) more this round · Show all", help: "Show all") : nil))
-        #expect(p.next.head == "\(position + 1) of \(size)")
-    }
-
-    @Test("the last of twelve shows 10, 11 and 12")
-    func lastOfTwelve() throws {
-        #expect(try player(round(size: 12, playing: 11)).next.rows.map(\.number) == ["10", "11", "12"])
-    }
-
-    @Test("two tunes, the second played: rows 1 and 2, the first dimmed with its actions")
-    func twoTunes() throws {
-        var s = try round(size: 2, playing: 0)
-        #expect(try player(s).next.rows.map(\.number) == ["1", "2"])
-        // Next: the first tune is played, the second plays.
-        s.played.append(queued(s.tune!))
-        s.tune = TunesPanelTests.playing(s.queue.removeFirst())
-        let rows = try player(s).next.rows
-        #expect(rows.map(\.number) == ["1", "2"])
-        #expect(rows.map(\.state) == [.played, .playing] && rows[0].dim)
-        #expect(rows[0].playNow?.help == "Play it again" && rows[0].share != nil && rows[0].scrap != nil)
-        #expect(rows[0].playNowCommand == .playPlayed(index: 0, name: "Kept Tune 1"))
-        #expect(rows[0].scrapCommand == .scrapPlayed(index: 0, name: "Kept Tune 1"))
+        let p = try player(Fixture.load("46-round-ended"))
+        #expect(p.next.head == "12 tunes" && p.next.rows.count == 12 && p.next.playing == nil)
+        #expect(p.next.rows.allSatisfy { $0.state == .played })
     }
 }

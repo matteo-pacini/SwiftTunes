@@ -147,7 +147,7 @@ struct ScrollBoxTests {
         return scroll
     }
 
-    @Test("the document is as wide as the box and as tall as its rows; the bottom fades only while more lies below",
+    @Test("the document is as wide as the box and as tall as its rows; an edge fades only while more lies beyond it",
           arguments: [3, 12, 50])
     func sizing(_ rows: Int) throws {
         let scroll = try box(rows)
@@ -159,7 +159,11 @@ struct ScrollBoxTests {
         #expect((scroll.layer?.mask != nil) == (height > 340))
         scroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, height - 340)))
         scroll.reflectScrolledClipView(scroll.contentView)
-        #expect(scroll.layer?.mask == nil)
+        // At the end the top edge fades instead, while there is more above.
+        #expect((scroll.layer?.mask != nil) == (height > 340))
+        scroll.contentView.scroll(to: .zero)
+        scroll.reflectScrolledClipView(scroll.contentView)
+        #expect((scroll.layer?.mask != nil) == (height > 340))
     }
 }
 
@@ -254,32 +258,67 @@ struct PasteTests {
     }
 }
 
-@Suite("ScrollBox target")
+@Suite("ScrollBox follows the playing row")
 @MainActor
-struct ScrollTargetTests {
-    private func box(target: String?) throws -> FadingScrollView {
-        let host = NSHostingView(rootView: ScrollBox(target: target) {
+struct ScrollFollowTests {
+    /// Fifty 48 pt rows, 6 apart, in a box four rows tall.
+    private func host(playing: Int?) -> NSHostingView<AnyView> {
+        let host = NSHostingView(rootView: view(playing: playing))
+        host.frame = NSRect(x: 0, y: 0, width: 300, height: 210)
+        host.layoutSubtreeIfNeeded()
+        return host
+    }
+
+    private func view(playing: Int?) -> AnyView {
+        let ids = (0..<50).map { "row \($0)" }
+        return AnyView(ScrollBox(follow: ScrollFollow(ids: ids, playing: playing)) {
             VStack(spacing: 6) {
-                ForEach(0..<50, id: \.self) { i in
-                    Text(verbatim: "Row \(i)").frame(maxWidth: .infinity, minHeight: 48, maxHeight: 48).scrollMark("row \(i)")
+                ForEach(ids, id: \.self) { id in
+                    Text(verbatim: id).frame(maxWidth: .infinity, minHeight: 48, maxHeight: 48).scrollMark(id)
                 }
             }
         }
-        .frame(width: 300, height: 340))
-        host.frame = NSRect(x: 0, y: 0, width: 300, height: 340)
-        host.layoutSubtreeIfNeeded()
+        .frame(width: 300, height: 210))
+    }
+
+    private func scroll(_ host: NSView) throws -> FadingScrollView {
         let scroll = try #require(find(FadingScrollView.self, in: host))
         scroll.layoutSubtreeIfNeeded()
         return scroll
     }
 
-    @Test("the target row is brought into view; with none the list stays at the top")
-    func reveal() throws {
-        let scroll = try box(target: "row 40")
-        let visible = scroll.contentView.bounds
-        let row = CGRect(x: 0, y: 40 * 54, width: 300, height: 48)
-        #expect(visible.contains(row))
-        #expect(try box(target: nil).contentView.bounds.minY == 0)
+    @Test("on first showing, the playing row is placed second from the top", arguments: [(40, 39), (0, 0), (1, 0), (49, 46)])
+    func opens(_ playing: Int, _ top: Int) throws {
+        let s = try scroll(host(playing: playing))
+        #expect(s.contentView.bounds.minY == CGFloat(top * 54))
+    }
+
+    @Test("nothing playing: the list stays at the top")
+    func idle() throws {
+        #expect(try scroll(host(playing: nil)).contentView.bounds.minY == 0)
+    }
+
+    @Test("the same playing row again does not pull back a list the user moved")
+    func sameTune() throws {
+        let h = host(playing: 40)
+        let s = try scroll(h)
+        s.contentView.scroll(to: NSPoint(x: 0, y: 108))
+        s.reflectScrolledClipView(s.contentView)
+        h.rootView = view(playing: 40)
+        h.layoutSubtreeIfNeeded()
+        #expect(s.contentView.bounds.minY == 108)
+    }
+
+    @Test("with the pointer over the list, a change of tune leaves it where it is")
+    func pointerOver() throws {
+        let h = host(playing: 40)
+        let s = try scroll(h)
+        let enter = try #require(NSEvent.enterExitEvent(with: .mouseEntered, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+                                                       context: nil, eventNumber: 0, trackingNumber: 0, userData: nil))
+        s.mouseEntered(with: enter)
+        h.rootView = view(playing: 10)
+        h.layoutSubtreeIfNeeded()
+        #expect(s.contentView.bounds.minY == CGFloat(39 * 54))
     }
 }
 

@@ -50,21 +50,6 @@ extension Decide {
         return entries
     }
 
-    /// The entries the player shows, always consecutive: the playing tune
-    /// and the next two, reaching back over played tunes when fewer than two
-    /// follow it, so the window keeps three rows while the round has them;
-    /// with nothing playing, the next three. And how many follow the window.
-    public static func roundWindow(_ round: [RoundEntry]) -> (rows: ArraySlice<RoundEntry>, more: Int) {
-        let start: Int
-        if let playing = round.firstIndex(where: { $0.state == .playing }) {
-            start = max(0, min(playing, round.endIndex - upNextRows))
-        } else {
-            start = round.firstIndex { $0.state != .played } ?? round.endIndex
-        }
-        let rows = round[start..<min(round.endIndex, start + upNextRows)]
-        return (rows, round.endIndex - rows.endIndex)
-    }
-
     /// The player list's right-hand text: `N of M` while a tune plays, else
     /// `M tunes`, or `nothing` for an empty round.
     public static func roundCount(_ round: [RoundEntry]) -> String {
@@ -72,20 +57,21 @@ extension Decide {
         return round.isEmpty ? "nothing" : Format.plural(round.count, "tune", "tunes")
     }
 
-    /// The round card's right-hand text: the order, then the repeat mode.
-    public static func roundModes(shuffle: Bool, repeat mode: RepeatMode) -> String {
-        let order = shuffle ? "shuffled" : "in the order made"
-        let again = switch mode {
-        case .all: "repeat all"
-        case .one: "repeat one"
-        case .off: "repeat off"
-        }
-        return "\(order) · \(again)"
-    }
+    /// Rows the player's list shows at once.
+    public static let listRows = 4
 
-    /// The row the round card brings into view: the playing tune's, nil
-    /// when nothing plays.
-    public static func roundScrollTarget(_ rows: [PlayerCard.Row]) -> String? {
-        rows.first { $0.state == .playing }?.id
+    /// How long after the user scrolls the list it is left alone.
+    public static let handsOffSeconds = 3.0
+
+    /// Where the list goes when the playing tune changes or the popover
+    /// opens: the index of the row to bring to the top, so the playing row is
+    /// second from the top while the round is long enough; nil to leave the
+    /// list where it is. It is left alone with nothing playing, when the
+    /// whole round fits, while the pointer is over it, and within
+    /// `handsOffSeconds` of the user scrolling it.
+    public static func listTop(count: Int, playing: Int?, pointerInside: Bool, userScrolledAt: Double?, now: Double) -> Int? {
+        guard let playing, count > listRows, !pointerInside else { return nil }
+        if let at = userScrolledAt, now - at < handsOffSeconds { return nil }
+        return max(0, min(playing - 1, count - listRows))
     }
 }

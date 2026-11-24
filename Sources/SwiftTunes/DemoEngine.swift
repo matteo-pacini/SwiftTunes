@@ -10,7 +10,7 @@ import TunesPanel
 /// A time written "@-N" or "@+N" in the file is N seconds before or after
 /// the launch. CARD is `player`, `chooser`, `new`, `edit:<id>`, `ask:<id>`,
 /// `share` (the playing tune), `share:<queue index>`, `rename`,
-/// `rename:<text typed>`, `lyrics`, `queue`, `words` or `words-sample`; the
+/// `rename:<text typed>`, `lyrics`, `words` or `words-sample`; the
 /// popover opens on it at launch.
 struct DemoOptions {
     var file: URL
@@ -44,7 +44,7 @@ struct DemoOptions {
         case share(Int?)
         /// The rename field, with this text typed if given.
         case rename(String?)
-        case lyrics, queue
+        case lyrics
         /// The own-words sheet, empty or with sample words.
         case words(sample: Bool)
 
@@ -65,7 +65,6 @@ struct DemoOptions {
                 try? await Task.sleep(for: .milliseconds(200))
                 model.askDelete()
             case .lyrics: model.toggleLyrics()
-            case .queue: model.openQueue()
             case .words(let sample):
                 model.openWords()
                 if sample {
@@ -116,7 +115,6 @@ struct DemoOptions {
         case "share": open = .share(nil)
         case "rename": open = .rename(nil)
         case "lyrics": open = .lyrics
-        case "queue": open = .queue
         case "words": open = .words(sample: false)
         case "words-sample": open = .words(sample: true)
         case let v?:

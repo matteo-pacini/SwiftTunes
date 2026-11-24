@@ -18,7 +18,6 @@ public enum Decide {
         if p.mode == .editor, let e = p.editor { return .editor(editor(s, e)) }
         if p.mode == .share, let sh = p.share { return .share(share(s, sh, home: home)) }
         if p.mode == .chooser || s.genre == nil { return .chooser(chooser(s)) }
-        if p.mode == .queue { return .queue(queueCard(s, now: now)) }
         if p.mode == .words, let w = p.following(s).words { return .words(wordsCard(s, w)) }
         return .player(player(s, p.following(s), now: now))
     }
@@ -345,9 +344,6 @@ public enum Decide {
         return "about \(Format.clock(max(10, (left / 10).rounded() * 10))) left"
     }
 
-    /// Rows THIS ROUND shows in the player.
-    public static let upNextRows = 3
-
     /// The round's entries as rows. Each row's commands and share target
     /// carry its index and name as drawn.
     static func roundRows(_ s: Snapshot, _ entries: some Sequence<RoundEntry>) -> [PlayerCard.Row] {
@@ -395,12 +391,11 @@ public enum Decide {
 
     static func nextSection(_ s: Snapshot, now: Double) -> PlayerCard.Next {
         let entries = round(s)
-        let window = roundWindow(entries)
         return PlayerCard.Next(
             label: "THIS ROUND",
             head: roundCount(entries),
-            rows: roundRows(s, window.rows),
-            more: window.more > 0 ? Control(text: "then \(window.more) more this round · Show all", help: "Show all") : nil
+            rows: roundRows(s, entries),
+            playing: entries.firstIndex { $0.state == .playing }
         )
     }
 
@@ -467,25 +462,6 @@ public enum Decide {
             refused: w.refused ?? "",
             cancel: Control(enabled: !w.busy, text: "Cancel", help: "Cancel"),
             compose: Control(enabled: !w.busy && wordsError == nil && nameError == nil, text: "Compose", help: "Compose")
-        )
-    }
-
-    static func queueCard(_ s: Snapshot, now: Double) -> QueueCard {
-        let entries = round(s)
-        let last: String? = entries.last.map { t in
-            s.repeat == .off ? "The round ends after \(t.name)." : "after these, a new round is drawn"
-        }
-        let rows = roundRows(s, entries)
-        return QueueCard(
-            back: Control(text: genreName(s), help: "Back"),
-            label: "THIS ROUND · \(Format.plural(entries.count, "tune", "tunes").uppercased())",
-            title: "This round",
-            head: roundModes(shuffle: s.shuffle, repeat: s.repeat),
-            rows: rows,
-            scrollTo: roundScrollTarget(rows),
-            last: last,
-            making: making(s, now: now),
-            palette: palette(s)
         )
     }
 
@@ -635,7 +611,6 @@ public enum Decide {
         if case .notice = footer(s, p, now: now) { return true }
         switch card(s, p, now: now, home: "") {
         case .player: break
-        case .queue: return jobShown(s)
         default: return false
         }
         if s.player == .playing || undoActive(s, now: now) { return true }
@@ -657,9 +632,6 @@ public enum Decide {
             hero = c.now.forming != nil
             job = c.making?.rows.contains { $0.kind == .job } ?? false
             meterShown = c.next.rows.contains { $0.state == .playing }
-        case .queue(let c):
-            job = c.making?.rows.contains { $0.kind == .job } ?? false
-            meterShown = c.rows.contains { $0.state == .playing }
         default:
             break
         }

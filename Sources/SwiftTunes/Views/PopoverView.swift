@@ -43,7 +43,7 @@ struct PopoverView: View {
         case .player(let p):
             Backdrop(palette: p.palette)
                 .matchedGeometryEffect(id: model.snapshot.genre ?? "", in: space, isSource: false)
-        case .share, .editor, .queue, .words:
+        case .share, .editor, .words:
             Backdrop(palette: Decide.palette(model.snapshot))
         case .setup, .chooser:
             Backdrop(palette: .neutral)
@@ -57,7 +57,6 @@ struct PopoverView: View {
         case .editor(let c): EditorView(card: c, model: model)
         case .share(let c): ShareView(card: c, model: model)
         case .player(let c): PlayerView(card: c, model: model)
-        case .queue(let c): QueueView(card: c, model: model)
         case .words(let c): WordsView(card: c, model: model)
         }
     }

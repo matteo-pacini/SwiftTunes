@@ -26,7 +26,6 @@ public struct Control: Sendable, Equatable {
 /// The one card the popover shows.
 public enum Card: Sendable, Equatable {
     case words(WordsCard)
-    case queue(QueueCard)
     case setup(SetupCard)
     case chooser(ChooserCard)
     case editor(EditorCard)
@@ -60,26 +59,6 @@ public struct WordsCard: Sendable, Equatable {
     public var refused: String
     public var cancel: Control
     public var compose: Control
-}
-
-// MARK: - Queue
-
-/// Everything that will play this round, in order.
-public struct QueueCard: Sendable, Equatable {
-    public var back: Control
-    /// `THIS ROUND · N TUNES`.
-    public var label: String
-    public var title: String
-    /// The modes: `shuffled · repeat all` and the like.
-    public var head: String
-    /// Every tune of the round, in list order.
-    public var rows: [PlayerCard.Row]
-    /// The row to bring into view: the playing tune's, nil when none plays.
-    public var scrollTo: String?
-    /// Under the list: what happens after it, nil with an empty round.
-    public var last: String?
-    public var making: PlayerCard.Making?
-    public var palette: Palette
 }
 
 // MARK: - Setup
@@ -291,16 +270,15 @@ public struct PlayerCard: Sendable, Equatable {
         public var help: String
     }
 
-    /// THIS ROUND: three consecutive rows of the round around the playing
-    /// tune (or the next three with none playing), numbered by their place.
+    /// THIS ROUND: every tune of the round, numbered by its place, in a list
+    /// that scrolls.
     public struct Next: Sendable, Equatable {
         public var label: String
-        /// `N of M` while a tune plays, else `M tunes`.
+        /// `N of M` while a tune plays, else `M tunes`, or `nothing`.
         public var head: String
         public var rows: [Row]
-        /// `then N more this round · Show all`, opening the queue card, when
-        /// more wait than the rows show.
-        public var more: Control?
+        /// The playing row's index in `rows`, nil when none plays.
+        public var playing: Int?
     }
 
     /// BEING MADE: the job and what has not started, under THIS ROUND.
