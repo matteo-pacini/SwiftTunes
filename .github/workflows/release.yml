@@ -1,0 +1,165 @@
+name: Release
+
+# A pushed v* tag makes a draft GitHub release with the signed, notarized and
+# stapled app. The owner publishes the draft.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    runs-on: xcode-27
+    # Holds the secrets and accepts only v* tags.
+    environment: release
+    steps:
+      - name: Select Xcode 27.2
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_27.2.app
+          xcodebuild -version
+          if [ "$(xcodebuild -version | head -n 1)" != "Xcode 27.2" ]; then
+            echo "::error::xcodebuild -version does not say Xcode 27.2."
+            exit 1
+          fi
+
+      # The whole history and every branch, to check the tag against main.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Everything that can refuse the tag runs before any secret is used.
+      - name: Check the tag, the plist and the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::$GITHUB_REF_NAME is not v<major>.<minor>.<patch>, with an optional -<suffix>."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::The commit of $GITHUB_REF_NAME is not on main."
+            exit 1
+          fi
+          short="$(/usr/bin/plutil -extract CFBundleShortVersionString raw -o - Support/Info.plist)"
+          bundle="$(/usr/bin/plutil -extract CFBundleVersion raw -o - Support/Info.plist)"
+          if [ "$short" != "$version" ] || [ "$bundle" != "$version" ]; then
+            echo "::error::$GITHUB_REF_NAME does not match Support/Info.plist ($short, $bundle)."
+            exit 1
+          fi
+          Scripts/release-notes.sh "$version" >"$RUNNER_TEMP/notes.md"
+          echo "VERSION=$version" >>"$GITHUB_ENV"
+
+      - run: swift test
+
+      - name: Install Nix
+        uses: nixbuild/nix-quick-install-action@9f63be77f412a248c9d9a65a4c82cf066cdf8f0c # v35
+        with:
+          nix_conf: |
+            keep-outputs = true
+            sandbox = relaxed
+            sandbox-fallback = false
+
+      # The key is usable by codesign alone (-T, not -A). The search list is
+      # extended, not replaced, so the runner's own keychains stay in it.
+      # No ace-server cache here: a release builds from the pinned sources.
+      - name: Import the Developer ID identity
+        env:
+          DEVELOPER_ID_P12: ${{ secrets.DEVELOPER_ID_P12 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          p12="$RUNNER_TEMP/developer-id.p12"
+          (umask 077 && printf '%s' "$DEVELOPER_ID_P12" | /usr/bin/base64 --decode -o "$p12")
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security import "$p12" -k "$keychain" -f pkcs12 -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$keychain" >/dev/null
+          searched=()
+          while IFS= read -r path; do
+            searched+=("$path")
+          done < <(security list-keychains -d user | sed -e 's/^[[:space:]]*"//' -e 's/"$//')
+          security list-keychains -d user -s "$keychain" "${searched[@]}"
+          identity="$(security find-identity -v -p codesigning "$keychain" \
+            | awk '/"Developer ID Application: / { print $2; exit }')"
+          if [ -z "$identity" ]; then
+            echo "::error::The imported file holds no valid Developer ID Application identity."
+            exit 1
+          fi
+          echo "SWIFTTUNES_SIGN_IDENTITY=$identity" >>"$GITHUB_ENV"
+
+      - name: Build the signed app
+        run: nix develop -c Scripts/make-app.sh
+
+      - name: Notarize
+        env:
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          key="$RUNNER_TEMP/notary-key.p8"
+          (umask 077 && printf '%s' "$NOTARY_KEY_P8" | /usr/bin/base64 --decode -o "$key")
+          submission="$RUNNER_TEMP/notary-submission.zip"
+          result="$RUNNER_TEMP/notary-result.json"
+          ditto -c -k --sequesterRsrc --keepParent build/SwiftTunes.app "$submission"
+          xcrun notarytool submit "$submission" \
+            --key "$key" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" \
+            --wait --timeout 1h --output-format json >"$result" || true
+          id="$(/usr/bin/plutil -extract id raw -o - "$result" 2>/dev/null || true)"
+          status="$(/usr/bin/plutil -extract status raw -o - "$result" 2>/dev/null || true)"
+          echo "Submission ${id:-none}: ${status:-no status}"
+          if [ "$status" != "Accepted" ]; then
+            if [ -n "$id" ]; then
+              xcrun notarytool log "$id" \
+                --key "$key" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" || true
+            fi
+            echo "::error::Notarization did not succeed."
+            exit 1
+          fi
+
+      - name: Staple, zip and checksum
+        run: |
+          xcrun stapler staple build/SwiftTunes.app
+          mkdir -p dist
+          zip="SwiftTunes-$VERSION.zip"
+          ditto -c -k --sequesterRsrc --keepParent build/SwiftTunes.app "dist/$zip"
+          (cd dist && shasum -a 256 "$zip" >"$zip.sha256")
+          cat "dist/$zip.sha256"
+
+      - name: Check the signature, the ticket and Gatekeeper
+        run: |
+          codesign --verify --deep --strict --verbose=2 build/SwiftTunes.app
+          xcrun stapler validate build/SwiftTunes.app
+          spctl --assess --type execute --verbose=2 build/SwiftTunes.app
+
+      - name: Draft the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then
+            prerelease=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/SwiftTunes-$VERSION.zip" "dist/SwiftTunes-$VERSION.zip.sha256" \
+            --draft --verify-tag "${prerelease[@]}" \
+            --title "SwiftTunes $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+
+      - name: Remove the keychain and the key files
+        if: always()
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          if [ -e "$keychain" ]; then
+            security delete-keychain "$keychain"
+          fi
+          rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/notary-key.p8"
