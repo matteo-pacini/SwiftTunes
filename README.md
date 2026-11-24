@@ -37,8 +37,10 @@ from Omarchy.
 - **Rename.** Click the playing tune's name to give it another.
 - **Removing the model.** The menu removes the 7.57 GiB model when you want
   the space back; your tunes stay and keep playing.
-- Every tune gets a picture drawn from its name, tempo and key. Media keys
-  and Now Playing work; the app can start at login.
+- Every tune gets a picture drawn from its name, tempo and key.
+
+Not yet proven: media keys, Now Playing and Start at Login are built but
+untested.
 
 ## A look
 
