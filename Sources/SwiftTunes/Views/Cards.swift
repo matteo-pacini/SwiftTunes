@@ -181,16 +181,25 @@ struct EditorView: View {
                             .multilineTextAlignment(.trailing)
                             .focused($focus, equals: .caption)
                     }
-                    row(card.turns, .turns) {
+                    // Variations run to 120 characters a line: the box takes the
+                    // row's whole width under its label, not the right-hand half.
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(verbatim: card.turns.label)
+                            Spacer()
+                            Text(verbatim: card.turns.side).font(.system(size: 10.5)).foregroundStyle(.secondary)
+                        }
                         TextEditor(text: binding(.turns))
-                            .frame(height: 54)
+                            .frame(height: 64)
                             .scrollContentBackground(.hidden)
                             .focused($focus, equals: .turns)
-                            .overlay(alignment: .topTrailing) {
+                            .accessibilityLabel(Text(verbatim: card.turns.label))
+                            .overlay(alignment: .topLeading) {
                                 if card.values.turns.isEmpty {
-                                    Text(verbatim: card.turns.placeholder).foregroundStyle(.tertiary).allowsHitTesting(false)
+                                    Text(verbatim: card.turns.placeholder).foregroundStyle(.tertiary).padding(.leading, 5).allowsHitTesting(false)
                                 }
                             }
+                        if !card.turns.error.isEmpty { error(card.turns.error) }
                     }
                     VStack(alignment: .leading, spacing: 3) {
                         LabeledContent {

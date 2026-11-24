@@ -167,12 +167,14 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             try? await Task.sleep(for: .milliseconds(500))
             guard let self else { return }
             show()
-            await prepare()
-            try? await Task.sleep(for: .milliseconds(800))
+            // Printed before the card is prepared, with no wait after: with
+            // the editor showing, a main-actor sleep here was seen not to
+            // return; the caller waits before its screenshot instead.
             if let window = popover.contentViewController?.view.window {
-                print("popover window \(window.windowNumber) height \(Int(window.frame.height)) content \(Int(popover.contentViewController?.preferredContentSize.height ?? 0))")
+                print("popover window \(window.windowNumber)")
                 fflush(stdout)
             }
+            await prepare()
         }
     }
 }

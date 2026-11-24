@@ -221,7 +221,11 @@ final class DemoEngine: EngineAPI {
         guard let g = snapshot.genres.first(where: { $0.id == id }) else {
             return .failure(Refusal(field: nil, text: "That genre no longer exists."))
         }
-        return .success(GenreFields(name: g.name, caption: "small combo, warm and unhurried", turns: ["late set", "a slow ballad"], bpm: [80, 120], palette: g.palette, sung: g.sung))
+        if g.sung {
+            return .success(GenreFields(name: g.name, caption: "retro synth pop, warm analog pads, gated drums, a clear lead vocal, sung verses and a big chorus",
+                                        turns: ["arpeggiated bass in eighths", "a key change before the last chorus"], bpm: [90, 118], palette: g.palette, sung: true))
+        }
+        return .success(GenreFields(name: g.name, caption: "small combo, warm and unhurried", turns: ["late set", "a slow ballad"], bpm: [80, 120], palette: g.palette, sung: false))
     }
 
     func saveGenre(id: String?, fields: GenreFields, base: GenreFields?) async -> Result<GenreSaved, Refusal> {
