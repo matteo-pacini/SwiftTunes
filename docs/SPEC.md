@@ -26,7 +26,7 @@ GPL-3.0-or-later.
 | 3 | Who owns `ace-server` | The app, through the lifeline shim: the shim holds the read end of a pipe whose write end only the app holds, and kills the server's process group when the pipe closes. |
 | 4 | Where `ace-server` comes from | Built from the pinned acestep.cpp revision, without its web page (see "Releases"), and embedded in `SwiftTunes.app/Contents/Helpers`. |
 | 5 | Signing, releases | Local builds are ad-hoc signed. A `v*` tag makes a release: signed with the owner's Developer ID, notarized, a zip on a draft GitHub release (see "Releases"). |
-| 6 | Repository | Private on GitHub; nothing is pushed without the owner's word. |
+| 6 | Repository | Public on GitHub; nothing is pushed without the owner's word. |
 | 7 | Kept format | AAC, 256 kbit/s, `.m4a`, encoded by the system. |
 | 8 | Holds | Memory pressure (warn or critical), Low Power Mode, thermal state serious or critical. All three are checked before each job and every 30 s while held. While a job runs only power and heat are checked, every 10 s: the server's own load raises memory pressure, so that check would hold every tune. |
 | 9 | Global shortcut | None. No notifications either. |

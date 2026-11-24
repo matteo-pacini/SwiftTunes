@@ -135,7 +135,7 @@ the demo's flags: `docs/TESTING.md`.
 - Commit on your own branch in your own worktree. Do not push, tag, or touch
   `main`. Commit messages are imperative, with a scope: `engine: …`,
   `app: …`, `build: …`, `docs: …`.
-- The repository will be public one day: no personal names, emails, host
+- The repository is public: no personal names, emails, host
   names or home paths in files, commits, test data or web requests. Fixtures
   are invented data in the real formats. The one exception is the bundle
   identifier, `me.matteopacini.SwiftTunes`, which is the app's name to the
