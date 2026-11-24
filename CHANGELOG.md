@@ -104,3 +104,5 @@ model is downloaded, nothing is sent anywhere. This is the first release.
 - Liquid Glass throughout, over a slowly drifting field of the genre's
   colours, in light and dark. With Reduce Motion nothing moves.
 - Quitting stops the composer and leaves nothing running.
+- SwiftTunes has its own icon in Finder and Login Items: a white swift in a
+  wide glide under a pair of lavender notes, on near-black.

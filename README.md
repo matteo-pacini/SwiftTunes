@@ -1,8 +1,16 @@
+<p align="center">
+  <img src="Resources/AppIcon.png" width="96" alt="The SwiftTunes icon: a white swift in a wide glide under a pair of lavender beamed notes, on near-black.">
+</p>
+
 # SwiftTunes
 
 A macOS menu bar app that plays endless music by genre, composed on your Mac
 by ACE-Step 1.5 Turbo through an embedded `ace-server` running on the GPU.
 Nothing is sent anywhere once the model is downloaded.
+
+**[Download the latest release](https://github.com/matteo-pacini/SwiftTunes/releases/latest)**:
+a signed and notarized zip, for a Mac with Apple silicon and macOS 26 or
+later. To build it yourself, see [Building](#building).
 
 <p align="center">
   <img src="docs/screenshots/playing.png" width="380" alt="The SwiftTunes popover playing a Jazz tune: its name, tempo and key, the tune's shape as columns of dots filled up to the position, and seven round controls with Previous left of the play button, and under them a volume slider between a quiet and a loud speaker. Below, This round reads 5 of 12 over a list of the whole round, scrolled so the playing tune sits second: tune 4, already played, dimmed at the top; tune 5 highlighted with a small level meter in place of its number; tunes 6 and 7 below, fading at the edge into the rest. Then the tune being made, and the composer bar.">
