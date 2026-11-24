@@ -8,17 +8,20 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 defaults:
   run:
     shell: bash
 
 jobs:
-  release:
+  # In the release environment, which holds the secrets and accepts only v*
+  # tags, with a token that can only read the repository.
+  build:
     runs-on: xcode-27
-    # Holds the secrets and accepts only v* tags.
     environment: release
+    outputs:
+      version: ${{ steps.gate.outputs.version }}
     steps:
       - name: Select Xcode 27.2
         run: |
@@ -37,6 +40,7 @@ jobs:
 
       # Everything that can refuse the tag runs before any secret is used.
       - name: Check the tag, the plist and the changelog
+        id: gate
         run: |
           version="${GITHUB_REF_NAME#v}"
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
@@ -56,8 +60,10 @@ jobs:
             echo "::error::$GITHUB_REF_NAME does not match Support/Info.plist ($short, $bundle)."
             exit 1
           fi
-          Scripts/release-notes.sh "$numeric" >"$RUNNER_TEMP/notes.md"
+          mkdir -p dist
+          Scripts/release-notes.sh "$numeric" >dist/notes.md
           echo "VERSION=$version" >>"$GITHUB_ENV"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
 
       - run: swift test
 
@@ -69,24 +75,32 @@ jobs:
             sandbox = relaxed
             sandbox-fallback = false
 
-      # The key is usable by codesign alone (-T, not -A). The search list is
+      # Every build step, and all code from elsewhere, runs here, before the
+      # signing key exists on the runner. The build cache is this run's own
+      # folder, so nothing another run left behind goes into the app.
+      - name: Build the app, unsigned by the Developer ID
+        run: |
+          export SWIFTTUNES_BUILD_CACHE="$RUNNER_TEMP/swifttunes-build"
+          env -u SWIFTTUNES_SIGN_IDENTITY nix develop -c Scripts/make-app.sh
+
+      # The keychain's password is made for this run and is never stored. The
+      # key's ACL lists only codesign (-T, not -A). The search list is
       # extended, not replaced, so the runner's own keychains stay in it.
-      # No ace-server cache here: a release builds from the pinned sources.
       - name: Import the Developer ID identity
         env:
           DEVELOPER_ID_P12: ${{ secrets.DEVELOPER_ID_P12 }}
           DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           keychain="$RUNNER_TEMP/signing.keychain-db"
           p12="$RUNNER_TEMP/developer-id.p12"
+          trap 'rm -f "$p12"' EXIT
+          keychain_password="$(/usr/bin/openssl rand -base64 24)"
           (umask 077 && printf '%s' "$DEVELOPER_ID_P12" | /usr/bin/base64 --decode -o "$p12")
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security create-keychain -p "$keychain_password" "$keychain"
           security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
           security import "$p12" -k "$keychain" -f pkcs12 -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
-          rm -f "$p12"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$keychain" >/dev/null
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" >/dev/null
           searched=()
           while IFS= read -r path; do
             searched+=("$path")
@@ -100,8 +114,8 @@ jobs:
           fi
           echo "SWIFTTUNES_SIGN_IDENTITY=$identity" >>"$GITHUB_ENV"
 
-      - name: Build the signed app
-        run: nix develop -c Scripts/make-app.sh
+      - name: Sign
+        run: Scripts/sign-app.sh build/SwiftTunes.app
 
       - name: Notarize
         env:
@@ -110,6 +124,7 @@ jobs:
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
         run: |
           key="$RUNNER_TEMP/notary-key.p8"
+          trap 'rm -f "$key"' EXIT
           (umask 077 && printf '%s' "$NOTARY_KEY_P8" | /usr/bin/base64 --decode -o "$key")
           submission="$RUNNER_TEMP/notary-submission.zip"
           result="$RUNNER_TEMP/notary-result.json"
@@ -121,6 +136,8 @@ jobs:
           status="$(/usr/bin/plutil -extract status raw -o - "$result" 2>/dev/null || true)"
           echo "Submission ${id:-none}: ${status:-no status}"
           if [ "$status" != "Accepted" ]; then
+            # notarytool's own output: the submission's state or its error.
+            cat "$result"
             if [ -n "$id" ]; then
               xcrun notarytool log "$id" \
                 --key "$key" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" || true
@@ -132,22 +149,67 @@ jobs:
       - name: Staple, zip and checksum
         run: |
           xcrun stapler staple build/SwiftTunes.app
-          mkdir -p dist
           zip="SwiftTunes-$VERSION.zip"
           ditto -c -k --sequesterRsrc --keepParent build/SwiftTunes.app "dist/$zip"
           (cd dist && shasum -a 256 "$zip" >"$zip.sha256")
           cat "dist/$zip.sha256"
 
+      # The checks run on the app as it comes out of the zip that ships.
       - name: Check the signature, the ticket and Gatekeeper
         run: |
-          codesign --verify --deep --strict --verbose=2 build/SwiftTunes.app
-          xcrun stapler validate build/SwiftTunes.app
-          spctl --assess --type execute --verbose=2 build/SwiftTunes.app
+          expanded="$RUNNER_TEMP/expanded"
+          rm -rf "$expanded"
+          mkdir -p "$expanded"
+          ditto -x -k "dist/SwiftTunes-$VERSION.zip" "$expanded"
+          codesign --verify --deep --strict --verbose=2 "$expanded/SwiftTunes.app"
+          xcrun stapler validate "$expanded/SwiftTunes.app"
+          spctl --assess --type execute --verbose=2 "$expanded/SwiftTunes.app"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: |
+            dist/SwiftTunes-${{ steps.gate.outputs.version }}.zip
+            dist/SwiftTunes-${{ steps.gate.outputs.version }}.zip.sha256
+            dist/notes.md
+          if-no-files-found: error
+
+      - name: Remove the keychain and the key files
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/notary-key.p8"
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          if [ -e "$keychain" ]; then
+            security delete-keychain "$keychain"
+          fi
+
+  # No secrets and no action from outside GitHub; the one token that can
+  # write the repository, used only to make the draft.
+  draft:
+    needs: build
+    runs-on: xcode-27
+    permissions:
+      contents: write
+    steps:
+      - name: Select Xcode 27.2
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_27.2.app
+          xcodebuild -version
+          if [ "$(xcodebuild -version | head -n 1)" != "Xcode 27.2" ]; then
+            echo "::error::xcodebuild -version does not say Xcode 27.2."
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: dist
 
       - name: Draft the release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
           prerelease=()
           if [[ "$VERSION" == *-* ]]; then
@@ -156,13 +218,4 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             "dist/SwiftTunes-$VERSION.zip" "dist/SwiftTunes-$VERSION.zip.sha256" \
             --draft --verify-tag "${prerelease[@]}" \
-            --title "SwiftTunes $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
-
-      - name: Remove the keychain and the key files
-        if: always()
-        run: |
-          keychain="$RUNNER_TEMP/signing.keychain-db"
-          if [ -e "$keychain" ]; then
-            security delete-keychain "$keychain"
-          fi
-          rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/notary-key.p8"
+            --title "SwiftTunes $VERSION" --notes-file dist/notes.md
