@@ -125,6 +125,40 @@ struct WordsTests {
         #expect(r.text == out && r.caret == outCaret)
     }
 
+    @Test("a text view's UTF-16 caret and the panel's character caret convert both ways", arguments: [
+        ("", 0, 0),
+        ("abc", 2, 2),
+        ("é🎵x", 0, 0),
+        ("é🎵x", 1, 1),
+        ("é🎵x", 3, 2),
+        ("é🎵x", 4, 3),
+        ("e\u{301}🇮🇹\r\nz", 2, 1),
+        ("e\u{301}🇮🇹\r\nz", 6, 2),
+        ("e\u{301}🇮🇹\r\nz", 8, 3),
+        ("e\u{301}🇮🇹\r\nz", 9, 4),
+    ] as [(String, Int, Int)])
+    func caretRoundTrip(_ text: String, _ utf16: Int, _ characters: Int) {
+        #expect(Panel.characterOffset(ofUTF16: utf16, in: text) == characters)
+        #expect(Panel.utf16Offset(ofCharacter: characters, in: text) == utf16)
+    }
+
+    @Test("an offset inside a character or outside the text is held to the text", arguments: [
+        ("é🎵x", 2, 1),
+        ("e\u{301}🇮🇹", 1, 0),
+        ("e\u{301}🇮🇹", 4, 1),
+        ("abc", -1, 0),
+        ("abc", 99, 3),
+    ] as [(String, Int, Int)])
+    func caretClamped(_ text: String, _ utf16: Int, _ characters: Int) {
+        #expect(Panel.characterOffset(ofUTF16: utf16, in: text) == characters)
+    }
+
+    @Test("a character caret outside the text is held to the text")
+    func characterCaretClamped() {
+        #expect(Panel.utf16Offset(ofCharacter: -2, in: "é🎵x") == 0)
+        #expect(Panel.utf16Offset(ofCharacter: 9, in: "é🎵x") == 4)
+    }
+
     @Test("the sheet opens only for a sung genre, with the engine's name")
     func open() throws {
         let s = try sungSnapshot()

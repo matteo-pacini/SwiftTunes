@@ -231,7 +231,7 @@ struct QueueView: View {
             // The rows' glass has its own container inside the scroll view: a
             // container outside it draws the glass in a layer the scroll view
             // does not clip.
-            ScrollView {
+            ScrollBox {
                 GlassEffectContainer(spacing: 6) {
                     VStack(spacing: 6) {
                         ForEach(card.rows, id: \.id) { row in
@@ -429,7 +429,7 @@ struct LyricsBox: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Caps(text: head)
-            ScrollView {
+            ScrollBox {
                 Text(verbatim: words)
                     .font(.system(size: 13))
                     .frame(maxWidth: .infinity, alignment: .leading)

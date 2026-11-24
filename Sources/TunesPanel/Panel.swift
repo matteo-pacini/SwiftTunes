@@ -603,6 +603,26 @@ extension Panel {
         return (String(before) + insert + String(text[at...]), before.count + insert.count)
     }
 
+    /// The characters of `text` that end within its first `offset` UTF-16
+    /// code units (the unit a text view counts in), clamped to the text. An
+    /// offset inside a character does not count that character.
+    public static func characterOffset(ofUTF16 offset: Int, in text: String) -> Int {
+        var units = 0
+        var characters = 0
+        for character in text {
+            units += character.utf16.count
+            if units > offset { break }
+            characters += 1
+        }
+        return characters
+    }
+
+    /// The UTF-16 code units in the first `offset` characters of `text`,
+    /// clamped to the text.
+    public static func utf16Offset(ofCharacter offset: Int, in text: String) -> Int {
+        text.prefix(max(0, offset)).utf16.count
+    }
+
     /// `Sing my words…`: the sheet, for a sung genre, its name field holding
     /// `name` (the engine's offer).
     public func openingWords(_ snapshot: Snapshot, name: String) -> Panel {

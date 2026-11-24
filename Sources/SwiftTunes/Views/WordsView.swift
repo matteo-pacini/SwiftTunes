@@ -6,7 +6,6 @@ import TunesPanel
 struct WordsView: View {
     let card: WordsCard
     let model: PanelModel
-    @State private var selection: TextSelection?
 
     var body: some View {
         GlassEffectContainer(spacing: 6) {
@@ -25,15 +24,10 @@ struct WordsView: View {
                         ForEach(Array(card.inserts.enumerated().dropFirst(3)), id: \.offset) { i, insert in insertButton(i, insert) }
                     }
                 }
-                TextEditor(text: Binding(get: { card.text }, set: { model.typeWords($0, caret: caret(in: $0)) }), selection: $selection)
-                    .font(.system(size: 13))
-                    .scrollContentBackground(.hidden)
+                PlainTextEditor(text: card.text, caret: card.caret, fontSize: 13, label: card.label, changed: model.typeWords)
                     .frame(height: 190)
                     .padding(8)
                     .glassEffect(.regular, in: .rect(cornerRadius: 13))
-                    .accessibilityLabel(Text(verbatim: card.label))
-                    .onChange(of: selection) { model.typeWords(card.text, caret: caret(in: card.text)) }
-                    .onChange(of: card.caret) { place(card.caret) }
                 if !card.wordsError.isEmpty { error(card.wordsError) }
                 HStack {
                     Text(verbatim: card.counter)
@@ -88,19 +82,5 @@ struct WordsView: View {
 
     private func error(_ text: String) -> some View {
         Text(verbatim: text).font(.system(size: 11.5)).foregroundStyle(Tone.red.color).fixedSize(horizontal: false, vertical: true)
-    }
-
-    /// Where the caret is in `text`, in characters.
-    private func caret(in text: String) -> Int {
-        guard case .selection(let range)? = selection?.indices,
-              range.upperBound >= text.startIndex, range.upperBound <= text.endIndex else { return text.count }
-        return text.distance(from: text.startIndex, to: range.upperBound)
-    }
-
-    /// Puts the caret where the panel says, after a mark was inserted.
-    private func place(_ offset: Int) {
-        let text = card.text
-        let i = text.index(text.startIndex, offsetBy: min(max(0, offset), text.count))
-        selection = TextSelection(insertionPoint: i)
     }
 }

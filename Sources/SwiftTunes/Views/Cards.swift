@@ -166,11 +166,10 @@ struct EditorView: View {
                 if !card.chip.isEmpty { Pill(text: card.chip) }
             }
             Text(verbatim: card.title).font(.system(size: 20, weight: .bold, design: .rounded)).lineLimit(1)
-            // Grouped rows drawn here rather than by a grouped Form, which is a
-            // scrolling list: in the popover, a scroll view was seen to block
-            // the main thread in the renderer's surface allocation
-            // (CAContext waitForCommitId), stalling main-actor work for
-            // seconds, and every time with a field focused in the Form.
+            // Grouped rows drawn by hand: a grouped form is a SwiftUI
+            // scrolling list, and in the popover those block the main thread
+            // in the renderer's surface allocation (CAContext
+            // waitForCommitId), stalling main-actor work for seconds.
             VStack(spacing: 0) {
                 row(card.name, .name) {
                     TextField(text: binding(.name), prompt: Text(verbatim: card.name.placeholder)) { Text(verbatim: card.name.label) }
@@ -195,11 +194,10 @@ struct EditorView: View {
                         Spacer()
                         Text(verbatim: card.turns.side).font(.system(size: 10.5)).foregroundStyle(.secondary)
                     }
-                    TextEditor(text: binding(.turns))
+                    PlainTextEditor(text: card.values.turns, fontSize: 12.5, label: card.turns.label) { text, _ in
+                        if text != card.values.turns { model.type(.turns, text) }
+                    }
                         .frame(height: 64)
-                        .scrollContentBackground(.hidden)
-                        .focused($focus, equals: .turns)
-                        .accessibilityLabel(Text(verbatim: card.turns.label))
                         .overlay(alignment: .topLeading) {
                             if card.values.turns.isEmpty {
                                 Text(verbatim: card.turns.placeholder).foregroundStyle(.tertiary).padding(.leading, 5).allowsHitTesting(false)
