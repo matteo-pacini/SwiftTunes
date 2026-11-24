@@ -245,6 +245,8 @@ public struct PlayerCard: Sendable, Equatable {
         public var shareRequest: ShareRequest?
         /// What the scrap control sends: the playing tune's name as drawn.
         public var scrapCommand: Command?
+        /// The slider under the round controls.
+        public var volume: Volume
 
     }
 
@@ -267,6 +269,12 @@ public struct PlayerCard: Sendable, Equatable {
         public var levels: [Double]
         /// Bars drawn as played, 0…78.
         public var played: Int
+        public var help: String
+    }
+
+    /// The player's level, 0…1, as the engine reports it.
+    public struct Volume: Sendable, Equatable {
+        public var level: Double
         public var help: String
     }
 

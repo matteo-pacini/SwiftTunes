@@ -89,6 +89,7 @@ struct Hero: View {
                 .padding(.vertical, -8)
             }
             controls
+            VolumeRow(volume: now.volume, model: model)
         }
     }
 
@@ -151,6 +152,48 @@ struct Hero: View {
             RoundButton(symbol: "trash", control: now.scrap) { model.send(now.scrapCommand) }
         }
         .animation(reduceMotion ? nil : .smooth, value: now.showsPause)
+    }
+}
+
+/// The player's level: the system slider between two speaker marks. While
+/// the pointer holds it, it draws its own place and sends each change;
+/// on release, the last place.
+struct VolumeRow: View {
+    let volume: PlayerCard.Volume
+    let model: PanelModel
+    @State private var drag: Double?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "speaker.fill")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Slider(value: level, in: 0...1) { editing in
+                if editing {
+                    drag = volume.level
+                } else {
+                    model.setVolume(fraction: drag ?? volume.level, dragging: false)
+                    drag = nil
+                }
+            }
+            .helped(Control(help: volume.help))
+            Image(systemName: "speaker.wave.3.fill")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+        }
+        .font(.system(size: 11))
+    }
+
+    private var level: Binding<Double> {
+        Binding(get: { drag ?? volume.level }, set: { value in
+            // Not held by the pointer (a keyboard or accessibility step): final at once.
+            guard drag != nil else {
+                model.setVolume(fraction: value, dragging: false)
+                return
+            }
+            drag = value
+            model.setVolume(fraction: value, dragging: true)
+        })
     }
 }
 

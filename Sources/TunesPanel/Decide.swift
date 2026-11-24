@@ -236,6 +236,14 @@ public enum Decide {
         return .seek(to: (f * l * 10).rounded() / 10)
     }
 
+    /// The slider at `fraction` of the way across: the level, within 0…1, to
+    /// a hundredth, or nil for a fraction that is not finite. `dragging` is
+    /// true while the pointer holds the slider.
+    public static func volume(fraction: Double, dragging: Bool) -> Command? {
+        guard fraction.isFinite else { return nil }
+        return .setVolume(to: (min(1, max(0, fraction)) * 100).rounded() / 100, dragging: dragging)
+    }
+
     /// The selected genre's palette, or one made from its name.
     public static func palette(_ s: Snapshot) -> Palette {
         guard let g = s.genres.first(where: { $0.id == s.genre }) else { return Palette.made(from: s.genre ?? "") }
@@ -332,7 +340,8 @@ public enum Decide {
             share: Control(enabled: t != nil, help: "Share"),
             scrap: Control(enabled: t != nil, help: t.map { "Scrap \($0.name)" } ?? "Scrap"),
             shareRequest: t.map { ShareRequest(target: TuneTarget(name: $0.name, index: nil), file: $0.file, sung: $0.sung) },
-            scrapCommand: t.map { .scrapPlaying(name: $0.name) }
+            scrapCommand: t.map { .scrapPlaying(name: $0.name) },
+            volume: PlayerCard.Volume(level: s.volume, help: "Volume")
         )
     }
 

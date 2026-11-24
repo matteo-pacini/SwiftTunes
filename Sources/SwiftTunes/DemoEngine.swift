@@ -214,6 +214,7 @@ final class DemoEngine: EngineAPI {
         case .seek(let to):
             s.pos = to
             s.posAt = now
+        case .setVolume(let to, _): s.volume = to
         case .next:
             guard let t = s.tune, !s.queue.isEmpty else { return }
             s.played.append(Self.queued(t))

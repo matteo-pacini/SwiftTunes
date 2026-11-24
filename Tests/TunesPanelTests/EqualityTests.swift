@@ -48,6 +48,7 @@ struct EqualityTests {
             ("scrap", { $0.scrap.text += "x" }),
             ("shareRequest", { flip(&$0.shareRequest, ShareRequest(target: TuneTarget(name: "x", index: 3), file: "f")) }),
             ("scrapCommand", { flip(&$0.scrapCommand, .scrapPlaying(name: "other")) }),
+            ("volume", { $0.volume.level -= 0.5 }),
         ] as [Change<PlayerCard.Now>])
     }
 
@@ -59,6 +60,9 @@ struct EqualityTests {
         expectEachFieldCounts(PlayerCard.Wave(levels: [0.5], played: 1, help: "h"), [
             ("levels", { $0.levels.append(1) }), ("played", { $0.played += 1 }), ("help", { $0.help += "x" }),
         ] as [Change<PlayerCard.Wave>])
+        expectEachFieldCounts(PlayerCard.Volume(level: 0.5, help: "h"), [
+            ("level", { $0.level += 0.01 }), ("help", { $0.help += "x" }),
+        ] as [Change<PlayerCard.Volume>])
     }
 
     @Test func playerCard() throws {

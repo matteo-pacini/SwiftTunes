@@ -330,6 +330,21 @@ struct PlayerTests {
         #expect(Decide.seek(try Fixture.load("05-queue-full"), fraction: fraction) == .seek(to: to))
     }
 
+    @Test("the slider sends its level within 0…1, to a hundredth, dragging or not; nothing for a level that is not finite",
+           arguments: [(0.5, 0.5), (0.456, 0.46), (0.994, 0.99), (0.996, 1), (0, 0), (1, 1), (-0.2, 0), (1.5, 1), (.nan, nil), (.infinity, nil), (-.infinity, nil)] as [(Double, Double?)],
+           [true, false])
+    func volume(_ fraction: (Double, Double?), _ dragging: Bool) {
+        #expect(Decide.volume(fraction: fraction.0, dragging: dragging) == fraction.1.map { .setVolume(to: $0, dragging: dragging) })
+    }
+
+    @Test("the volume row: the level the engine reports, 1 for a snapshot without one", arguments: ["05-queue-full", "17-paused", "21-stopped", "33-ended"])
+    func volumeRow(_ name: String) throws {
+        var s = try Fixture.load(name)
+        #expect(try player(s).now.volume == PlayerCard.Volume(level: 1, help: "Volume"))
+        s.volume = 0.35
+        #expect(try player(s).now.volume == PlayerCard.Volume(level: 0.35, help: "Volume"))
+    }
+
     @Test("no seek without a tune whose length is known")
     func noSeek() throws {
         #expect(Decide.seek(try Fixture.load("06-first-tune"), fraction: 0.5) == nil)
