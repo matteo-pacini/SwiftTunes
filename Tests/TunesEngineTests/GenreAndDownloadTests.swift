@@ -298,10 +298,10 @@ import TunesRules
         rig.player.volume = 1
         let calls = rig.player.calls.count
         rig.make()
-        // Applied at launch, with nothing played yet.
         #expect(rig.player.volume == 0.35 && rig.player.calls.count == calls)
         await rig.send(.selectGenre(id: "jazz"))
         #expect(rig.snap.player == .playing && rig.snap.volume == 0.35 && rig.player.volume == 0.35)
+        #expect(rig.player.volumeAtPlay.last == 0.35)
         await rig.close()
     }
 

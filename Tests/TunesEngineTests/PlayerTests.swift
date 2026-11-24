@@ -249,7 +249,7 @@ import TunesRules
         await rig.close()
     }
 
-    @Test func aDragWritesTheStateFileOnceOnRelease() async throws {
+    @Test func aDragWritesTheStateFileOnlyOnRelease() async throws {
         let (rig, _) = try await keptRig(1)
         let file = rig.paths.support.appending(path: "state.json")
         Files.remove(file)

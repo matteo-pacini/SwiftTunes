@@ -701,8 +701,8 @@ final class Engine: EngineAPI {
         }
     }
 
-    /// Applied at once. The command saves the level only for `dragging:
-    /// false`, so a drag writes the state file once, when the pointer lets go.
+    /// Applied at once. This command saves the level only for `dragging:
+    /// false`; any other save, and shutdown, also write the level of that moment.
     func setVolume(_ level: Double, dragging: Bool) {
         guard level.isFinite else { return }
         let clamped = min(max(0, level), 1)

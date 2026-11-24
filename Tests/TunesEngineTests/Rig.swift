@@ -62,9 +62,12 @@ final class FakePlayer: TunePlayer {
     var position = 0.0
     var repeatOne = false
     var volume = 1.0
+    /// The level at each `play`, kept apart from `calls` so call counts hold.
+    var volumeAtPlay: [Double] = []
 
     func play(_ url: URL, token: Int) {
         calls.append("play \(url.lastPathComponent)")
+        volumeAtPlay.append(volume)
         current = nil
         next = nil
         pendingPlay = (url, token)
