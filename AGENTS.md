@@ -140,7 +140,9 @@ the demo's flags: `docs/TESTING.md`.
   are invented data in the real formats. The one exception is the bundle
   identifier, `me.matteopacini.SwiftTunes`, which is the app's name to the
   system and stays as it is; a release's signature carries the owner's
-  name too, and that is Apple's doing. `Resources/ThirdPartyNotices.txt`
+  name too, and that is Apple's doing. The repository's own address,
+  `github.com/matteo-pacini/SwiftTunes`, is used where a link to it is
+  needed, such as the README's download link. `Resources/ThirdPartyNotices.txt`
   holds other projects' notices word for word, names and addresses
   included, because their licences require it.
 - A change a user can notice adds a line under `Unreleased` in
