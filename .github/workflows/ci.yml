@@ -4,13 +4,78 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
+# Every job runs on the xcode-27 image and first selects Xcode 27.2, the one
+# Xcode that builds, tests and releases SwiftTunes. Swift 6.3.3 in Xcode 26.6,
+# the default on macos-26, crashes in IR generation on Sources/SwiftTunes/Views.
 jobs:
   test:
-    # Xcode 27 (Swift 6.4). Swift 6.3.3 in Xcode 26.6, the default on
-    # macos-26, crashes in IR generation on Sources/SwiftTunes/Views.
     runs-on: xcode-27
     steps:
-      - uses: actions/checkout@v4
+      - name: Select Xcode 27.2
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_27.2.app
+          xcodebuild -version
+          if [ "$(xcodebuild -version | head -n 1)" != "Xcode 27.2" ]; then
+            echo "::error::xcodebuild -version does not say Xcode 27.2."
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - run: swift --version
       - run: swift build
       - run: swift test
+
+  changelog:
+    runs-on: xcode-27
+    steps:
+      - name: Select Xcode 27.2
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_27.2.app
+          xcodebuild -version
+          if [ "$(xcodebuild -version | head -n 1)" != "Xcode 27.2" ]; then
+            echo "::error::xcodebuild -version does not say Xcode 27.2."
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The changelog has a section for the plist's version
+        run: |
+          version="$(/usr/bin/plutil -extract CFBundleShortVersionString raw -o - Support/Info.plist)"
+          echo "Support/Info.plist: $version"
+          Scripts/release-notes.sh "$version" >/dev/null
+
+  app:
+    runs-on: xcode-27
+    steps:
+      - name: Select Xcode 27.2
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_27.2.app
+          xcodebuild -version
+          if [ "$(xcodebuild -version | head -n 1)" != "Xcode 27.2" ]; then
+            echo "::error::xcodebuild -version does not say Xcode 27.2."
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Nix
+        uses: nixbuild/nix-quick-install-action@9f63be77f412a248c9d9a65a4c82cf066cdf8f0c # v35
+        with:
+          nix_conf: |
+            keep-outputs = true
+            sandbox = relaxed
+            sandbox-fallback = false
+      # The acestep.cpp checkout and its build tree; Scripts/build-ace-server.sh
+      # rebuilds only what changed. The compiler is part of the key because the
+      # object files in it come from that Xcode's clang.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/SwiftTunes-build
+          key: ace-server-xcode-27.2-${{ hashFiles('Config/pins.json', 'Scripts/build-ace-server.sh') }}
+      - name: Build the ad-hoc signed app
+        run: nix develop -c Scripts/make-app.sh
