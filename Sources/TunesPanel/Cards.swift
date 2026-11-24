@@ -349,6 +349,22 @@ public struct PlayerCard: Sendable, Equatable {
         public var retry: Control?
         /// `Sing my words…`, for a sung genre.
         public var words: Control?
+        /// The switch shows only once the model is ready.
+        public var showsSwitch: Bool = true
+        /// Without the model: the setup card's business in one line.
+        public var standIn: StandIn?
+    }
+
+    /// The composer bar standing in for the setup cards.
+    public struct StandIn: Sendable, Equatable {
+        public var text: String
+        /// The size, or the amounts and the speed.
+        public var detail: String
+        /// 0…1 while downloading.
+        public var progress: Double?
+        /// Download, Cancel or Resume.
+        public var button: Control
+        public var command: Command
     }
 
     public struct Line: Sendable, Equatable {
@@ -390,6 +406,18 @@ public enum Footer: Sendable, Equatable {
     case notice(String)
     /// "Scrapped <t>." and the button "Undo · N s".
     case undo(text: String, button: Control)
+}
+
+/// The status item menu's `Remove Music Model…` and the alert it asks with.
+public struct ModelRemoval: Sendable, Equatable {
+    public var menuTitle: String
+    /// Some model file or part file is on disk.
+    public var enabled: Bool
+    public var alertTitle: String
+    public var alertText: String
+    public var remove: String
+    public var cancel: String
+    public var command: Command
 }
 
 /// The menu bar item: the note glyph, the genre's name while playing, the
