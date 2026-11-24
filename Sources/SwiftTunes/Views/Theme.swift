@@ -43,15 +43,12 @@ extension Palette {
     static let neutral = Palette(colors: [RGB(0.09, 0.09, 0.11), RGB(0.17, 0.17, 0.21), RGB(0.13, 0.13, 0.17), RGB(0.11, 0.11, 0.15)])
 }
 
-/// Whether anything may move: the popover is open and Reduce Motion is
-/// off. The backdrop also holds still in Low Power Mode.
+/// What may move, as `Decide.animating` says for the card showing.
 struct Motion: Equatable {
-    var open = false
-    var reduce = false
-    var lowPower = false
-
-    var forms: Bool { open && !reduce }
-    var drifts: Bool { open && !reduce && !lowPower }
+    /// The colour field.
+    var drifts = false
+    /// The forming waves.
+    var forms = false
 }
 
 extension EnvironmentValues {

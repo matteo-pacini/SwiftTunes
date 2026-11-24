@@ -2,7 +2,7 @@ import AppKit
 import TunesContract
 import TunesPanel
 
-/// `--demo <file.jsonl> [--demo-line N] [--demo-open CARD] [--demo-appearance light|dark] [--demo-inactive]`: the app runs on
+/// `--demo <file.jsonl> [--demo-line N] [--demo-step S] [--demo-open CARD] [--demo-appearance light|dark] [--demo-inactive] [--demo-still-backdrop]`: the app runs on
 /// a stand-in engine that shows the snapshots of a fixture file instead of
 /// composing or playing, so each state can be opened and looked at. It plays
 /// no sound and touches no file but the one it reads.
@@ -18,6 +18,10 @@ struct DemoOptions {
     var open: Open?
     /// `--demo-appearance light|dark`: the whole app in that appearance.
     var appearance: NSAppearance.Name?
+    /// `--demo-step <seconds>`: from the line shown, the next line of the
+    /// file every so many seconds, as if the engine had sent it.
+    var step: Double?
+    var stillBackdrop: Bool
     /// `--demo-inactive`: the app gives up being active once the popover is
     /// open, to look at the cards in a window that is not key.
     var inactive: Bool
@@ -81,6 +85,8 @@ struct DemoOptions {
         file = URL(fileURLWithPath: path)
         line = value("--demo-line").flatMap(Int.init)
         inactive = arguments.contains("--demo-inactive")
+        step = value("--demo-step").flatMap(Double.init)
+        stillBackdrop = arguments.contains("--demo-still-backdrop")
         switch value("--demo-appearance") {
         case "light": appearance = .aqua
         case "dark": appearance = .darkAqua
@@ -124,7 +130,20 @@ final class DemoEngine: EngineAPI {
         }
         let pick = options.line.map { min(max(0, $0), snapshots.count - 1) } ?? snapshots.count - 1
         snapshot = snapshots.indices.contains(pick) ? snapshots[pick] : Self.empty
+        if let step = options.step, pick + 1 < snapshots.count {
+            let later = Array(snapshots[(pick + 1)...])
+            stepper = Task { [weak self] in
+                for next in later {
+                    try? await Task.sleep(for: .seconds(step))
+                    guard let self, !Task.isCancelled else { return }
+                    snapshot = next
+                    changed()
+                }
+            }
+        }
     }
+
+    private var stepper: Task<Void, Never>?
 
     private static let empty = Snapshot(
         version: 1, setup: .ready, download: nil, need: Need(downloadBytes: 0, diskFreeBytes: 0, ramBytes: 8 << 30),
@@ -272,5 +291,5 @@ final class DemoEngine: EngineAPI {
     /// The same two words every time.
     func suggestTuneName() -> String { snapshot.genre == nil ? "" : "Long Way Home" }
 
-    func shutdown() async {}
+    func shutdown() async { stepper?.cancel() }
 }

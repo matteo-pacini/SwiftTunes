@@ -20,6 +20,9 @@ final class PanelModel {
 
     /// Low Power Mode is on: the backdrop holds still.
     private(set) var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+    /// The demo's `--demo-still-backdrop`: the backdrop holds still as in
+    /// Low Power Mode, so a screenshot shows only what else moves.
+    var stillBackdrop = false
 
     /// Called after every new snapshot, for the status item and Now Playing.
     @ObservationIgnored var onSnapshot: ((Snapshot) -> Void)?
