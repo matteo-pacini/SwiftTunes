@@ -407,9 +407,10 @@ This section adds to "Layout of the popover" and wins where they differ.
   a drag that ends at once.
 - **The engine** clamps the level to 0…1, ignores one that is not finite,
   applies it to the player at once and reports it as `volume`. A level
-  equal to the current one produces no snapshot. It writes `state.json`
-  only for a command with `dragging: false`, and at shutdown; a drag writes
-  the file once. At launch the saved level is applied before anything
+  equal to the current one produces no snapshot. The command writes `state.json`
+  only with `dragging: false`, and the engine writes it at shutdown; a drag
+  writes the file once. A save made for another reason during a drag holds
+  the level of that moment. At launch the saved level is applied before anything
   plays; a state file with no level, or one out of range, reads as 1.
 - The level holds across tunes, stop and play, genres and rounds. Muting
   in tests is separate from it. Now Playing and the media keys have no
