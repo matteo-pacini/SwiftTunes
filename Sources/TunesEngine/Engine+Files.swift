@@ -15,7 +15,7 @@ extension Engine {
     /// Moves a tune's file aside and offers its undo; the previous scrap is
     /// finalised only once the move is done. False when the tune is not ours
     /// or cannot be moved (said in `error`).
-    func setAside(_ tune: Tune) -> Bool {
+    func setAside(_ tune: Tune, from place: Scrap.Place = .playing) -> Bool {
         guard scrappable(tune.path) else { return false }
         let dest = scrappedDir.appending(path: tune.file)
         // Two genre folders can hold the same file name.
@@ -33,7 +33,7 @@ extension Engine {
         let mark = tune.path.deletingLastPathComponent().appending(path: TuneFiles.pinMark(tune.file))
         let wasPinned = Files.exists(mark)
         if wasPinned { Files.remove(mark) }
-        scrap = Scrap(tune: tune, from: tune.path, to: dest, pinned: wasPinned, until: clock.now + Rules.scrapHold)
+        scrap = Scrap(tune: tune, from: tune.path, to: dest, pinned: wasPinned, until: clock.now + Rules.scrapHold, place: place)
         setTimer("scrap", Rules.scrapHold) { [weak self] in self?.finaliseScrap() }
         changed()
         return true
@@ -65,16 +65,20 @@ extension Engine {
 
     func scrapQueued(_ i: Int, _ name: String) {
         let q = queueNow()
-        guard i >= 0, i < q.count, q[i].named(name), setAside(q[i]) else { return }
-        if i < ready.count {
-            ready.remove(at: i)
-        } else {
-            roundOrder.removeAll { $0 == q[i].file }
-            nextKeptCache = nil
-        }
+        guard i >= 0, i < q.count, q[i].named(name), setAside(q[i], from: .upcoming(i)) else { return }
+        upcoming.removeAll { $0.name == q[i].file }
+        nextKeptCache = nil
         syncPlaylist()
         changed()
         maybeCompose()
+    }
+
+    /// Scraps a tune of `played`: it leaves the round, with the usual undo.
+    func scrapPlayed(_ i: Int, _ name: String) {
+        let list = playedNow()
+        guard i >= 0, i < list.count, list[i].named(name), setAside(list[i], from: .played(i)) else { return }
+        played.remove(at: i)
+        changed()
     }
 
     func scrapJob() {
@@ -106,9 +110,18 @@ extension Engine {
             try? Files.touch(s.from.deletingLastPathComponent().appending(path: TuneFiles.pinMark(s.from.lastPathComponent)))
         }
         changed()
+        // Back where it was in the round's list; a tune that was playing
+        // plays next.
         if let g = genre, s.from.deletingLastPathComponent().standardizedFileURL == genreDir(g).standardizedFileURL {
             s.tune.path = s.from
-            ready.insert(s.tune, at: 0)
+            let name = s.from.lastPathComponent
+            let item = QueueItem(name: name, tune: s.tune.kept ? nil : s.tune)
+            switch s.place {
+            case .played(let i): played.insert(name, at: min(i, played.count))
+            case .upcoming(let i): upcoming.insert(item, at: min(i, upcoming.count))
+            case .playing: upcoming.insert(QueueItem(name: name, tune: nil), at: 0)
+            }
+            nextKeptCache = nil
             syncPlaylist()
         }
     }
@@ -121,7 +134,7 @@ extension Engine {
     func tuneAt(_ target: TuneTarget) -> Tune? {
         var t: Tune?
         if let i = target.index {
-            let q = queueNow()
+            let q = target.inPlayed ? playedNow() : queueNow()
             t = i >= 0 && i < q.count ? q[i] : nil
         } else {
             t = current
@@ -314,7 +327,7 @@ extension Engine {
             dropOwnWords()
             composerOff()
             genre = nil
-            ready = []
+            upcoming = []
             newRound()
             wantsPlay = false
             loading = nil

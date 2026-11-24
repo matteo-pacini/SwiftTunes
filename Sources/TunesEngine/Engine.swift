@@ -118,6 +118,14 @@ struct Scrap {
     var to: URL
     var pinned: Bool
     var until: Double
+    /// Where it was in the round's list, for the undo to put it back.
+    var place: Place = .playing
+
+    enum Place {
+        case playing
+        case upcoming(Int)
+        case played(Int)
+    }
 }
 
 final class Observation: SnapshotObservation {
@@ -194,18 +202,21 @@ final class Engine: EngineAPI {
 
     // Player and queue
     var genre: Genre?
-    var ready: [Tune] = []
     var current: Tune?
     var currentToken: Int?
-    /// The kept tunes the round has still to play, in play order, drawn once.
-    var roundOrder: [String] = []
-    /// `roundOrder` is the next round's, drawn while the last tune of this
-    /// one plays.
-    var roundAhead = false
+    /// What will play after the playing tune, in order: the round's list
+    /// from here on. A new tune not yet played carries its object.
+    var upcoming: [QueueItem] = []
+    /// The tunes played this round, oldest first; the playing one is not here.
+    var played: [String] = []
+    /// The next round, drawn while the last tune of this one plays with
+    /// repeat on, so the player knows what follows.
+    var nextRound: [String]?
+    /// The tune Previous put back first: a new tune goes behind it.
+    var putBack: String?
     /// The tune that started last: a new round never starts with it.
     var lastStarted: String?
     var nextKeptCache: Tune?
-    var played: Set<String> = []
     var anchor: String?
     var appended: Ask?
     var loading: Ask?
@@ -413,69 +424,6 @@ final class Engine: EngineAPI {
         listTunes(genre).sorted()
     }
 
-    /// The first kept tune of the order, kept as one object while it stays first.
-    var nextKept: Tune? {
-        guard let g = genre, let first = roundOrder.first else { return nil }
-        if let c = nextKeptCache, c.file == first,
-           c.path.deletingLastPathComponent().standardizedFileURL == genreDir(g).standardizedFileURL {
-            return c
-        }
-        let t = keptTune(genreDir(g).appending(path: first))
-        nextKeptCache = t
-        return t
-    }
-
-    /// Brings the order up to date with the folder: tunes gone are dropped,
-    /// kept tunes the round has not met join its end. With the round's last
-    /// tune playing and repeat on, the next round is drawn now, so the player
-    /// knows what follows; the queue still ends with this round.
-    func syncRound() {
-        guard genre != nil else {
-            roundOrder = []
-            return
-        }
-        let kept = keptNames()
-        let readyNames = Set(ready.map(\.file))
-        var excluded = readyNames
-        if !roundAhead {
-            excluded.formUnion(played)
-            if let c = current { excluded.insert(c.file) }
-        }
-        roundOrder = Rounds.reconciled(roundOrder, kept: kept, excluded: excluded).filter { !readyNames.contains($0) }
-        guard roundOrder.isEmpty, !roundAhead, repeatMode != .off else { return }
-        let tunes = kept.filter { !readyNames.contains($0) }
-        if let c = current {
-            // A lone tune cannot open a round after itself: nothing is next,
-            // and the round starts again once it ends.
-            guard tunes != [c.file] else { return }
-            roundOrder = Rounds.draw(tunes, shuffle: shuffle, anchor: nil, avoid: c.file, rng: &rng)
-            roundAhead = !roundOrder.isEmpty
-        } else if wantsPlay && loading == nil && !tunes.isEmpty && !played.isEmpty {
-            newRound(avoid: lastStarted)
-        }
-    }
-
-    /// What will play, in order: the finished new tunes, then the rest of the
-    /// round's kept tunes. Command indexes refer to it.
-    func queueNow() -> [Tune] {
-        syncRound()
-        guard !roundAhead, let g = genre, let first = nextKept else { return ready }
-        return ready + [first] + roundOrder.dropFirst().map { keptTune(genreDir(g).appending(path: $0), decode: false) }
-    }
-
-    /// The kept tunes in the queue.
-    func roundLeft() -> [String] {
-        syncRound()
-        return roundAhead ? [] : roundOrder
-    }
-
-    func ended() -> Bool {
-        repeatMode == .off && genre != nil && current == nil && loading == nil && wantsPlay && ready.isEmpty
-            && !listTunes(genre).isEmpty && roundLeft().isEmpty
-    }
-
-    func newReady() -> Int { ready.filter { !$0.kept }.count }
-
     func pinned(_ t: Tune) -> Bool {
         Files.exists(t.path.deletingLastPathComponent().appending(path: TuneFiles.pinMark(t.file)))
     }
@@ -570,7 +518,9 @@ final class Engine: EngineAPI {
             model: Model(name: pins?.name ?? "ACE-Step 1.5 Turbo", variant: pins?.variant ?? "4B Q8",
                          device: lastDevice ?? "Metal", state: state, since: since, silenceS: silenceS, detail: detail,
                          failures: failures, retryAt: retryAt, ramUsedBytes: ram, ramFreeBytes: nil, thinWords: thinWords),
-            error: genresError ?? playError ?? fileError ?? pinsError ?? removeError
+            error: genresError ?? playError ?? fileError ?? pinsError ?? removeError,
+            played: playedNow().map { QueuedTune(name: $0.name, file: $0.stem, bpm: $0.bpm, key: $0.key, length: $0.length,
+                                                 kept: true, new: false, pinned: pinned($0), pos: orderPos($0), sung: $0.sung) }
         )
     }
 
@@ -649,8 +599,9 @@ final class Engine: EngineAPI {
         case .cancelDownload: cancelDownload()
         case .removeModel:
             removeModel()
-        case .previous, .playPlayed, .scrapPlayed:
-            break
+        case .previous: previous()
+        case .playPlayed(let i, let name): playPlayed(i, name)
+        case .scrapPlayed(let i, let name): scrapPlayed(i, name)
         case .refresh:
             genresSig = nil
             readGenres()
@@ -665,13 +616,12 @@ final class Engine: EngineAPI {
         dropOwnWords()
         composerOff()
         genre = g
-        ready = []
+        upcoming = []
         newRound()
         if let cand = nextCandidate() {
             // Shown as playing at once: no snapshot may put the old genre's
             // tune or pause under the new genre.
-            if roundOrder.first == cand.file { roundOrder.removeFirst() }
-            played.insert(cand.file)
+            upcoming.removeFirst()
             current = cand
             paused = false
             setPosition(0)
@@ -680,22 +630,6 @@ final class Engine: EngineAPI {
             haltPlayer()
         }
         changed()
-    }
-
-    /// Starts a round: its order drawn over the kept tunes not queued as
-    /// ready, never starting with `avoid`.
-    func newRound(avoid: String? = nil) {
-        played = []
-        roundAhead = false
-        nextKeptCache = nil
-        anchor = nil
-        guard genre != nil else {
-            roundOrder = []
-            return
-        }
-        let readyNames = Set(ready.map(\.file))
-        roundOrder = Rounds.draw(keptNames().filter { !readyNames.contains($0) }, shuffle: shuffle, anchor: nil,
-                                 avoid: avoid, rng: &rng)
     }
 
     func toggle() {
@@ -713,6 +647,7 @@ final class Engine: EngineAPI {
 
     func stop() {
         guard genre != nil, wantsPlay || current != nil || loading != nil else { return }
+        if let c = current { played.append(c.file) }
         wantsPlay = false
         current = nil
         currentToken = nil
@@ -746,16 +681,8 @@ final class Engine: EngineAPI {
     func setModes(shuffle newShuffle: Bool, repeat newRepeat: RepeatMode) {
         guard newShuffle != shuffle || newRepeat != repeatMode else { return }
         let wasEnded = ended()
-        if newShuffle != shuffle {
-            // What is left is redrawn: shuffled, or back in the order made
-            // going round from the last kept tune started.
-            roundOrder = Rounds.draw(roundOrder, shuffle: newShuffle, anchor: anchor, avoid: nil, rng: &rng)
-            nextKeptCache = nil
-        }
-        if newRepeat == .off && roundAhead {
-            roundOrder = []
-            roundAhead = false
-        }
+        if newShuffle != shuffle { redrawQueue(shuffle: newShuffle) }
+        if newRepeat == .off { nextRound = nil }
         shuffle = newShuffle
         repeatMode = newRepeat
         player.repeatOne = newRepeat == .one
@@ -769,22 +696,7 @@ final class Engine: EngineAPI {
         }
     }
 
-    func playQueued(_ i: Int, _ name: String) {
-        let q = queueNow()
-        guard i >= 0, i < q.count, q[i].named(name) else { return }
-        if i < ready.count { ready.insert(ready.remove(at: i), at: 0) }
-        wantsPlay = true
-        playNow(q[i])
-        changed()
-    }
-
     // MARK: - The player
-
-    func nextCandidate() -> Tune? {
-        guard genre != nil else { return nil }
-        syncRound()
-        return ready.first ?? nextKept
-    }
 
     func newToken() -> Int {
         askSeq += 1
@@ -849,31 +761,12 @@ final class Engine: EngineAPI {
 
     func onTrack(_ ask: Ask, token: Int) {
         let path = ask.path
-        let queued = ready.first?.path == path
         let name = path.lastPathComponent
-        if queued {
-            current = ready.removeFirst()
-        } else if let i = roundOrder.firstIndex(of: name) {
-            let tune = nextKept?.path == path ? nextKept! : (current?.path == path ? current! : keptTune(path))
-            if roundAhead {
-                // The next round's first tune: that round begins.
-                played = []
-                roundAhead = false
-            }
-            roundOrder.remove(at: i)
-            // A kept tune picked out of turn: with shuffle off the rest
-            // follow it in the order made.
-            if i > 0 && !shuffle { roundOrder = Rounds.made(roundOrder, after: name) }
-            nextKeptCache = nil
-            current = tune
-        } else if current?.path != path {
-            current = keptTune(path)
-        }
+        advance(to: path)
         currentToken = token
-        if !queued, current?.kept == true { anchor = name }
+        if current?.kept == true { anchor = name }
         lastStarted = name
         loading = nil
-        played.insert(name)
         appended = nil
         playError = nil
         setPosition(0)
@@ -883,6 +776,8 @@ final class Engine: EngineAPI {
     }
 
     func onIdle(natural: Bool) {
+        // It played: it stays in the round's list.
+        if let c = current { played.append(c.file) }
         current = nil
         currentToken = nil
         appended = nil

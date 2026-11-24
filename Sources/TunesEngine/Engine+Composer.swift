@@ -669,7 +669,7 @@ extension Engine {
         retryAt = nil
         if self.genre?.id == g.id {
             // The user's words play next when ready.
-            if j.words != nil { ready.insert(tune, at: 0) } else { ready.append(tune) }
+            upcoming.insert(QueueItem(name: tune.file, tune: tune), at: newTuneIndex)
         }
         syncPlaylist()
         changed()
@@ -686,7 +686,7 @@ extension Engine {
         // What plays, the new tunes, and the kept tunes the player shows next.
         var protected = Set((ready + [current].compactMap { $0 })
             .filter { $0.path.deletingLastPathComponent().standardizedFileURL == dir }.map(\.file))
-        protected.formUnion(roundOrder.prefix(Rules.keptShown))
+        protected.formUnion(upcoming.prefix(Rules.keptShown).map(\.name))
         if let fresh { protected.insert(fresh.lastPathComponent) }
         let names = listTunes(g)
         let pinnedNames = Set(names.filter { Files.exists(dir.appending(path: TuneFiles.pinMark($0))) })

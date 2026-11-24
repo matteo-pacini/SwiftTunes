@@ -66,6 +66,16 @@ struct Seen {
 @Suite(.serialized, .timeLimit(.minutes(1))) struct SessionTests {
     static let home = "/home-for-tests"
 
+    /// The round's names in list order, from the engine's snapshot.
+    static func round(_ s: Snapshot) -> [String] {
+        s.played.map(\.name) + (s.tune.map { [$0.name] } ?? []) + s.queue.map(\.name)
+    }
+
+    /// `N of M`: the playing tune's place in the round, the round's length.
+    static func place(_ s: Snapshot) -> String {
+        "\(s.played.count + 1) of \(round(s).count)"
+    }
+
     func see(_ rig: Rig, _ panel: Panel = Panel()) -> Seen {
         let s = rig.snap
         let now = rig.clock.now
@@ -119,7 +129,7 @@ struct Seen {
         #expect(p.now.suffix == "kept tunes" && p.now.genre.text == "Jazz")
         #expect(p.now.title == rig.snap.tune?.name && p.now.meta == "100 BPM · A minor")
         #expect(p.now.showsPause && p.now.next.enabled)
-        #expect(p.next.head == "from 3 kept, shuffled")
+        #expect(p.next.head == Self.place(rig.snap) && p.next.head == "1 of 3")
         #expect(seen.composerText.first == "On, it makes new Jazz and keeps 2 ahead.")
         #expect(seen.status.text == "Jazz" && !seen.status.dim && seen.status.dot == nil)
 
@@ -141,7 +151,7 @@ struct Seen {
         #expect(await rig.run { rig.snap.ready == 2 && rig.snap.model.state == .idle })
         seen = step("queue full")
         p = try #require(seen.player)
-        #expect(p.next.head == "2 new, then kept")
+        #expect(p.next.head == Self.place(rig.snap))
         #expect(p.next.rows.filter { $0.tag == "new" }.count == 2 && !p.next.rows.contains { $0.kind == .job })
         #expect(p.composer.lines.first?.right == "resting, queue is full" && seen.status.dot == nil)
 
@@ -150,7 +160,7 @@ struct Seen {
         seen = step("first new tune playing")
         p = try #require(seen.player)
         #expect(p.now.title == rig.snap.tune?.name && rig.snap.tune?.new == true && p.now.suffix == "")
-        #expect(p.next.head == "1 new, then kept")
+        #expect(p.next.head == Self.place(rig.snap))
 
         #expect(await rig.run { rig.snap.ready == 2 && rig.snap.model.state == .idle })
         // A hold applies when a job is next due: the queue must have room.
@@ -189,7 +199,44 @@ struct Seen {
         await rig.send(.undo)
         seen = step("undone")
         #expect(seen.footer == nil)
-        #expect(seen.player?.next.rows.first?.name == playing.name)
+        // The first row is the playing tune; the tune brought back plays next.
+        #expect(seen.player?.next.rows.first?.name == rig.snap.tune?.name)
+        #expect(seen.player?.next.rows[1].name == playing.name)
+
+        // Previous, within the first 3 s: the last played tune plays again.
+        // The list does not move, so no tune's number changes.
+        func numbers() -> [String: String] {
+            guard case .queue(let q) = see(rig, Panel().openingQueue()).card else { return [:] }
+            return Dictionary(q.rows.filter { !$0.number.isEmpty }.map { ($0.name, $0.number) }, uniquingKeysWith: { a, _ in a })
+        }
+        let roundBefore = Self.round(rig.snap)
+        let numbersBefore = numbers()
+        #expect(numbersBefore.count >= Self.round(rig.snap).count - 1, "\(numbersBefore)")
+        let wasPlaying = try #require(rig.snap.tune)
+        let backTo = try #require(rig.snap.played.last)
+        rig.player.position = 1
+        await rig.send(.refresh)
+        await rig.send(.previous)
+        seen = step("previous")
+        #expect(rig.snap.tune?.file == backTo.file && rig.snap.queue.first?.file == wasPlaying.file)
+        #expect(Self.round(rig.snap) == roundBefore)
+        #expect(seen.player?.next.head == Self.place(rig.snap))
+        let numbersAfterPrevious = numbers()
+        for (name, n) in numbersBefore where name != backTo.name && name != wasPlaying.name {
+            #expect(numbersAfterPrevious[name] == n, "\(name) moved from \(n)")
+        }
+
+        // Play it again: the first played tune; the rest return to the queue.
+        let first = try #require(rig.snap.played.first)
+        await rig.send(.playPlayed(index: 0, name: first.name))
+        seen = step("play it again")
+        #expect(rig.snap.tune?.file == first.file && rig.snap.played.isEmpty)
+        #expect(Self.round(rig.snap) == roundBefore)
+        #expect(seen.player?.next.head == "1 of \(roundBefore.count)")
+        let numbersAfterAgain = numbers()
+        for (name, n) in numbersBefore where name != first.name && name != wasPlaying.name {
+            #expect(numbersAfterAgain[name] == n, "\(name) moved from \(n)")
+        }
 
         await rig.send(.setComposer(on: false))
         await rig.send(.setRepeat(.off))
@@ -201,7 +248,9 @@ struct Seen {
         p = try #require(seen.player)
         #expect(p.now.title == "Played all \(rig.snap.keptTotal) Jazz tunes" && p.now.meta == "Play starts over. Repeat is off.")
         #expect(p.now.playPause.enabled && !p.now.showsPause && !p.now.next.enabled)
-        #expect(p.next.head == "nothing" && p.now.repeat.text == "off" && !p.now.repeat.lit)
+        // Ended: played holds the whole round.
+        #expect(rig.snap.played.count == rig.snap.keptTotal)
+        #expect(p.next.head == "\(rig.snap.keptTotal) tunes" && p.now.repeat.text == "off" && !p.now.repeat.lit)
 
         await rig.send(.play)
         let before = try #require(rig.snap.tune)
@@ -257,15 +306,16 @@ struct Seen {
         var p = try #require(see(rig).player)
         #expect(rig.snap.queue.count == 11 && rig.snap.roundLeft == 11)
         #expect(p.next.rows.count == 3 && p.next.rows.map(\.number) == ["1", "2", "3"])
-        #expect(p.next.more?.text == "then 8 more this round · Show all")
+        // Three rows: the playing tune and the next two; the rest behind Show all.
+        #expect(p.next.more?.text == "then \(Self.round(rig.snap).count - 3) more this round · Show all")
         let queueSeen = see(rig, Panel().openingQueue())
         guard case .queue(let q) = queueSeen.card else {
             Issue.record("no queue card: \(queueSeen.dump)")
             return
         }
-        #expect(q.label == "QUEUE · 11 THIS ROUND" && q.rows.count == 11)
-        #expect(q.rows.map(\.name) == rig.snap.queue.map(\.name))
-        #expect(q.last == "after these, the round starts over")
+        #expect(q.label == "THIS ROUND · \(Self.round(rig.snap).count) TUNES" && q.rows.count == Self.round(rig.snap).count)
+        #expect(q.rows.map(\.name) == Self.round(rig.snap))
+        #expect(q.last == "after these, a new round is drawn")
 
         // A sung tune: the first plan's words are too thin and it is written again.
         await rig.send(.stop)
