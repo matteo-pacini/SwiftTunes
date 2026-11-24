@@ -100,6 +100,7 @@ seconds as `Double`. Sizes are bytes as `Int64`. A field marked optional is
 | `played` | `played` | `[QueuedTune]` | The tunes already played this round, oldest first; the playing tune is not in it (spec, "The round and Previous"). Decodes as empty when absent. |
 | `shuffle` | `shuffle` | `Bool` | |
 | `repeat` | `repeat` | `RepeatMode`: `all`, `one`, `off` | |
+| `volume` | `volume` | `Double` | The player's level, 0 (silent) to 1 (full); the level of this app's sound, not of the Mac's output (spec, "Volume"). Decodes as 1 when absent. |
 | `ended` | `ended` | `Bool` | Repeat is off and every kept tune was played this round [R9]. |
 | `roundLeft` | `round_left` | `Int` | Kept tunes not yet played this round. |
 | `keep` | `keep` | `Int` | The newest-N rule's N (50). |
@@ -190,6 +191,7 @@ public enum Command: Sendable, Equatable {
     case setComposer(on: Bool)         // [R14]
     case setShuffle(on: Bool)          // [R8]
     case setRepeat(RepeatMode)         // [R8]
+    case setVolume(to: Double, dragging: Bool)  // spec, "Volume"; clamped to 0…1, not finite: ignored
     case scrapPlaying(name: String)    // [R25]
     case scrapQueued(index: Int, name: String)
     case scrapJob                      // cancels the tune being made; no undo
@@ -301,6 +303,7 @@ are camel case in Swift with the snake-case raw values given here.
 |---|---|---|
 | Which tune plays next, rounds, shuffle, repeat | decides [R1 to R12] | shows |
 | The player and its events | owns | sends commands |
+| The player's level | applies it, reports it as `volume`, saves it | sends `setVolume`; shows `volume`; holds the slider's place during a drag |
 | Now Playing info and remote commands | no | owns; maps remote commands to `play`, `pause`, `toggle`, `next`, `seek`, `stop`, and fills the info from the snapshot |
 | Composing, the server, holds, retries, timings | owns | shows |
 | Files: tunes, keep rule, pins, scrap and undo, export | owns | never touches |

@@ -386,3 +386,31 @@ stays as written there.
   place.
 - The right-hand text of the heading stays `N of M`, or `M tunes` with
   nothing playing, or `nothing`. BEING MADE sits under the list, unchanged.
+
+## Volume
+
+This section adds to "Layout of the popover" and wins where they differ.
+
+- **What it is.** One level for this app's sound, from 0 (silent) to 1
+  (full), applied to the engine's player. It is not the Mac's output
+  volume and never changes it. A new installation starts at 1.
+- **Where.** A row of its own in NOW PLAYING, under the round controls,
+  as wide as the card: a small speaker, the slider, a speaker with waves.
+  The two speakers are marks, not buttons. The slider is the system's
+  control, so its glass is the system's. No number is shown. The tooltip
+  and the accessibility label are `Volume`. The row is there whenever the
+  round controls are.
+- **Dragging.** The sound follows the pointer. While the pointer holds the
+  slider the app sends `setVolume(to:dragging: true)` for each new place,
+  in steps of 0.01, and draws its own place, not the snapshot's; on release
+  it sends the last place with `dragging: false`. A click on the track is
+  a drag that ends at once.
+- **The engine** clamps the level to 0…1, ignores one that is not finite,
+  applies it to the player at once and reports it as `volume`. A level
+  equal to the current one produces no snapshot. It writes `state.json`
+  only for a command with `dragging: false`, and at shutdown; a drag writes
+  the file once. At launch the saved level is applied before anything
+  plays; a state file with no level, or one out of range, reads as 1.
+- The level holds across tunes, stop and play, genres and rounds. Muting
+  in tests is separate from it. Now Playing and the media keys have no
+  part in it.
