@@ -33,6 +33,8 @@ public struct Snapshot: Codable, Equatable, Sendable {
     public var posAt: Double
     /// What plays next, in order. Command indexes refer to this array.
     public var queue: [QueuedTune]
+    /// The tunes already played this round, oldest first; not the playing one.
+    public var played: [QueuedTune]
     public var shuffle: Bool
     public var `repeat`: RepeatMode
     /// Repeat is off and every kept tune was played this round.
@@ -88,8 +90,10 @@ public struct Snapshot: Codable, Equatable, Sendable {
         expect: Expect?,
         undo: Undo?,
         model: Model,
-        error: String?
+        error: String?,
+        played: [QueuedTune] = []
     ) {
+        self.played = played
         self.version = version
         self.setup = setup
         self.download = download
@@ -136,6 +140,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
         case pos
         case posAt = "pos_at"
         case queue
+        case played
         case shuffle
         case `repeat`
         case ended
@@ -149,6 +154,39 @@ public struct Snapshot: Codable, Equatable, Sendable {
         case undo
         case model
         case error
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        setup = try c.decode(Setup.self, forKey: .setup)
+        download = try c.decodeIfPresent(Download.self, forKey: .download)
+        need = try c.decode(Need.self, forKey: .need)
+        genres = try c.decode([GenreSummary].self, forKey: .genres)
+        genre = try c.decodeIfPresent(String.self, forKey: .genre)
+        keptTotal = try c.decode(Int.self, forKey: .keptTotal)
+        composing = try c.decode(Bool.self, forKey: .composing)
+        ahead = try c.decode(Int.self, forKey: .ahead)
+        player = try c.decode(PlayerState.self, forKey: .player)
+        stopped = try c.decode(Bool.self, forKey: .stopped)
+        tune = try c.decodeIfPresent(PlayingTune.self, forKey: .tune)
+        pos = try c.decode(Double.self, forKey: .pos)
+        posAt = try c.decode(Double.self, forKey: .posAt)
+        queue = try c.decode([QueuedTune].self, forKey: .queue)
+        shuffle = try c.decode(Bool.self, forKey: .shuffle)
+        self.repeat = try c.decode(RepeatMode.self, forKey: .repeat)
+        ended = try c.decode(Bool.self, forKey: .ended)
+        roundLeft = try c.decode(Int.self, forKey: .roundLeft)
+        keep = try c.decode(Int.self, forKey: .keep)
+        ready = try c.decode(Int.self, forKey: .ready)
+        keptPlaying = try c.decode(Bool.self, forKey: .keptPlaying)
+        canNext = try c.decode(Bool.self, forKey: .canNext)
+        job = try c.decodeIfPresent(Job.self, forKey: .job)
+        expect = try c.decodeIfPresent(Expect.self, forKey: .expect)
+        undo = try c.decodeIfPresent(Undo.self, forKey: .undo)
+        model = try c.decode(Model.self, forKey: .model)
+        error = try c.decodeIfPresent(String.self, forKey: .error)
+        played = try c.decodeIfPresent([QueuedTune].self, forKey: .played) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -168,6 +206,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
         try c.encode(pos, forKey: .pos)
         try c.encode(posAt, forKey: .posAt)
         try c.encode(queue, forKey: .queue)
+        try c.encode(played, forKey: .played)
         try c.encode(shuffle, forKey: .shuffle)
         try c.encode(`repeat`, forKey: .repeat)
         try c.encode(ended, forKey: .ended)

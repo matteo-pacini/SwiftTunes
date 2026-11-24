@@ -67,3 +67,25 @@ import TunesContract
         #expect(text.contains(#""on_disk_bytes":4"#))
     }
 }
+
+@Suite struct PlayedDecodeTests {
+    @Test func playedReadsAsEmptyWhenAbsentAndIsWritten() throws {
+        var s = Snapshot(
+            version: 1, setup: .ready, download: nil, need: Need(downloadBytes: 0, diskFreeBytes: 0, ramBytes: 0),
+            genres: [], genre: nil, keptTotal: 0, composing: false, ahead: 2, player: .none, stopped: false, tune: nil,
+            pos: 0, posAt: 0, queue: [], shuffle: true, repeat: .all, ended: false, roundLeft: 0, keep: 50, ready: 0,
+            keptPlaying: false, canNext: false, job: nil, expect: nil, undo: nil,
+            model: Model(name: "m", variant: "v", device: "d", state: .unloaded, since: 0, silenceS: nil, detail: nil,
+                         failures: 0, retryAt: nil, ramUsedBytes: nil, ramFreeBytes: nil),
+            error: nil
+        )
+        s.played = [QueuedTune(name: "Blue Lamp", file: "f", bpm: nil, key: nil, length: nil, kept: true, new: false, pinned: false, pos: 1)]
+        let data = try JSONEncoder().encode(s)
+        #expect(try JSONDecoder().decode(Snapshot.self, from: data) == s)
+        var dict = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(dict["played"] != nil)
+        dict["played"] = nil
+        let old = try JSONDecoder().decode(Snapshot.self, from: try JSONSerialization.data(withJSONObject: dict))
+        #expect(old.played.isEmpty)
+    }
+}

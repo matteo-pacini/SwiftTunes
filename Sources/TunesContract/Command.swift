@@ -32,6 +32,11 @@ public enum Command: Sendable, Equatable {
     case refresh
     /// Removes the music model's files; ignored when nothing is on disk.
     case removeModel
+    /// Restarts the playing tune, or within its first 3 s goes back one.
+    /// Nothing when no tune plays.
+    case previous
+    /// Plays `played[index]` again; ignored unless that tune is there.
+    case playPlayed(index: Int, name: String)
 }
 
 /// A tune for the async calls: the playing tune when `index` is nil, else
