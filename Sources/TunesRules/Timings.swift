@@ -1,21 +1,25 @@
 import TunesContract
 
-/// Stage timings and the modes, as the state file keeps them.
+/// Stage timings, the modes and the player's level, as the state file keeps them.
 public struct SavedState: Equatable, Sendable {
     public var writing: [Double]
     public var rendering: [Double]
     public var shuffle: Bool
     public var `repeat`: RepeatMode
+    /// The player's level, 0 to 1.
+    public var volume: Double
 
-    public init(writing: [Double] = [], rendering: [Double] = [], shuffle: Bool = true, repeat: RepeatMode = .all) {
+    public init(writing: [Double] = [], rendering: [Double] = [], shuffle: Bool = true, repeat: RepeatMode = .all, volume: Double = 1) {
         self.writing = writing
         self.rendering = rendering
         self.shuffle = shuffle
         self.repeat = `repeat`
+        self.volume = volume
     }
 
     /// The state file's text read back; anything missing or malformed reads
-    /// as its default: no timings, shuffle on, repeat all.
+    /// as its default: no timings, shuffle on, repeat all, volume 1. A volume
+    /// outside 0…1 is malformed.
     public static func parse(_ text: String?) -> SavedState {
         guard let text, case .object(let fields)? = try? JSONValue.parse(text) else { return SavedState() }
         func value(_ key: String) -> JSONValue? { fields.first(where: { $0.key == key })?.value }
@@ -31,6 +35,7 @@ public struct SavedState: Equatable, Sendable {
         var state = SavedState(writing: timings("writing"), rendering: timings("rendering"))
         if case .bool(let b)? = value("shuffle") { state.shuffle = b }
         if case .string(let s)? = value("repeat"), let mode = RepeatMode(rawValue: s) { state.repeat = mode }
+        if let v = value("volume")?.number, (0...1).contains(v) { state.volume = v }
         return state
     }
 
@@ -41,6 +46,7 @@ public struct SavedState: Equatable, Sendable {
             ("rendering", .array(rendering.map { .double($0) })),
             ("shuffle", .bool(shuffle)),
             ("repeat", .string(self.repeat.rawValue)),
+            ("volume", .double(volume)),
         ]).dumps() + "\n"
     }
 }

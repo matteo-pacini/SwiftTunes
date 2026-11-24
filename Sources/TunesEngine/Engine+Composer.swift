@@ -839,6 +839,8 @@ extension Engine {
     func shutdown() async {
         guard !shuttingDown else { return }
         shuttingDown = true
+        // A drag the pointer never let go of.
+        saveState()
         dlTask?.cancel()
         dlPrevious?.cancel()
         let downloads = [dlTask, dlPrevious].compactMap { $0 }

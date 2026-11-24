@@ -61,6 +61,7 @@ final class FakePlayer: TunePlayer {
     var paused = false
     var position = 0.0
     var repeatOne = false
+    var volume = 1.0
 
     func play(_ url: URL, token: Int) {
         calls.append("play \(url.lastPathComponent)")

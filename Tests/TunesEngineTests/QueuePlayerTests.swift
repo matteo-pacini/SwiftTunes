@@ -86,6 +86,40 @@ import Testing
         #expect(events.contains(.ended(token: 1)))
     }
 
+    @Test func theLevelHoldsAcrossItemsAndStop() async throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "queue-player-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let a = dir.appending(path: "a.m4a")
+        let b = dir.appending(path: "b.m4a")
+        try Self.silence(a, seconds: 0.3)
+        try Self.silence(b, seconds: 0.3)
+        let player = QueuePlayer(muted: true)
+        var events: [PlayerEvent] = []
+        let waiter = Waiter()
+        player.onEvent = { e in
+            events.append(e)
+            waiter.poke()
+        }
+        // The real player: each wait is bounded, and a miss says what came.
+        func until(_ check: @escaping () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
+            let ok = await waiter.until(.seconds(10), check)
+            #expect(ok, "the player did not report in time; events: \(events)", sourceLocation: sourceLocation)
+        }
+        player.volume = 0.25
+        #expect(player.playerVolume == 0.25)
+        player.play(a, token: 1)
+        player.setNext(b, token: 2)
+        await until { events.contains(.started(token: 2)) }
+        #expect(player.playerVolume == 0.25)
+        player.stop()
+        player.volume = 0.5
+        player.play(a, token: 3)
+        await until { events.contains(.started(token: 3)) }
+        #expect(player.playerVolume == 0.5 && player.volume == 0.5)
+        player.stop()
+    }
+
     @Test func aRenameUnderThePlayingFileDoesNotStopIt() async throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "queue-player-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

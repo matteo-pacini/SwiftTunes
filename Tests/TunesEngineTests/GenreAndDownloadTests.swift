@@ -287,6 +287,24 @@ import TunesRules
         await rig.close()
     }
 
+    @Test func theVolumeSurvivesARestartAndReachesThePlayerAtLaunch() async throws {
+        let rig = try await Rig()
+        try rig.keptTune("Jazz", day: 1)
+        rig.make()
+        await rig.send(.setVolume(to: 0.35, dragging: false))
+        await rig.shutdown()
+
+        // A new player starts at full.
+        rig.player.volume = 1
+        let calls = rig.player.calls.count
+        rig.make()
+        // Applied at launch, with nothing played yet.
+        #expect(rig.player.volume == 0.35 && rig.player.calls.count == calls)
+        await rig.send(.selectGenre(id: "jazz"))
+        #expect(rig.snap.player == .playing && rig.snap.volume == 0.35 && rig.player.volume == 0.35)
+        await rig.close()
+    }
+
     @Test func staleFilesAreClearedAtStart() async throws {
         let rig = try await Rig()
         let dir = rig.genreDir("Jazz")

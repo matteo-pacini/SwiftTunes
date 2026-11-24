@@ -210,6 +210,70 @@ import TunesRules
         await rig.close()
     }
 
+    @Test func volumeReachesThePlayerAndTheSnapshot() async throws {
+        let (rig, _) = try await keptRig(2)
+        #expect(rig.snap.volume == 1 && rig.player.volume == 1)
+        await rig.send(.setVolume(to: 0.4, dragging: false))
+        #expect(rig.player.volume == 0.4 && rig.snap.volume == 0.4)
+        #expect(rig.snapshots.last?.volume == 0.4)
+        await rig.close()
+    }
+
+    @Test(arguments: [(1.7, 1.0), (-0.2, 0.0), (0.0, 0.0), (1.0, 1.0)])
+    func volumeIsClamped(_ asked: Double, _ applied: Double) async throws {
+        let (rig, _) = try await keptRig(1)
+        await rig.send(.setVolume(to: 0.5, dragging: false))
+        await rig.send(.setVolume(to: asked, dragging: false))
+        #expect(rig.player.volume == applied && rig.snap.volume == applied)
+        await rig.close()
+    }
+
+    @Test(arguments: [Double.nan, .infinity, -.infinity])
+    func aVolumeThatIsNotFiniteIsIgnored(_ asked: Double) async throws {
+        let (rig, _) = try await keptRig(1)
+        await rig.send(.setVolume(to: 0.5, dragging: false))
+        let n = rig.snapshots.count
+        await rig.send(.setVolume(to: asked, dragging: false))
+        #expect(rig.player.volume == 0.5 && rig.snap.volume == 0.5 && rig.snapshots.count == n)
+        await rig.close()
+    }
+
+    @Test func anUnchangedVolumeProducesNoSnapshot() async throws {
+        let (rig, _) = try await keptRig(1)
+        await rig.send(.setVolume(to: 0.5, dragging: true))
+        let n = rig.snapshots.count
+        #expect(rig.snapshots.last?.volume == 0.5)
+        await rig.send(.setVolume(to: 0.5, dragging: true))
+        await rig.send(.setVolume(to: 0.5, dragging: false))
+        #expect(rig.snapshots.count == n)
+        await rig.close()
+    }
+
+    @Test func aDragWritesTheStateFileOnceOnRelease() async throws {
+        let (rig, _) = try await keptRig(1)
+        let file = rig.paths.support.appending(path: "state.json")
+        Files.remove(file)
+        for level in [0.9, 0.8, 0.7] {
+            await rig.send(.setVolume(to: level, dragging: true))
+            #expect(rig.player.volume == level && rig.snap.volume == level)
+            #expect(!Files.exists(file))
+        }
+        // Released where the last step left it: no new snapshot, yet saved.
+        await rig.send(.setVolume(to: 0.7, dragging: false))
+        #expect(SavedState.parse(Files.read(file)).volume == 0.7)
+        await rig.close()
+    }
+
+    @Test func aDragNeverReleasedIsSavedAtShutdown() async throws {
+        let (rig, _) = try await keptRig(1)
+        let file = rig.paths.support.appending(path: "state.json")
+        await rig.send(.setVolume(to: 0.3, dragging: true))
+        #expect(SavedState.parse(Files.read(file)).volume == 1)
+        await rig.shutdown()
+        #expect(SavedState.parse(Files.read(file)).volume == 0.3)
+        await rig.close()
+    }
+
     @Test func repeatOnAfterTheRoundEndedStartsAnother() async throws {
         let (rig, _) = try await keptRig(1, repeat: .off)
         rig.player.finish()

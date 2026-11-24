@@ -190,6 +190,7 @@ final class Engine: EngineAPI {
     var timings: (writing: [Double], rendering: [Double])
     var shuffle: Bool
     var repeatMode: RepeatMode
+    var volume: Double
 
     // Setup and download
     var setup: Setup = .missing
@@ -277,11 +278,13 @@ final class Engine: EngineAPI {
         timings = (saved.writing, saved.rendering)
         shuffle = saved.shuffle
         repeatMode = saved.repeat
+        volume = saved.volume
         snapshot = Snapshot.empty
         prepareFolders()
         readGenres()
         checkSetup()
         player.repeatOne = repeatMode == .one
+        player.volume = volume
         player.onEvent = { [weak self] event in self?.playerEvent(event) }
         snapshot = buildSnapshot()
     }
@@ -520,14 +523,15 @@ final class Engine: EngineAPI {
                          failures: failures, retryAt: retryAt, ramUsedBytes: ram, ramFreeBytes: nil, thinWords: thinWords),
             error: genresError ?? playError ?? fileError ?? pinsError ?? removeError,
             played: playedNow().map { QueuedTune(name: $0.name, file: $0.stem, bpm: $0.bpm, key: $0.key, length: $0.length,
-                                                 kept: true, new: false, pinned: pinned($0), pos: orderPos($0), sung: $0.sung) }
+                                                 kept: true, new: false, pinned: pinned($0), pos: orderPos($0), sung: $0.sung) },
+            volume: volume
         )
     }
 
     // MARK: - Saved state and genres
 
     func saveState() {
-        let want = SavedState(writing: timings.writing, rendering: timings.rendering, shuffle: shuffle, repeat: repeatMode)
+        let want = SavedState(writing: timings.writing, rendering: timings.rendering, shuffle: shuffle, repeat: repeatMode, volume: volume)
         guard want != saved else { return }
         do {
             try Files.writeAtomic(Data(want.text.utf8), to: stateFile)
@@ -589,7 +593,7 @@ final class Engine: EngineAPI {
         case .setComposer(let on): setComposer(on)
         case .setShuffle(let on): setModes(shuffle: on, repeat: repeatMode)
         case .setRepeat(let mode): setModes(shuffle: shuffle, repeat: mode)
-        case .setVolume: break
+        case .setVolume(let level, let dragging): setVolume(level, dragging: dragging)
         case .scrapPlaying(let name): scrapPlaying(name)
         case .scrapQueued(let i, let name): scrapQueued(i, name)
         case .scrapJob: scrapJob()
@@ -695,6 +699,19 @@ final class Engine: EngineAPI {
         } else {
             syncPlaylist()
         }
+    }
+
+    /// Applied at once. The command saves the level only for `dragging:
+    /// false`, so a drag writes the state file once, when the pointer lets go.
+    func setVolume(_ level: Double, dragging: Bool) {
+        guard level.isFinite else { return }
+        let clamped = min(max(0, level), 1)
+        if clamped != volume {
+            volume = clamped
+            player.volume = clamped
+            changed()
+        }
+        if !dragging { saveState() }
     }
 
     // MARK: - The player

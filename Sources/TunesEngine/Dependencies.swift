@@ -72,6 +72,8 @@ public protocol TunePlayer: AnyObject {
     var position: Double { get }
     /// The playing item starts over at its end, reported as `.looped`.
     var repeatOne: Bool { get set }
+    /// The level, 0 (silent) to 1 (full), kept across items, stop and play.
+    var volume: Double { get set }
 }
 
 /// Starts the model server.

@@ -216,18 +216,24 @@ private func codes(_ parts: (String, Int)...) -> [Int] {
         ("not json", SavedState()),
         (#"{"shuffle": false, "repeat": "one", "writing": [1]}"#, SavedState(writing: [1], shuffle: false, repeat: .one)),
         (#"{"shuffle": 0, "repeat": "twice"}"#, SavedState()),
+        (#"{"volume": 0.25}"#, SavedState(volume: 0.25)),
+        (#"{"volume": 0}"#, SavedState(volume: 0)),
+        (#"{"volume": "loud"}"#, SavedState()),
+        (#"{"volume": 1.5}"#, SavedState()),
+        (#"{"volume": -0.1}"#, SavedState()),
+        (#"{"volume": null}"#, SavedState()),
     ])
     func stateFileReadBack(_ text: String, _ want: SavedState) {
         #expect(SavedState.parse(text) == want)
     }
 
     @Test func stateFileMissingReadsAsDefaults() {
-        #expect(SavedState.parse(nil) == SavedState(shuffle: true, repeat: .all))
+        #expect(SavedState.parse(nil) == SavedState(shuffle: true, repeat: .all, volume: 1))
     }
 
     @Test func stateFileRoundTrips() {
-        let s = SavedState(writing: [33.3, 35], rendering: [31.8], shuffle: false, repeat: .off)
-        #expect(s.text == #"{"writing": [33.3, 35.0], "rendering": [31.8], "shuffle": false, "repeat": "off"}"# + "\n")
+        let s = SavedState(writing: [33.3, 35], rendering: [31.8], shuffle: false, repeat: .off, volume: 0.42)
+        #expect(s.text == #"{"writing": [33.3, 35.0], "rendering": [31.8], "shuffle": false, "repeat": "off", "volume": 0.42}"# + "\n")
         #expect(SavedState.parse(s.text) == s)
     }
 }

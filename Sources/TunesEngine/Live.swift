@@ -186,6 +186,13 @@ final class QueuePlayer: TunePlayer {
         didSet { player.actionAtItemEnd = repeatOne ? .none : .advance }
     }
 
+    var volume = 1.0 {
+        didSet { player.volume = Float(volume) }
+    }
+
+    /// The level the AVQueuePlayer itself holds.
+    var playerVolume: Float { player.volume }
+
     init(muted: Bool = false) {
         player.isMuted = muted
         let center = NotificationCenter.default
