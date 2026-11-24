@@ -5,7 +5,7 @@ by ACE-Step 1.5 Turbo through an embedded `ace-server` running on the GPU.
 Nothing is sent anywhere once the model is downloaded.
 
 <p align="center">
-  <img src="docs/screenshots/playing.png" width="380" alt="The SwiftTunes popover playing a Jazz tune: its name, tempo and key, the tune's shape as columns of dots filled up to the position, six round controls, the next three tunes numbered in play order with nine more this round, the tune being made, and the composer bar.">
+  <img src="docs/screenshots/playing.png" width="380" alt="The SwiftTunes popover playing a Jazz tune: its name, tempo and key, the tune's shape as columns of dots filled up to the position, and seven round controls with Previous left of the play button. Below, This round reads 5 of 12: the playing tune is highlighted with a small level meter in place of its number, followed by tunes 6 and 7 and five more this round; then the tune being made, and the composer bar.">
 </p>
 
 SwiftTunes is inspired by [Flowtunes](https://github.com/omacom/flowtunes)
@@ -19,16 +19,22 @@ from Omarchy.
 - **Tunes kept, tunes made.** A genre plays the tunes kept for it. Turn the
   composer on and it writes new ones and keeps two ready ahead; a new tune
   plays next. The newest 50 of a genre are kept.
-- **The queue in play order.** Up next lists what will play, numbered, new
-  tunes first, then the kept ones in the round's order, shuffled or in the
-  order made. Every kept tune plays once a round; repeat all, one or off.
-  What is being made shows apart, under it.
+- **The round, held in order.** This round lists every tune of the round in
+  one order: the ones already played, the playing one, then what waits. A
+  tune keeps its number as the round goes on; only a newly made tune, which
+  plays next, moves the ones after it down by one. Played tunes stay in the
+  list, dimmed, and any of them can be played again. Every kept tune plays
+  once a round, shuffled or in the order made; repeat all, one or off. What
+  is being made shows apart, under it.
+- **Previous.** Within the first three seconds of a tune, Previous goes back
+  to the one before it in the round; later, it starts the tune again. The
+  Previous media key does the same.
 - **Sung genres and your own words.** A sung genre's tunes have words,
   written by the model in English; the words of the playing tune open under
   it. From a sung genre you can also ask for one tune sung with words you
   write.
-- **Scrap and undo.** Scrap the playing tune or a queued one and it can be
-  brought back for ten seconds; scrapping the one being made stops it.
+- **Scrap and undo.** Scrap any tune in the round and it can be brought back
+  for ten seconds; scrapping the one being made stops it.
 - **Keep for good.** A tune kept for good is never removed by the newest-50
   rule.
 - **Share and drag out.** Drag a tune's picture out of the popover to drop
@@ -43,13 +49,13 @@ from Omarchy.
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/composing.png" width="250" alt="Nothing playing yet in Synthwave: the hero shows a moving wave of dots while the first tune is written, and a separate Being made list shows the tune being written and one not started."></td>
-    <td><img src="docs/screenshots/lyrics.png" width="250" alt="A sung tune playing, with tempo, key and the word sung under its name; the wave has shrunk to a thin strip and the words show in a scrolling box headed Lyrics as written."></td>
+    <td><img src="docs/screenshots/composing.png" width="250" alt="Nothing playing yet in Synthwave: the hero shows a wave of dots that moves while the first tune is written, This round has nothing in it yet, and a separate Being made list shows the tune being written and one not started."></td>
+    <td><img src="docs/screenshots/lyrics.png" width="250" alt="A sung tune playing, with tempo, key and the word sung under its name; the wave has shrunk to a thin strip and the words show in a scrolling box headed Lyrics as written. Below the controls, This round reads 1 of 5 with the playing tune highlighted."></td>
     <td><img src="docs/screenshots/genres.png" width="250" alt="The genre chooser: nine genres as tiles in their own colours, each with its kept count or what is playing, and a dashed tile to add a new genre."></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/own-words.png" width="250" alt="The sheet for a tune with your own words: buttons that insert verse, chorus, bridge and instrumental break marks, a text box with the words, a count of sung lines and characters, a suggested name, and Compose."></td>
-    <td><img src="docs/screenshots/editor.png" width="250" alt="Editing a sung genre: name, prompt, variations, tempo range, the Singing switch with its explanation, four colour wells, and the buttons to delete, cancel or save."></td>
+    <td><img src="docs/screenshots/editor.png" width="250" alt="Editing a sung genre in grouped rows, its name selected for typing: prompt, variations, tempo range, the Singing switch with its explanation, four colour wells, and the buttons to delete, cancel or save."></td>
     <td><img src="docs/screenshots/playing-light.png" width="250" alt="The playing state in light appearance: the same layout on a pale wash of the genre's colours with dark text."></td>
   </tr>
 </table>
