@@ -548,3 +548,19 @@ playlist" and "Singing" where they say a new tune plays next.
   expect it last; the panel fixtures whose `queue` shows new tunes first
   show them last; the README's screenshots made from those fixtures are
   taken again; `SessionTests` follows the engine's real snapshots.
+
+## Rows that join and leave
+
+This section wins over "The list is a playlist" where it says an insertion
+or a removal is animated in place.
+
+- A row that joins THIS ROUND or leaves it does so at once, with no fade
+  and no scaling: inside a glass container a fade reaches a row's content
+  but not its glass, so the glass would stand empty while the content
+  fades. The rows around it still slide to their places.
+- A change that only reorders the rows (shuffle changed, a new round drawn)
+  is not animated: the list is simply drawn in its new order.
+- **Version.** These two rules and "New tunes join the end" are release
+  0.1.1. The 0.1.0 section of the changelog describes 0.1.0 as it was
+  built; what changed since is listed under `Unreleased` until the release
+  commit names it 0.1.1.
