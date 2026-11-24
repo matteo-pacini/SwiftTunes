@@ -101,3 +101,115 @@ struct RealServerTests {
         #expect(made?.wave.count == 78 && made?.length != nil)
     }
 }
+
+/// Words through the real server, plans only: the engine's own job and
+/// request for a sung genre, then for the user's words. No /synth is sent and
+/// nothing is heard. Off unless TUNES_REAL_PLANS is set besides the three
+/// variables above; at most three /lm requests.
+@Suite(.serialized, .enabled(if: RealServer.configured && ProcessInfo.processInfo.environment["TUNES_REAL_PLANS"] != nil),
+       .timeLimit(.minutes(10)))
+struct RealPlansTests {
+    static let caption = "lo-fi hip hop song, dusty vinyl crackle, warm detuned electric piano, soft boom bap drums, mellow bass, a soft female voice singing a simple melodic hook, sung verses and chorus"
+    static let words = """
+    [Verse]
+    paper boats along the gutter
+    sailing where the streetlights end
+    [Chorus]
+    slow down, slow down
+    the evening is a friend
+    """
+
+    /// The answer to a job once it is done, polling as the engine does.
+    static func plan(_ client: ServerClient, _ body: JSONValue) async throws -> JSONValue {
+        let id = try ServerClient.jobID(try await client.json("POST", "/lm", body: body))
+        while true {
+            let status = try await client.json("GET", ServerClient.jobPath(id))["status"]
+            if status != .string("running") {
+                #expect(status == .string("done"))
+                break
+            }
+            try await Task.sleep(for: .seconds(Rules.poll))
+        }
+        let data = try await client.call("GET", ServerClient.jobPath(id, "&result=1"), timeout: 60)
+        guard case .array(let list) = try JSONValue.parse(String(decoding: data, as: UTF8.self)), let first = list.first else {
+            throw ServerClient.Failure(description: "no plan")
+        }
+        return first
+    }
+
+    @Test func aSungPlanAndAnOwnWordsPlan() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let server = URL(filePath: env["TUNES_REAL_ACE_SERVER"]!)
+        let out = URL(filePath: env["TUNES_REAL_OUT"]!, directoryHint: .isDirectory)
+        let lifeline = try #require(LifelineTests.lifeline)
+        let package = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let genres = out.appending(path: "genres-sung.json")
+        try Data("""
+        {"genres": [{"id": "lofi", "name": "Lo-fi", "caption": "\(Self.caption)", "turns": [], "bpm": [70, 92], "sung": true}]}
+        """.utf8).write(to: genres)
+        let paths = EnginePaths(
+            support: out.appending(path: "support", directoryHint: .isDirectory),
+            models: URL(filePath: env["TUNES_REAL_MODELS"]!, directoryHint: .isDirectory),
+            caches: out.appending(path: "caches", directoryHint: .isDirectory),
+            music: out.appending(path: "Music/Tunes", directoryHint: .isDirectory)
+        )
+        let engine = Engine(EngineEnvironment(
+            paths: paths, aceServer: server, defaultGenres: genres, pins: package.appending(path: "Config/pins.json"),
+            clock: LivePieces.clock(), random: SystemRandomNumberGenerator(), player: FakePlayer(),
+            launcher: LivePieces.launcher(lifeline: lifeline, server: server), holds: LivePieces.holds(), probe: LivePieces.probe()
+        ))
+        engine.send(.selectGenre(id: "lofi"))
+        let g = try #require(engine.genre)
+        #expect(g.sung)
+
+        // The server, started as the engine starts it.
+        let port = LoopbackPort.free()
+        let tap = TapLauncher(LivePieces.launcher(lifeline: lifeline, server: server))
+        let process = try tap.launch(
+            arguments: ["--models", paths.models.path, "--device", ServerLog.device, "--host", "127.0.0.1", "--port", String(port)],
+            onLine: { _ in }, onExit: { _ in }
+        )
+        await tap.until { tap.lines.contains { ServerLog.isListening($0) } }
+        let client = ServerClient(host: "127.0.0.1", port: port)
+        var log: [String] = []
+        var calls = 0
+
+        // A sung plan: written again once if its words are too thin.
+        var sung: JSONValue = .null
+        for _ in 0..<2 {
+            let job = engine.makeJob(g, own: nil)
+            let body = engine.lmBody(job)
+            #expect(body["lyrics"] == .string("") && body["vocal_language"] == .string("en"))
+            #expect(job.caption == Self.caption && !job.caption.contains("instrumental"))
+            calls += 1
+            let t = Date()
+            sung = try await Self.plan(client, body)
+            var words = ""
+            if case .string(let w)? = sung["lyrics"] { words = w }
+            log.append("sung plan \(calls): \(String(format: "%.1f", Date().timeIntervalSince(t))) s, \(WordsRules.sungLines(words).count) sung lines, thin \(WordsRules.tooThin(words)), language \(sung["vocal_language"].map { $0.dumps() } ?? "-")")
+            log.append(words)
+            if !WordsRules.tooThin(words) { break }
+        }
+
+        // The user's words, sent as given.
+        let own = engine.makeJob(g, own: OwnWords(words: Self.words, name: "Paper Boats", genreID: g.id))
+        let body = engine.lmBody(own)
+        #expect(body["lyrics"] == .string(Self.words) && body["vocal_language"] == .string("en"))
+        calls += 1
+        let t = Date()
+        let plan = try await Self.plan(client, body)
+        var back = ""
+        if case .string(let w)? = plan["lyrics"] { back = w }
+        log.append("own words plan: \(String(format: "%.1f", Date().timeIntervalSince(t))) s, words back equal words sent: \(back == Self.words)")
+        log.append(back)
+        #expect(back == Self.words)
+        #expect(calls <= 3)
+
+        process.stop()
+        await process.waitForExit()
+        log.append("server exits: \(tap.exits), /lm calls: \(calls)")
+        try Data((log.joined(separator: "\n") + "\n").utf8).write(to: out.appending(path: "plans.txt"))
+        print(log.joined(separator: "\n"))
+        await engine.shutdown()
+    }
+}

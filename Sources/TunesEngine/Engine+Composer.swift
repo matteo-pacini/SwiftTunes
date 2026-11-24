@@ -357,16 +357,9 @@ extension Engine {
 
     func startJob() {
         guard let g = genre, let s = server else { return }
-        jobSeq += 1
         let own = ownWordsPending.flatMap { $0.genreID == g.id ? $0 : nil }
         ownWordsPending = nil
-        let sung = own != nil || g.sung
-        let j = JobRecord(
-            token: jobSeq, genre: g, bpm: Composing.bpm(g.bpm, rng: &rng),
-            caption: Composing.caption(caption: g.caption, turns: g.turns, sung: sung, rng: &rng),
-            name: own?.name ?? Composing.name(moods: g.moods, things: g.things, rng: &rng), writeAt: clock.now,
-            sung: sung, words: own?.words
-        )
+        let j = makeJob(g, own: own)
         job = j
         // Writing from the moment it starts, before the server answers.
         j.step = .lm
@@ -376,16 +369,33 @@ extension Engine {
         postLM(j, s)
     }
 
-    func postLM(_ j: JobRecord, _ s: ServerRecord) {
-        // Sung: empty lyrics ask the model to write the words; given words
-        // are sent as given. Either way the language is asked for, since
-        // left free the model picks one, or none, by itself.
+    /// A job for genre `g`: its tempo, caption and name drawn now; sung
+    /// when the genre is, or with the user's words.
+    func makeJob(_ g: Genre, own: OwnWords?) -> JobRecord {
+        jobSeq += 1
+        let sung = own != nil || g.sung
+        return JobRecord(
+            token: jobSeq, genre: g, bpm: Composing.bpm(g.bpm, rng: &rng),
+            caption: Composing.caption(caption: g.caption, turns: g.turns, sung: sung, rng: &rng),
+            name: own?.name ?? Composing.name(moods: g.moods, things: g.things, rng: &rng), writeAt: clock.now,
+            sung: sung, words: own?.words
+        )
+    }
+
+    /// The body of a job's /lm request. Sung: empty lyrics ask the model to
+    /// write the words; given words are sent as given. Either way the
+    /// language is asked for, since left free the model picks one, or none.
+    func lmBody(_ j: JobRecord) -> JSONValue {
         var fields: [(key: String, value: JSONValue)] = [
             ("caption", .string(j.caption)), ("lyrics", .string(j.words ?? (j.sung ? "" : Rules.lyrics))),
             ("duration", .int(pins?.duration ?? 180)), ("bpm", .int(j.bpm)),
         ]
         if j.sung { fields.append(("vocal_language", .string(Rules.vocalLanguage))) }
-        let body: JSONValue = .object(fields)
+        return .object(fields)
+    }
+
+    func postLM(_ j: JobRecord, _ s: ServerRecord) {
+        let body = lmBody(j)
         j.posting = true
         spawn { [weak self] in
             let result: Result<String, any Error>
