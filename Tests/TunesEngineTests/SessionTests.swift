@@ -75,10 +75,6 @@ struct Seen {
 
     @Test func aSession() async throws {
         let rig = try await Rig(ready: false)
-        for (d, title) in ["Blue Lamp", "Smoky Window", "Late Avenue"].enumerated() {
-            try await rig.realKeptTune("Jazz", day: d + 1, title: title)
-        }
-        rig.make()
         var log: [String] = []
         func step(_ name: String) -> Seen {
             let seen = see(rig)
@@ -94,16 +90,32 @@ struct Seen {
         #expect(seen.setup?.button.text == "Download" && seen.setup?.command == .download)
         #expect(seen.status.dim && seen.status.dot == nil)
 
+        // Kept tunes appear (copied in by hand): the chooser, still no model.
+        for (d, title) in ["Blue Lamp", "Smoky Window", "Late Avenue"].enumerated() {
+            try await rig.realKeptTune("Jazz", day: d + 1, title: title)
+        }
+        await rig.send(.refresh)
+        seen = step("kept tunes, no model")
+        #expect(seen.chooser?.chip == "A click plays what is kept")
+        #expect(seen.chooser?.cells.map { "\($0.name) · \($0.sub)" } == ["Jazz · 3 kept", "Lo-fi · none yet"])
+
+        // Picked without the model: the player, and the composer bar stands
+        // in for the setup cards.
+        await rig.send(.selectGenre(id: "jazz"))
+        seen = step("picked without the model")
+        var p = try #require(seen.player)
+        #expect(rig.snap.setup == .missing && p.now.showsPause)
+        let standIn = try #require(p.composer.standIn)
+        #expect(standIn.text == "The music model is not on this Mac.")
+        #expect(standIn.button.text == "Download" && standIn.command == .download)
+        #expect(standIn.detail == Format.gib(rig.snap.need.downloadBytes, decimals: 2))
+        #expect(!p.composer.showsSwitch)
+
         await rig.send(.download)
         #expect(await rig.run { rig.snap.setup == .ready })
         seen = step("download done")
-        #expect(seen.chooser?.chip == "A click plays what is kept")
-        #expect(seen.chooser?.cells.map { "\($0.name) · \($0.sub)" } == ["Jazz · 3 kept", "Lo-fi · none yet"])
-        #expect(seen.status.dim)
-
-        await rig.send(.selectGenre(id: "jazz"))
-        seen = step("genre picked")
-        var p = try #require(seen.player)
+        p = try #require(seen.player)
+        #expect(p.composer.standIn == nil && p.composer.showsSwitch)
         #expect(p.now.suffix == "kept tunes" && p.now.genre.text == "Jazz")
         #expect(p.now.title == rig.snap.tune?.name && p.now.meta == "100 BPM · A minor")
         #expect(p.now.showsPause && p.now.next.enabled)
@@ -221,11 +233,8 @@ struct Seen {
         #expect(rig.snap.player == .playing && rig.player.calls == calls)
         seen = step("model removed")
         // With kept tunes the player stays; the composer bar stands in for
-        // the setup cards. Known: the panel still shows the setup card
-        // whenever the model is missing, until the app's change for it lands.
-        withKnownIssue("the panel's removal state is the app role's pending change", isIntermittent: true) {
-            #expect(seen.player != nil, "\(seen.dump)")
-        }
+        // the setup cards.
+        #expect(seen.player?.composer.standIn?.text == "The music model is not on this Mac.", "\(seen.dump)")
 
         // The whole session, kept for a reader of a failure.
         if ProcessInfo.processInfo.environment["TUNES_SESSION_LOG"] != nil {
