@@ -41,9 +41,11 @@ Read, in this order, before any work:
 - A player event counts only if it is about the item last asked for.
 - Never delete a file the app did not make.
 - Never pass `--keep-loaded` to `ace-server`.
-- The repository describes SwiftTunes in its own terms. Nothing tracked
-  (code, comments, tests, fixtures, documents, commit messages) says where
-  its design came from or names another program it resembles.
+- The repository describes SwiftTunes in its own terms. The README credits
+  one inspiration, Flowtunes from Omarchy, with a link; that credit is the
+  only place another program is named. Nothing else tracked (code, comments,
+  tests, fixtures, documents, commit messages) says where the design came
+  from or names a program it resembles.
 - Stay inside the files your role owns (`docs/SPEC.md`, "Ownership"). A
   change you need elsewhere is a request to the lead.
 
