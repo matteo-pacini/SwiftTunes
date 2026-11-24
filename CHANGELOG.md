@@ -12,9 +12,9 @@ The first release.
   prompt, variations, tempo range, colours and Singing switch.
 - Turn the composer on and it writes new tunes and keeps two ready ahead. The
   newest 50 tunes of a genre are kept.
-- This round lists every tune in one order, keeps the playing tune in view,
-  and lets you play any of them again. Shuffle or play in the order made;
-  repeat all, one or off.
+- The This round list shows every tune of the round in one order, keeps the
+  playing tune in view, and lets you play any of them again. Shuffle or play
+  in the order made; repeat all, one or off.
 - Previous goes back a tune within the first three seconds, and otherwise
   starts the tune again.
 - Sung genres have words written by the model, shown under the playing tune.
