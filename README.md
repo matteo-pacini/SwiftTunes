@@ -26,15 +26,15 @@ from Omarchy.
   four colours and a Singing switch.
 - **Tunes kept, tunes made.** A genre plays the tunes kept for it. Turn the
   composer on and it writes new ones and keeps two ready ahead; a new tune
-  plays next. The newest 50 of a genre are kept.
+  joins the end of the round. The newest 50 of a genre are kept.
 - **The round, held in order.** This round lists every tune of the round in
   one order, in a list that scrolls in place to keep the playing tune in
   view: the ones already played, the playing one, then what waits. A
-  tune keeps its number as the round goes on; only a newly made tune, which
-  plays next, moves the ones after it down by one. Played tunes stay in the
-  list, dimmed, and any of them can be played again. Every kept tune plays
-  once a round, shuffled or in the order made; repeat all, one or off. What
-  is being made shows apart, under it.
+  tune keeps its number as the round goes on; a newly made tune joins the
+  end and plays when the round reaches it, or next if nothing waits. Played
+  tunes stay in the list, dimmed, and any of them can be played again. Every
+  kept tune plays once a round, shuffled or in the order made; repeat all,
+  one or off. What is being made shows apart, under it.
 - **Previous.** Within the first three seconds of a tune, Previous goes back
   to the one before it in the round; later, it starts the tune again.
 - **Sung genres and your own words.** A sung genre's tunes have words,
