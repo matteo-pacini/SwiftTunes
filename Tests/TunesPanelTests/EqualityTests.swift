@@ -215,6 +215,13 @@ struct EqualityTests {
         expectEachFieldCounts(pick, [("id", { $0.id += "x" }), ("control", { $0.control.lit.toggle() })] as [Change<WordsCard.ModelPick>])
     }
 
+    @Test func panelWords() {
+        expectEachFieldCounts(Panel.Words(name: "n"), [
+            ("text", { $0.text += "x" }), ("caret", { $0.caret += 1 }), ("name", { $0.name += "x" }), ("touched", { $0.touched.toggle() }),
+            ("refused", { flip(&$0.refused, "no") }), ("busy", { $0.busy.toggle() }), ("model", { flip(&$0.model, "small") }),
+        ] as [Change<Panel.Words>])
+    }
+
     @Test func smallValues() throws {
         expectEachFieldCounts(StatusItem(dim: false, text: "t", dot: nil, help: "h"), [
             ("dim", { $0.dim.toggle() }), ("text", { $0.text += "x" }), ("dot", { flip(&$0.dot, .red) }), ("help", { $0.help += "x" }),

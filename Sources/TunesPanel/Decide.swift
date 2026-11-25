@@ -46,7 +46,7 @@ public enum Decide {
             let why = d?.error ?? s.error ?? "The download did not finish."
             return SetupCard(kind: .failed, title: "The download stopped", detail: "\(Format.sentence(why)) Finished files are kept.",
                              rows: downloaded.map { [$0] } ?? [], progress: nil,
-                             button: Control(text: "Resume", help: "Resume"), command: .download)
+                             button: Control(text: "Resume", help: "Resume"), command: resume(s, model: d?.model))
         case .missing, .ready:
             var rows: [SetupCard.Row] = [
                 .init(label: "download", value: Format.gib(s.need.downloadBytes, decimals: 2)),
@@ -510,6 +510,14 @@ public enum Decide {
         return onDisk.first(where: \.chosen)?.id ?? onDisk.first?.id
     }
 
+    /// Carrying on a failed or cancelled download of `model`: `download` for
+    /// the chosen model or a download that names none, `downloadModel` for
+    /// another.
+    static func resume(_ s: Snapshot, model: String?) -> Command {
+        guard let model, s.models.contains(where: { $0.id == model && !$0.chosen }) else { return .download }
+        return .downloadModel(id: model)
+    }
+
     /// `about N GiB of memory`.
     static func memory(_ m: ModelChoice) -> String {
         "about \(Format.gib(m.ramBytes)) of memory"
@@ -629,7 +637,7 @@ public enum Decide {
         }
         let capsule = modelsCapsule(s)
         if [.starting, .writing, .rendering, .failed].contains(m.state) && !m.name.isEmpty {
-            // With models listed the capsule names the model; the variant goes.
+            // With models listed the capsule names the model, so the line leaves out the variant.
             let parts = capsule == nil ? [m.name, m.variant, m.device] : [m.name, m.device]
             lines.append(.init(parts.filter { !$0.isEmpty }.joined(separator: " · "), models: capsule))
         } else if m.state == .idle, let capsule {
@@ -712,15 +720,36 @@ public enum Decide {
     /// The models card: a row per model with its sizes, its download and
     /// what can be done with it.
     static func models(_ s: Snapshot) -> ModelsCard {
-        let onDisk = s.models.filter(\.onDisk).count
         let fetching = s.setup == .downloading || s.models.contains(where: \.downloading)
         let rows = s.models.map { m -> ModelsCard.Row in
             // A download that names no model is the chosen one's.
             let d = s.download.flatMap { ($0.model ?? (m.chosen ? m.id : nil)) == m.id ? $0 : nil }
+            let another = s.models.contains { $0.id != m.id && $0.onDisk }
+            // What fetching this model from nothing downloads: its own file once
+            // another model is complete (the shared files are then complete
+            // too), its file and the shared files while none is; 0 when it is on
+            // disk or the shared size is unknown.
+            let whole = m.onDisk ? 0 : another ? m.fileBytes : s.sharedBytes > 0 ? m.fileBytes + s.sharedBytes : 0
+            let here = whole - m.downloadBytes
+            let part = whole > 0 && here > 0 && here < whole
             var row = ModelsCard.Row(id: m.id, name: m.name, variant: m.variant, ticked: m.chosen,
                                      sub: m.onDisk ? "\(Format.gib(m.fileBytes, decimals: 2)) on this Mac · \(memory(m))"
-                                                   : "\(Format.gib(m.downloadBytes, decimals: 2)) to download · \(memory(m))",
+                                          : part ? "\(Format.gibNumber(here, decimals: 2)) of \(Format.gib(whole, decimals: 2)) downloaded"
+                                                 : "\(Format.gib(m.downloadBytes, decimals: 2)) to download · \(memory(m))",
                                      progress: nil, error: "", buttons: [])
+            // The engine decides when it is pressed whether this is the last
+            // model; the alert follows what the card shows.
+            func remove(frees: Int64) -> ModelsCard.Button {
+                let one = Command.removeOneModel(id: m.id)
+                var ask = modelRemoval(s)
+                ask.command = one
+                if another {
+                    ask = ModelRemoval(alertTitle: "Remove \(m.name)?", alertText: "It frees \(Format.gib(frees, decimals: 2)). Your tunes stay.",
+                                       remove: "Remove", cancel: "Cancel", command: one)
+                }
+                return .init(kind: .remove, control: Control(text: "Remove", help: "Remove \(m.name)"), command: one, ask: ask)
+            }
+            let resume = ModelsCard.Button(kind: .resume, control: Control(text: "Resume", help: "Resume"), command: Self.resume(s, model: m.id), ask: nil)
             if m.downloading || (d != nil && d?.error == nil && s.setup == .downloading) {
                 if let d {
                     row.sub = "\(Format.gibNumber(d.done)) of \(Format.gib(d.total, decimals: 2)) · \(Format.rate(d.rate))"
@@ -729,22 +758,16 @@ public enum Decide {
                 row.buttons = [.init(kind: .cancel, control: Control(text: "Cancel", help: "Cancel"), command: .cancelDownload, ask: nil)]
             } else if let error = d?.error, !m.onDisk {
                 row.error = Format.sentence(error)
-                // `download` fetches what the chosen model lacks; another model's
-                // download resumes by its id.
-                row.buttons = [.init(kind: .resume, control: Control(text: "Resume", help: "Resume"),
-                                     command: m.chosen ? .download : .downloadModel(id: m.id), ask: nil)]
+                row.buttons = [resume]
+                if part && !(m.chosen && another) { row.buttons.append(remove(frees: here)) }
             } else if m.onDisk {
                 if !m.chosen {
                     row.buttons.append(.init(kind: .use, control: Control(text: "Use", help: "Use \(m.name)"), command: .chooseModel(id: m.id), ask: nil))
                 }
-                if onDisk == 1 {
-                    let all = modelRemoval(s)
-                    row.buttons.append(.init(kind: .remove, control: Control(text: "Remove", help: "Remove \(m.name)"), command: all.command, ask: all))
-                } else if !m.chosen {
-                    let one = ModelRemoval(alertTitle: "Remove \(m.name)?", alertText: "It frees \(Format.gib(m.fileBytes, decimals: 2)). Your tunes stay.",
-                                           remove: "Remove", cancel: "Cancel", command: .removeOneModel(id: m.id))
-                    row.buttons.append(.init(kind: .remove, control: Control(text: "Remove", help: "Remove \(m.name)"), command: one.command, ask: one))
-                }
+                if !(m.chosen && another) { row.buttons.append(remove(frees: m.fileBytes)) }
+            } else if part {
+                if !fetching { row.buttons.append(resume) }
+                if !(m.chosen && another) { row.buttons.append(remove(frees: here)) }
             } else if !fetching {
                 row.buttons = [.init(kind: .download, control: Control(text: "Download", help: "Download \(m.name)"), command: .downloadModel(id: m.id), ask: nil)]
             }
@@ -756,7 +779,8 @@ public enum Decide {
             title: "Music models",
             detail: "New tunes are made with the ticked one. A change applies from the next tune.",
             rows: rows,
-            footnote: "Both share 3.42 GiB of other files, kept while a model remains. This card is also under Music Models… in the menu bar icon's menu."
+            footnote: (s.sharedBytes > 0 ? "The models share \(Format.gib(s.sharedBytes, decimals: 2)) of other files, kept while a model remains. " : "")
+                + "This card is also under Music Models… in the menu bar icon's menu."
         )
     }
 
