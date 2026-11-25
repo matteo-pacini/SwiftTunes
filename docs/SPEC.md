@@ -564,3 +564,95 @@ or a removal is animated in place.
   0.1.1. The 0.1.0 section of the changelog describes 0.1.0 as it was
   built; what changed since is listed under `Unreleased` until the release
   commit names it 0.1.1.
+
+## Music models
+
+This section wins over decision 14, "Removing the music model" and every
+earlier sentence that assumes one model. It is release 0.2.0.
+
+- **The models.** Two, of one family, sharing three files (the diffusion
+  model, the text encoder, the VAE: 3.42 GiB) and differing in the
+  language model: `small`, shown as `Small`, variant `0.6B Q8`, its file
+  `acestep-5Hz-lm-0.6B-Q8_0.gguf` (709,846,656 bytes); `large`, shown as
+  `Large`, variant `4B Q8`, today's file. `Config/pins.json` lists them,
+  each with its file, hash, memory figure and the installed memory from
+  which it is suggested. The list is open: a third model is a new entry,
+  not new code. The 1.7B model is not offered: at Q8 it computes garbage
+  on Metal, and at full precision it is nearly as heavy as Large.
+- **Measured** (M1 Max, 64 GiB, one instrumental and one sung tune each):
+  Small peaks at 3.1 GiB and takes about 40 s a tune; Large peaks at
+  7.2 GiB and takes about 50 s. The figures quoted are `about 4 GiB of
+  memory` for Small and `about 8 GiB of memory` for Large.
+- **The suggestion.** The engine reads the Mac's installed memory once.
+  Under 24 GiB the suggested model is Small; from 24 GiB, Large. It only
+  pre-selects; any model may be chosen on any Mac.
+- **The chosen model** is the one new tunes are made with. While no model
+  is on disk it is the one `download` fetches, and starts as the suggested
+  one. Once a model is on disk only a model on disk can be chosen. It is
+  saved in `state.json`; a state file without it means the model on disk
+  (Large when both are), so an existing installation carries on as it was.
+  A change applies from the next tune: a tune being made is finished with
+  the model it started with.
+- **The server.** Every `/lm` request names its model's file in
+  `lm_model`. Without it the server takes the first language model by file
+  name, which would be the smallest on disk whatever was chosen.
+- **First run.** The setup card lists the models as rows under its
+  sentence: a round mark (filled for the chosen one), the name with the
+  variant small beside it, `Suggested` on the suggested one, and under the
+  name `X.XX GiB download · about N GiB of memory`. A click on a row
+  chooses it. Under the rows: `This Mac has N GiB of memory. Large follows
+  the prompt and the words more closely; Small is quicker and lighter. You
+  can add the other later.` The `download` and `free on disk` rows and the
+  button stay; the `memory while composing` row goes, its figure now being
+  in each model's row. The composer bar's stand-in (kept tunes, no model)
+  is unchanged and fetches the chosen model.
+- **The composer bar.** Its model line reads `ACE-Step 1.5 Turbo ·
+  <device>` and ends in a capsule with the chosen model's name and a
+  chevron, in the genre button's style, tooltip `Music models`. It opens
+  the models card. The capsule shows whenever the model line does, and
+  also when the composer is off or resting, on a line of its own, so the
+  card is always one click from the player.
+- **The models card** (`MUSIC MODELS`, with `Back`): title `Music models`,
+  then `New tunes are made with the ticked one. A change applies from the
+  next tune.` One row per model: a tick on the chosen one; the name and
+  variant; under them `X.XX GiB on this Mac · about N GiB of memory` or
+  `X.XX GiB to download · about N GiB of memory`; at the right `Use` (on
+  disk, not chosen), `Remove` (on disk; absent on the chosen one while
+  another is on disk), or `Download` (not on disk). While a model
+  downloads its row shows the bar, `X of Y GiB · <speed>` and `Cancel`,
+  and no other row offers `Download`. A failed download shows its error
+  and `Resume` in that row. Under the rows: `Both share 3.42 GiB of other
+  files, kept while a model remains. This card is also under Music
+  Models… in the menu bar icon's menu.`
+- **Downloading another model** is allowed while music plays and while
+  the composer works; composing carries on with the chosen model. One
+  download at a time. It fetches the model's own file, and any shared file
+  that is missing.
+- **Removing.** `Remove` asks first: title `Remove <name>?`, text `It frees
+  X.XX GiB. Your tunes stay.`, buttons `Remove` and `Cancel`. It deletes
+  that model's file and its part file, nothing else. The chosen model
+  cannot be removed while another is on disk: choose the other first. The
+  only model on disk is removed as "Removing the music model" says (the
+  shared files go too, composing stops), with that section's alert.
+- **The menu.** `Remove Music Model…` becomes `Music Models…`, always
+  enabled. It opens the popover on the models card.
+- **Sing my words.** With more than one model on disk the sheet has a row
+  `Model` under `Name`: one capsule per model on disk, the one in use lit,
+  starting on the chosen model. That tune alone is made with it.
+- **What is kept per model:** the stage timings behind the estimates, in
+  `state.json` (the timings already saved are Large's). A tune's file
+  records the model that made it, in its tags; it is shown nowhere.
+- **Holds, failures, the keep rule, the round** are unchanged.
+- **Only what the pins name.** Deleting touches only files the pins list;
+  a language-model file the pins do not name is neither used nor deleted.
+- **Done:** rules tests for the pins with two models, each choice's
+  download size and the suggestion at 8, 16, 24, 32 and 64 GiB; engine
+  tests against the fake server: `lm_model` on every `/lm`, a change
+  applying from the next tune, the words tune using its own model, the
+  choice surviving a restart, an old state file, first download of each
+  choice, a second model fetching one file, one download at a time,
+  removing one, removing the last, refusing the chosen one, timings per
+  model, the tag; panel tests for every row, sentence and button state
+  above and equality for each new field; `SessionTests` through a first
+  run choosing Small; one real-server tune with each model on the real
+  Mac; the README, the changelog and the screenshots that change.

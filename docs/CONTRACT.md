@@ -37,7 +37,7 @@ public protocol EngineAPI: AnyObject {
     func setPinned(_ on: Bool, for target: TuneTarget) async -> Result<PinResult, Refusal>
     func exportCopy(of target: TuneTarget) async -> Result<URL, Refusal>
     func renameTune(_ target: TuneTarget, to name: String) async -> Result<String, Refusal>
-    func composeWithWords(_ words: String, name: String) async -> Result<Void, Refusal>
+    func composeWithWords(_ words: String, name: String, model: String?) async -> Result<Void, Refusal>
     /// A two-word name drawn from the selected genre's own lists, as the
     /// composer names its tunes; a fresh pick on each call. Empty when no
     /// genre is selected.
@@ -111,18 +111,35 @@ seconds as `Double`. Sizes are bytes as `Int64`. A field marked optional is
 | `expect` | `expect` | `Expect?` | Median stage times of the last five tunes; nil until both stages have been timed once [R41]. |
 | `undo` | `undo` | `Undo?` | An offered undo. |
 | `model` | `model` | `Model` | The composer's model and its state. |
+| `models` | `models` | `[ModelChoice]` | Every music model the pins list, smallest first (spec, "Music models"). Decodes as empty when absent. |
+| `memoryBytes` | `memory_bytes` | `Int64` | The Mac's installed memory. Decodes as 0 when absent. |
 | `error` | `error` | `String?` | One line for the strip over the player: the first present of the pins file's error, the genres file's error, the play error, the file error. Plain text. |
 
 `Download`: `file` (`Int`, 1-based), `files` (`Int`), `name` (`String`: one of
 `language model`, `diffusion model`, `text encoder`, `VAE`), `done`
 (`Int64`, over all files), `total` (`Int64`), `rate` (`Double`, bytes per
 second), `error` (`String?`).
+`model` (`String?`: the id of the model being fetched; decodes as nil when
+absent).
+
+`ModelChoice`: `id` (`String`: `small`, `large`), `name` (`String`: `Small`,
+`Large`), `variant` (`String`: `0.6B Q8`, `4B Q8`), `fileBytes` /
+`file_bytes` (`Int64`: its own file), `downloadBytes` / `download_bytes`
+(`Int64`: what fetching it would still download, the shared files included
+while they are missing), `onDisk` / `on_disk` (`Bool`: its file and the
+shared files are complete), `ramBytes` / `ram_bytes` (`Int64`: the memory
+figure quoted for it), `suggested` (`Bool`: true for exactly one, chosen from
+`memoryBytes`), `chosen` (`Bool`: true for exactly one: the model new tunes
+are made with, or, while none is on disk, the one `download` fetches),
+`downloading` (`Bool`).
 
 `Need`: `downloadBytes` / `download_bytes` (`Int64`, still to fetch [R49]),
 `onDiskBytes` / `on_disk_bytes` (`Int64`: what the model files and parts take
 now, the figure removal would free),
 `diskFreeBytes` / `disk_free_bytes` (`Int64`), `ramBytes` / `ram_bytes`
-(`Int64`, 8 GiB: the figure the wording quotes).
+(`Int64`: the chosen model's figure, the one the wording quotes). Every
+figure of `Need` is about the chosen model: what it still has to fetch, and
+what all model files and parts on disk take.
 
 `GenreSummary`: `id`, `name`, `kept` (`Int`), `sung` (`Bool`), `palette` (`[String]?`: four
 colours as `#RRGGBB`, nil when the genres file gives none; the panel then
@@ -153,8 +170,8 @@ next few.
 `Undo`: `name` (`String`), `until` (`Double`), `genre` (`String?`: the id of
 the genre whose folder the tune returns to, nil if that genre is gone).
 
-`Model`: `name` (`String`, `ACE-Step 1.5 Turbo`), `variant` (`String`,
-`4B Q8`), `device` (`String`: the Metal device's name from the server's log,
+`Model`: `name` (`String`, `ACE-Step 1.5 Turbo`), `variant` (`String`:
+the chosen model's, `0.6B Q8` or `4B Q8`), `device` (`String`: the Metal device's name from the server's log,
 or `Metal` before one was seen), `state` (`ModelState`), `since` (`Double`),
 `silenceS` / `silence_s` (`Int?`: seconds of silence in the plan being
 rewritten), `thinWords` / `thin_words` (`Bool`: the plan being
@@ -171,7 +188,8 @@ resting, no server process), `writing`, `rendering`, `held_memory`,
 
 - `model.ram_free_bytes` is always null: the system gives a pressure level,
   not a trustworthy free figure.
-- `need.ram_bytes` is 8 GiB.
+- `need.ram_bytes` is the chosen model's figure: 4 GiB for `small`, 8 GiB for
+  `large`.
 - Unknown enum values do not decode; there is no older or newer peer.
 
 ## Commands
@@ -198,7 +216,10 @@ public enum Command: Sendable, Equatable {
     case undo                          // [R26]
     case playQueued(index: Int, name: String)   // [R17]
     case retry                         // only in failed or no_device [R42]
-    case download
+    case download                      // fetches what the chosen model lacks
+    case chooseModel(id: String)       // spec, "Music models"; ignored unless listed; once any model is on disk, ignored unless that one is
+    case downloadModel(id: String)     // another model's file, and any shared file missing; ignored when it is on disk or a download runs
+    case removeOneModel(id: String)    // its own file only; ignored for the chosen model unless it is the only one on disk, when it acts as removeModel
     case cancelDownload
     case removeModel                   // spec, "Removing the music model"; ignored when nothing is on disk
     case refresh                       // re-reads the genres file and memory, then notifies
@@ -273,7 +294,9 @@ public enum TuneRules {
 Like `GenreRules`, this is shared so the field and the engine cannot
 disagree; the engine role owns the file and its tests.
 
-`composeWithWords` asks for one tune sung with the given words in the
+`composeWithWords` asks for one tune sung with the given words,
+made with the model whose id is given, or with the chosen one when it is nil
+or not on disk, in the
 selected genre (spec, "Singing"). It returns once the request is accepted;
 the tune then shows as the job. Refusals (no field): a `WordsRules` or
 `TuneRules` sentence, `A tune with your words is already being made.`, and
