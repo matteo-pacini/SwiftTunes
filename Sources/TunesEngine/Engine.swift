@@ -459,6 +459,8 @@ final class Engine: EngineAPI {
 
     func buildSnapshot() -> Snapshot {
         readGenres()
+        // The files may have changed outside the app: setup follows `models`.
+        checkSetup()
         let now = clock.now
         let order = keptNames()
         func orderPos(_ t: Tune) -> Int? {
@@ -550,7 +552,8 @@ final class Engine: EngineAPI {
                                                  kept: true, new: false, pinned: pinned($0), pos: orderPos($0), sung: $0.sung) },
             volume: volume,
             models: models,
-            memoryBytes: memoryBytes
+            memoryBytes: memoryBytes,
+            sharedBytes: (pins?.shared ?? []).reduce(0) { $0 + $1.bytes }
         )
     }
 
@@ -593,8 +596,15 @@ final class Engine: EngineAPI {
     func genreByID(_ id: String) -> Genre? { genres.first { $0.id == id } }
 
     /// Ready with the chosen model on disk, though another model downloads.
+    /// With a model on disk the effective choice is saved, so the first one
+    /// complete stays chosen when another is added, and one deleted outside
+    /// the app does not take the choice back when it returns.
     func checkSetup() {
         if let c = chosenModel(), onDisk(c) {
+            if chosenID != c.id {
+                chosenID = c.id
+                saveState()
+            }
             setup = .ready
         } else if dlTask != nil {
             setup = .downloading

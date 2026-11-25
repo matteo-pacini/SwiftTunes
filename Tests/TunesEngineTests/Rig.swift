@@ -259,7 +259,7 @@ final class FakeProcess: ServerProcess {
 }
 
 extension Engine {
-    /// Words for the chosen model, as before a model could be named.
+    /// Words for the chosen model.
     func composeWithWords(_ words: String, name: String) async -> Result<Void, Refusal> {
         await composeWithWords(words, name: name, model: nil)
     }

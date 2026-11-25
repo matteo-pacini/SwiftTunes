@@ -1,4 +1,6 @@
+import Foundation
 import Testing
+import TunesContract
 @testable import TunesRules
 
 private let GiB: Int64 = 1 << 30
@@ -57,5 +59,50 @@ private let shared: [(name: String, bytes: Int64)] = [
     ] as [(String?, [Bool], Int, Int)])
     func chosen(saved: String?, onDisk: [Bool], suggested: Int, want: Int) {
         #expect(ModelRules.chosen(saved: saved, ids: ids, onDisk: onDisk, suggested: suggested) == want)
+    }
+}
+
+/// The contract's fields for the models: written, read back, and read as
+/// their defaults from a snapshot that lacks them.
+@Suite struct ModelContractTests {
+    func snapshot() -> Snapshot {
+        Snapshot(
+            version: 1, setup: .downloading,
+            download: Download(file: 1, files: 4, name: "language model", done: 10, total: 20, rate: 0, error: nil, model: "small"),
+            need: Need(downloadBytes: 0, diskFreeBytes: 0, ramBytes: 0),
+            genres: [], genre: nil, keptTotal: 0, composing: false, ahead: 2, player: .none, stopped: false, tune: nil,
+            pos: 0, posAt: 0, queue: [], shuffle: true, repeat: .all, ended: false, roundLeft: 0, keep: 50, ready: 0,
+            keptPlaying: false, canNext: false, job: nil, expect: nil, undo: nil,
+            model: Model(name: "m", variant: "v", device: "d", state: .unloaded, since: 0, silenceS: nil, detail: nil,
+                         failures: 0, retryAt: nil, ramUsedBytes: nil, ramFreeBytes: nil),
+            error: nil,
+            models: [ModelChoice(id: "small", name: "Small", variant: "0.6B Q8", fileBytes: 709_846_656, downloadBytes: 1,
+                                 onDisk: false, ramBytes: 4 * GiB, suggested: true, chosen: true, downloading: true)],
+            memoryBytes: 16 * GiB, sharedBytes: 3_671_093_888
+        )
+    }
+
+    @Test func theyAreWrittenAndReadBack() throws {
+        let s = snapshot()
+        let data = try JSONEncoder().encode(s)
+        #expect(try JSONDecoder().decode(Snapshot.self, from: data) == s)
+        let dict = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(dict["memory_bytes"] as? Int64 == 16 * GiB && dict["shared_bytes"] as? Int64 == 3_671_093_888)
+        let model = try #require((dict["models"] as? [[String: Any]])?.first)
+        #expect(model["id"] as? String == "small" && model["file_bytes"] as? Int64 == 709_846_656)
+        #expect(model["download_bytes"] as? Int64 == 1 && model["on_disk"] as? Bool == false && model["ram_bytes"] as? Int64 == 4 * GiB)
+        #expect(model["suggested"] as? Bool == true && model["chosen"] as? Bool == true && model["downloading"] as? Bool == true)
+        #expect((dict["download"] as? [String: Any])?["model"] as? String == "small")
+    }
+
+    @Test func absentTheyReadAsTheirDefaults() throws {
+        var dict = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(snapshot())) as? [String: Any])
+        for key in ["models", "memory_bytes", "shared_bytes"] { dict[key] = nil }
+        var download = try #require(dict["download"] as? [String: Any])
+        download["model"] = nil
+        dict["download"] = download
+        let old = try JSONDecoder().decode(Snapshot.self, from: try JSONSerialization.data(withJSONObject: dict))
+        #expect(old.models.isEmpty && old.memoryBytes == 0 && old.sharedBytes == 0)
+        #expect(old.download?.model == nil && old.download?.done == 10)
     }
 }

@@ -65,7 +65,11 @@ nonisolated struct Pins: Sendable {
         }
         guard case .array(let sharedList)? = m["shared"], !sharedList.isEmpty else { throw Mistake(description: "model.shared") }
         var shared: [ModelFile] = []
-        for (i, f) in sharedList.enumerated() { shared.append(try file(f, "model.shared[\(i)]")) }
+        for (i, f) in sharedList.enumerated() {
+            let one = try file(f, "model.shared[\(i)]")
+            guard !shared.contains(where: { $0.name == one.name }) else { throw Mistake(description: "model.shared[\(i)].name") }
+            shared.append(one)
+        }
         guard case .array(let choiceList)? = m["choices"], !choiceList.isEmpty else { throw Mistake(description: "model.choices") }
         var choices: [ModelPin] = []
         for (i, c) in choiceList.enumerated() {
@@ -74,10 +78,17 @@ nonisolated struct Pins: Sendable {
             guard !choices.contains(where: { $0.id == id }) else { throw Mistake(description: "\(at).id") }
             let own = try file(c["file"], "\(at).file")
             guard own.role == "lm" else { throw Mistake(description: "\(at).file.role") }
+            guard !(shared + choices.map(\.file)).contains(where: { $0.name == own.name }) else {
+                throw Mistake(description: "\(at).file.name")
+            }
+            // Smallest first: the suggestion and the choice rely on the order.
+            let from = Int64(try int(c["suggested_from_bytes"], "\(at).suggested_from_bytes", zero: true))
+            guard choices.last.map({ $0.suggestedFrom < from }) ?? true else {
+                throw Mistake(description: "\(at).suggested_from_bytes")
+            }
             choices.append(ModelPin(
                 id: id, name: try string(c["name"], "\(at).name"), variant: try string(c["variant"], "\(at).variant"), file: own,
-                ramBytes: Int64(try int(c["ram_bytes"], "\(at).ram_bytes")),
-                suggestedFrom: Int64(try int(c["suggested_from_bytes"], "\(at).suggested_from_bytes", zero: true))
+                ramBytes: Int64(try int(c["ram_bytes"], "\(at).ram_bytes")), suggestedFrom: from
             ))
         }
         return Pins(

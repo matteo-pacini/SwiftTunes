@@ -39,6 +39,7 @@ private let GiB: Int64 = 1 << 30
         let s = rig.snap
         #expect(s.memoryBytes == 16 * GiB)
         let sharedBytes = Int64(shared.reduce(0) { $0 + rig.modelFiles[$1]!.count })
+        #expect(s.sharedBytes == sharedBytes)
         let smallBytes = Int64(rig.smallFile.data.count)
         let largeBytes = Int64(rig.modelFiles[large]!.count)
         #expect(s.models == [
@@ -54,7 +55,7 @@ private let GiB: Int64 = 1 << 30
         await rig.close()
     }
 
-    @Test(arguments: [(8, "small"), (16, "small"), (24, "large"), (32, "large"), (64, "large")] as [(Int64, String)])
+    @Test(arguments: [(0, "small"), (8, "small"), (16, "small"), (24, "large"), (32, "large"), (64, "large")] as [(Int64, String)])
     func theSuggestionFollowsTheMemory(memoryGiB: Int64, want: String) async throws {
         let rig = try await Rig(ready: false, memory: memoryGiB * GiB)
         #expect(rig.snap.models.filter(\.suggested).map(\.id) == [want])
@@ -80,7 +81,7 @@ private let GiB: Int64 = 1 << 30
         #expect(try choice(rig, "large").chosen && choice(rig, "large").onDisk && !choice(rig, "small").onDisk)
         await rig.send(.chooseModel(id: "small"))
         #expect(try choice(rig, "large").chosen)
-        #expect(state(rig).model == nil)
+        #expect(state(rig).model == "large")
         await rig.close()
     }
 
@@ -370,6 +371,170 @@ private let GiB: Int64 = 1 << 30
         #expect(onDisk(rig).isEmpty && rig.snap.need.onDiskBytes == 0)
         await rig.close()
     }
+
+    // MARK: - What a review settled
+
+    @Test func aRewriteAfterThinWordsNamesItsModel() async throws {
+        let rig = try await bothRig(genres: Self.sungGenres)
+        await rig.send(.chooseModel(id: "small"))
+        await rig.ace.set(kinds: [.thin, .normal])
+        await rig.send(.selectGenre(id: "jazz"))
+        await rig.send(.setComposer(on: true))
+        #expect(await rig.run { rig.snap.tune != nil })
+        #expect(rig.snapshots.contains { $0.model.thinWords })
+        let models = await rig.ace.lmModels
+        #expect(models.count >= 2 && models.allSatisfy { $0 == small })
+        await rig.close()
+    }
+
+    @Test func theRequestAfterAFailureNamesItsModel() async throws {
+        let rig = try await bothRig()
+        await rig.send(.chooseModel(id: "small"))
+        await rig.ace.set(kinds: [.fail])
+        await rig.send(.selectGenre(id: "jazz"))
+        await rig.send(.setComposer(on: true))
+        #expect(await rig.run { rig.snap.tune != nil })
+        #expect(rig.snapshots.contains { $0.model.state == .failed })
+        let models = await rig.ace.lmModels
+        #expect(models.count >= 2 && models.allSatisfy { $0 == small })
+        await rig.close()
+    }
+
+    @Test func theFirstDownloadThroughDownloadModelIsChosenAndStaysSo() async throws {
+        let rig = try await Rig(ready: false, memory: 64 * GiB)
+        #expect(try choice(rig, "large").chosen)
+        await rig.send(.downloadModel(id: "small"))
+        #expect(await rig.run { rig.snap.download == nil })
+        #expect(try choice(rig, "small").chosen && rig.snap.setup == .ready)
+        #expect(state(rig).model == "small")
+        await rig.send(.downloadModel(id: "large"))
+        #expect(await rig.run { rig.snap.download == nil })
+        #expect(try choice(rig, "large").onDisk && choice(rig, "small").chosen)
+        #expect(state(rig).model == "small")
+        await rig.close()
+    }
+
+    @Test func aRefusedDownloadSavesNoChoice() async throws {
+        let rig = try await Rig(ready: false, memory: 64 * GiB)
+        await rig.host.set(holdAfter: 500)
+        rig.engine.send(.downloadModel(id: "small"))
+        await rig.host.untilHeld()
+        rig.engine.send(.download)
+        #expect(rig.engine.dl?.model == "small" && state(rig).model == nil)
+        await rig.host.release()
+        #expect(await rig.run { rig.snap.download == nil })
+        #expect(state(rig).model == "small")
+        await rig.close()
+    }
+
+    @Test func downloadModelCarriesOnFromThePartOfTheChosenModel() async throws {
+        let rig = try await Rig(ready: false, memory: 64 * GiB)
+        await rig.host.set(holdAfter: 1000)
+        rig.engine.send(.downloadModel(id: "large"))
+        await rig.host.untilHeld()
+        await rig.send(.cancelDownload)
+        await rig.host.release()
+        await rig.settle()
+        // How much reached the part before the cancel depends on timing:
+        // the first 1000 bytes stand for it.
+        try #require(rig.modelFiles[large]).prefix(1000).write(to: rig.paths.models.appending(path: large + ".part"))
+        await rig.send(.downloadModel(id: "large"))
+        #expect(await rig.run { rig.snap.setup == .ready })
+        #expect(await rig.host.ranges.contains("bytes=1000-"))
+        #expect(try choice(rig, "large").onDisk && choice(rig, "large").chosen)
+        await rig.close()
+    }
+
+    @Test func theOnlyModelDeletedOutsideTheAppStopsTheComposer() async throws {
+        let rig = try await Rig(ahead: 1)
+        await rig.send(.selectGenre(id: "jazz"))
+        await rig.send(.setComposer(on: true))
+        #expect(await rig.run { rig.snap.ready == 1 && rig.snap.model.state == .idle })
+        try FileManager.default.removeItem(at: rig.paths.models.appending(path: large))
+        await rig.send(.refresh)
+        #expect(rig.snap.setup == .missing && !rig.snap.models.contains(where: \.onDisk))
+        let posts = await rig.ace.lmModels.count
+        // The next tune is not started: the composer stops.
+        rig.player.finish()
+        #expect(await rig.run { !rig.snap.composing && rig.launcher.running == 0 })
+        #expect(rig.snap.setup == .missing && rig.snap.model.state == .unloaded)
+        #expect(await rig.ace.lmModels.count == posts)
+        #expect(rig.snapshots.allSatisfy { ($0.setup == .ready) == $0.models.contains(where: \.onDisk) })
+        await rig.close()
+    }
+
+    @Test func theChosenModelDeletedOutsideTheAppGivesWayForGood() async throws {
+        let rig = try await bothRig()
+        #expect(try choice(rig, "large").chosen)
+        try FileManager.default.removeItem(at: rig.paths.models.appending(path: large))
+        await rig.send(.selectGenre(id: "jazz"))
+        await rig.send(.setComposer(on: true))
+        #expect(await rig.run { rig.snap.ready == 2 })
+        #expect(await rig.ace.lmModels.allSatisfy { $0 == small })
+        #expect(try choice(rig, "small").chosen && state(rig).model == "small")
+        // Back on disk, it is not chosen again.
+        try rig.placeModels()
+        await rig.send(.refresh)
+        #expect(try choice(rig, "large").onDisk && choice(rig, "small").chosen)
+        await rig.close()
+    }
+
+    @Test func removingTheModelAWordsTuneIsMadeWithStartsItOverWithTheChosenOne() async throws {
+        let rig = try await bothRig(genres: Self.sungGenres, ahead: 1)
+        await rig.ace.set(runningPolls: 20)
+        await rig.send(.selectGenre(id: "jazz"))
+        await rig.send(.stop)
+        #expect(refusal(await rig.engine.composeWithWords("hold on to me", name: "Mine", model: "small")) == nil)
+        #expect(await rig.run { rig.snap.model.state == .writing })
+        #expect(rig.engine.job?.model?.id == "small")
+        await rig.send(.removeOneModel(id: "small"))
+        #expect(try !choice(rig, "small").onDisk && onDisk(rig) == ([large] + shared).sorted())
+        #expect(await rig.run { rig.snap.ready == 1 && rig.snap.job == nil })
+        #expect(await rig.ace.lmModels == [small, large])
+        #expect(await rig.ace.cancelled.count == 1)
+        await rig.close()
+    }
+
+    @Test func aPartAloneIsRemovedAndTheModelOnDiskStays() async throws {
+        let rig = try await Rig()
+        try Data("part".utf8).write(to: rig.paths.models.appending(path: small + ".part"))
+        await rig.send(.removeOneModel(id: "small"))
+        #expect(onDisk(rig) == ([large] + shared).sorted())
+        #expect(try choice(rig, "large").chosen && rig.snap.setup == .ready)
+        await rig.close()
+    }
+
+    @Test(arguments: ["small", "large"])
+    func withNoModelCompleteRemovingAPartRemovesEverything(id: String) async throws {
+        let rig = try await Rig(ready: false, memory: 64 * GiB)
+        try FileManager.default.createDirectory(at: rig.paths.models, withIntermediateDirectories: true)
+        let own = id == "small" ? small : large
+        try Data("part".utf8).write(to: rig.paths.models.appending(path: own + ".part"))
+        try #require(rig.modelFiles[shared[0]]).write(to: rig.paths.models.appending(path: shared[0]))
+        try Data("part".utf8).write(to: rig.paths.models.appending(path: shared[1] + ".part"))
+        await rig.send(.removeOneModel(id: id))
+        #expect(onDisk(rig).isEmpty && rig.snap.need.onDiskBytes == 0 && rig.snap.setup == .missing)
+        await rig.close()
+    }
+
+    @Test func aRemovalLeavesANewerDownloadOfTheSameModelAlone() async throws {
+        let rig = try await Rig()
+        await rig.host.set(corrupt: [small])
+        await rig.send(.downloadModel(id: "small"))
+        #expect(await rig.run { rig.snap.download?.error != nil })
+        try rig.smallFile.data.prefix(1000).write(to: rig.paths.models.appending(path: small + ".part"))
+        await rig.host.set(corrupt: [])
+        await rig.host.set(holdAfter: 500)
+        rig.engine.send(.removeOneModel(id: "small"))
+        rig.engine.send(.downloadModel(id: "small"))
+        // The removal ran before the download's first request was answered.
+        await rig.host.untilHeld()
+        #expect(rig.engine.dlTask != nil && rig.engine.dl?.model == "small")
+        await rig.host.release()
+        #expect(await rig.run { rig.engine.dlTask == nil })
+        #expect(try rig.snap.download == nil && choice(rig, "small").onDisk)
+        await rig.close()
+    }
 }
 
 /// The pins file as the engine reads it.
@@ -392,11 +557,18 @@ private let GiB: Int64 = 1 << 30
         #expect(suggested == ["small", "small", "large", "large", "large"])
     }
 
+    @Test(arguments: [(0, "small"), (25_769_803_775, "small"), (25_769_803_776, "large")] as [(Int64, String)])
+    func theRepositorysSuggestionAtItsEdges(memory: Int64, want: String) throws {
+        let pins = try Pins.parse(try #require(Files.read(Self.repo.appending(path: "Config/pins.json"))))
+        #expect(pins.choices[ModelRules.suggested(from: pins.choices.map(\.suggestedFrom), memory: memory)].id == want)
+    }
+
     nonisolated static let file = #"{"role": "lm", "name": "a.gguf", "sha256": "AB", "bytes": 1}"#
     nonisolated static let dit = #"{"role": "dit", "name": "d.gguf", "sha256": "cd", "bytes": 2}"#
     nonisolated static func pins(shared: String = "[\(dit)]", choices: String) -> String {
         #"{"model": {"name": "M", "base_url": "u", "revision": "r", "silence_code": 1, "shared": \#(shared), "choices": \#(choices)}, "keep": 1, "ahead": 1, "duration": 1}"#
     }
+    nonisolated static let other = #"{"role": "lm", "name": "b.gguf", "sha256": "ef", "bytes": 3}"#
     nonisolated static func choice(id: String = "a", file: String = file, from: String = "0") -> String {
         #"{"id": "\#(id)", "name": "A", "variant": "V", "file": \#(file), "ram_bytes": 4, "suggested_from_bytes": \#(from)}"#
     }
@@ -415,6 +587,11 @@ private let GiB: Int64 = 1 << 30
         (pins(choices: "[\(choice(file: dit))]"), "model.choices[0].file.role"),
         (pins(choices: "[\(choice(from: "-1"))]"), "model.choices[0].suggested_from_bytes"),
         (pins(shared: #"[{"role": "x", "name": "d", "sha256": "c", "bytes": 2}]"#, choices: "[\(choice())]"), "model.shared[0].role"),
+        (pins(choices: "[\(choice(from: "10")), \(choice(id: "b", file: other, from: "5"))]"), "model.choices[1].suggested_from_bytes"),
+        (pins(choices: "[\(choice(from: "10")), \(choice(id: "b", file: other, from: "10"))]"), "model.choices[1].suggested_from_bytes"),
+        (pins(choices: "[\(choice()), \(choice(id: "b", from: "1"))]"), "model.choices[1].file.name"),
+        (pins(choices: "[\(choice(file: dit.replacingOccurrences(of: "dit", with: "lm")))]"), "model.choices[0].file.name"),
+        (pins(shared: "[\(dit), \(dit)]", choices: "[\(choice())]"), "model.shared[1].name"),
     ])
     func aWrongOne(text: String, key: String) {
         #expect(throws: Pins.Mistake.self) { try Pins.parse(text) }

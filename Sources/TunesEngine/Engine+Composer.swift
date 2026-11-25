@@ -96,6 +96,7 @@ extension Engine {
     /// queue or not; once made with the switch off, the server stops.
     func maybeCompose() {
         guard job == nil, !shuttingDown else { return }
+        if wanted { checkModelFiles() }
         if !wanted {
             if server != nil || state == .starting || state == .writing || state == .rendering {
                 stopServer()
@@ -767,15 +768,9 @@ extension Engine {
 
     // MARK: - Download
 
-    /// Fetches what the chosen model lacks, and saves it as chosen.
+    /// Fetches what the chosen model lacks.
     func download() {
         guard let c = chosenModel(), !onDisk(c) else { return }
-        // Unsaved, a suggested Small would give way to a Large added later:
-        // a state file without a model means the largest on disk.
-        if chosenID != c.id {
-            chosenID = c.id
-            saveState()
-        }
         startDownload(c)
     }
 
@@ -888,19 +883,39 @@ extension Engine {
         }
     }
 
-    /// Deletes one model's own file and its part, nothing else. The chosen
-    /// one goes only as the last on disk, and then as `removeModel`.
+    /// Before a tune: with no model on disk (deleted outside the app) the
+    /// composer stops, as after a removal.
+    func checkModelFiles() {
+        checkSetup()
+        guard setup != .ready else { return }
+        dropOwnWords()
+        composerOff()
+    }
+
+    /// Deletes one model's own file and its part, nothing else. With no
+    /// other model on disk it is `removeModel`; the chosen one is refused
+    /// while another is on disk. A tune being made with it starts over with
+    /// the chosen model.
     func removeOneModel(_ id: String) {
         guard let pins, let c = pins.choice(id) else { return }
-        if c.id == chosenModel()?.id {
-            guard !pins.choices.contains(where: { $0.id != id && onDisk($0) }) else { return }
+        guard pins.choices.contains(where: { $0.id != id && onDisk($0) }) else {
             removeModel()
             return
         }
+        guard c.id != chosenModel()?.id else { return }
         let fetching = dlTask != nil && dl?.model == id
         let names = [c.file.name, c.file.name + ".part"]
         guard fetching || names.contains(where: { Files.exists(env.paths.models.appending(path: $0)) }) else { return }
         if fetching { cancelDownload() }
+        if job?.model?.id == id {
+            cancelJob()
+            ownWordsPending?.model = nil
+            silenceS = nil
+            thinWords = false
+            changed()
+            maybeCompose()
+            settleState()
+        }
         let writing = dlPrevious
         spawn { [weak self] in
             // A cancelled download may still hold a part open: it ends first.
@@ -910,17 +925,21 @@ extension Engine {
     }
 
     /// Deletes `files` and their parts; with `model`, only that model's
-    /// download is forgotten and a failure names it.
+    /// download is forgotten and a failure names it. A download running now
+    /// is another model's or was started after the removal (a removal first
+    /// cancels the download of what it deletes): its files and its progress
+    /// are left alone.
     func deleteModelFiles(_ files: [ModelFile], of model: ModelPin? = nil) {
+        let fetching = dlTask == nil ? [] : Set(dlFiles.map(\.name))
         var failure: Int32?
-        for f in files {
+        for f in files where !fetching.contains(f.name) {
             for name in [f.name, f.name + ".part"] where unlink(env.paths.models.appending(path: name).path) != 0 {
                 if errno != ENOENT && failure == nil { failure = errno }
             }
         }
         // Whatever was deleted stays deleted.
         removeError = failure.map { "could not remove \(model?.name ?? "the music model"): \(String(cString: strerror($0)))" }
-        if model == nil || dl?.model == model?.id { dl = nil }
+        if dlTask == nil && (model == nil || dl?.model == model?.id) { dl = nil }
         checkSetup()
         changed()
     }
