@@ -266,14 +266,18 @@ final class DemoEngine: EngineAPI {
             for j in s.models.indices { s.models[j].downloading = false }
             if s.setup != .ready { s.setup = .missing }
         case .removeOneModel(let id):
-            guard let i = s.models.firstIndex(where: { $0.id == id }), s.models[i].onDisk else { return }
-            if s.models.filter(\.onDisk).count == 1 {
+            guard let i = s.models.firstIndex(where: { $0.id == id }) else { return }
+            if !s.models.contains(where: { $0.id != id && $0.onDisk }) {
                 guard Self.removeAll(&s) else { return }
             } else {
                 guard !s.models[i].chosen else { return }
+                // Another model is complete, so the shared files are: what this
+                // one lacks is all its own file.
+                let here = s.models[i].fileBytes - s.models[i].downloadBytes
+                guard here > 0 else { return }
                 s.models[i].onDisk = false
                 s.models[i].downloadBytes = s.models[i].fileBytes
-                s.need.onDiskBytes -= s.models[i].fileBytes
+                s.need.onDiskBytes -= here
             }
         default:
             return
@@ -287,7 +291,6 @@ final class DemoEngine: EngineAPI {
     /// models are figures in a fixture; no file is touched.
     private static func removeAll(_ s: inout Snapshot) -> Bool {
         guard s.need.onDiskBytes > 0 else { return false }
-        let shared = s.need.onDiskBytes - s.models.filter(\.onDisk).map(\.fileBytes).reduce(0, +)
         s.composing = false
         s.job = nil
         s.download = nil
@@ -298,7 +301,7 @@ final class DemoEngine: EngineAPI {
         for j in s.models.indices {
             s.models[j].onDisk = false
             s.models[j].downloading = false
-            s.models[j].downloadBytes = s.models[j].fileBytes + max(0, shared)
+            s.models[j].downloadBytes = s.models[j].fileBytes + s.sharedBytes
             if s.models[j].chosen { s.need.downloadBytes = s.models[j].downloadBytes }
         }
         return true

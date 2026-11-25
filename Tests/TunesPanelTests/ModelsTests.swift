@@ -124,18 +124,44 @@ struct ModelsComposerTests {
         #expect(c.lines.isEmpty && c.standIn?.command == .download)
     }
 
-    @Test("with no models listed: the variant on the model line and no capsule", arguments: Fixture.states.filter { !$0.contains("-models-") })
+    static let withModelLine = ["06-first-tune", "10-writing", "11-after-scrap", "15-failed-playing", "19-outside-text", "20-session", "22-writing-again",
+                            "25-kept-playing-new-ready", "36-sung-lyrics", "37-thin-rewrite", "38-own-words", "39-twelve-queue",
+                            "40-twelve-repeat-off", "45-round-played", "47-round-fifty"]
+    static let withoutModelLine = ["05-queue-full", "07-composer-off-kept", "08-nothing-kept", "09-kept-tunes", "12-held-power", "13-held-memory",
+                              "14-no-device", "16-genres-error", "17-paused", "21-stopped", "23-pick-after-pause", "24-pick-after-stop",
+                              "29-after-save", "30-modes-default", "31-shuffle-off", "32-repeat-one", "33-ended", "34-pinned",
+                              "41-no-model-kept", "42-downloading-kept", "43-download-failed-kept", "44-model-on-disk", "46-round-ended"]
+
+    @Test("with no models listed: the variant on the model line and no capsule", arguments: withModelLine)
     func noModels(_ name: String) throws {
         let s = try Fixture.load(name)
-        guard case .player(let p) = card(s) else { return }
+        #expect(s.models.isEmpty && !s.model.variant.isEmpty)
+        let p = try player(s)
+        #expect(lines(p).contains([s.model.name, s.model.variant, s.model.device].joined(separator: " · ")))
         #expect(capsules(p).isEmpty)
+    }
+
+    @Test("with no models listed and no model line: no capsule", arguments: withoutModelLine)
+    func noModelsNoLine(_ name: String) throws {
+        let s = try Fixture.load(name)
+        #expect(s.models.isEmpty)
+        #expect(capsules(try player(s)).isEmpty)
+    }
+
+    @Test("every player fixture without models is in one of the two lists")
+    func listsComplete() throws {
+        let players = try Fixture.states.filter { !$0.contains("-models-") }.filter { name in
+            if case .player = card(try Fixture.load(name)) { return true }
+            return false
+        }
+        #expect(Set(players) == Set(Self.withModelLine + Self.withoutModelLine))
     }
 }
 
 @Suite("Music models: the card")
 struct ModelsCardTests {
     let header = ("MUSIC MODELS", "Music models", "New tunes are made with the ticked one. A change applies from the next tune.",
-                  "Both share 3.42 GiB of other files, kept while a model remains. This card is also under Music Models… in the menu bar icon's menu.")
+                  "The models share 3.42 GiB of other files, kept while a model remains. This card is also under Music Models… in the menu bar icon's menu.")
 
     func buttons(_ r: ModelsCard.Row) -> [String] { r.buttons.map(\.control.text) }
 
@@ -169,7 +195,9 @@ struct ModelsCardTests {
         #expect(!small.ticked && small.sub == "0.66 GiB to download · about 4 GiB of memory" && small.progress == nil && small.error.isEmpty)
         #expect(small.buttons == [ModelsCard.Button(kind: .download, control: Control(text: "Download", help: "Download Small"), command: .downloadModel(id: "small"), ask: nil)])
         #expect(large.ticked && large.sub == "4.15 GiB on this Mac · about 8 GiB of memory")
-        #expect(large.buttons == [ModelsCard.Button(kind: .remove, control: Control(text: "Remove", help: "Remove Large"), command: .removeModel, ask: Decide.modelRemoval(s))])
+        var last = Decide.modelRemoval(s)
+        last.command = .removeOneModel(id: "large")
+        #expect(large.buttons == [ModelsCard.Button(kind: .remove, control: Control(text: "Remove", help: "Remove Large"), command: .removeOneModel(id: "large"), ask: last)])
     }
 
     @Test("both on disk, Large chosen: Use and Remove on Small, nothing on Large")
@@ -236,6 +264,130 @@ struct ModelsCardTests {
         #expect(c.rows[1].buttons.map(\.command) == [.download])
         #expect(!c.rows[1].error.isEmpty)
         #expect(c.rows[0].buttons.map(\.command) == [.downloadModel(id: "small")])
+    }
+}
+
+@Suite("Music models: what a review settled")
+struct ModelsSettledTests {
+    /// 03 or 43, a failed first download, with the 64 GiB models (Large
+    /// chosen) and the download naming `model`.
+    func failedFirst(_ name: String, model: String?) throws -> Snapshot {
+        var s = try Fixture.load(name)
+        s.models = try Fixture.load("49-models-first-64gib").models
+        s.sharedBytes = 3_671_093_888
+        s.download?.model = model
+        return s
+    }
+
+    static let resumes: [(String?, Command)] = [("large", .download), (nil, .download), ("small", .downloadModel(id: "small"))]
+
+    @Test("the setup card's Resume carries on with the model the download was for", arguments: resumes)
+    func setupResume(_ model: String?, _ command: Command) throws {
+        let c = try setup(failedFirst("03-download-failed", model: model))
+        #expect(c.kind == .failed && c.button.text == "Resume" && c.command == command)
+    }
+
+    @Test("the stand-in's Resume carries on with the model the download was for", arguments: resumes)
+    func standInResume(_ model: String?, _ command: Command) throws {
+        let c = try player(failedFirst("43-download-failed-kept", model: model)).composer
+        #expect(c.standIn?.button.text == "Resume" && c.standIn?.command == command)
+    }
+
+    @Test("a row's Resume carries on with its model", arguments: resumes)
+    func rowResume(_ model: String?, _ command: Command) throws {
+        let c = try models(failedFirst("03-download-failed", model: model))
+        let row = try #require(c.rows.first { !$0.error.isEmpty })
+        #expect(row.id == (model ?? "large"))
+        #expect(row.buttons.first { $0.kind == .resume }?.command == command)
+    }
+
+    func remove(_ r: ModelsCard.Row) -> ModelsCard.Button? { r.buttons.first { $0.kind == .remove } }
+
+    @Test("Large alone while Small downloads: Remove sends removeOneModel, so the engine decides when it is pressed")
+    func removeWhileAnotherDownloads() throws {
+        let s = try Fixture.load("52-models-small-downloading")
+        let b = try #require(remove(try models(s).rows[1]))
+        #expect(b.command == .removeOneModel(id: "large"))
+        #expect(b.ask?.command == .removeOneModel(id: "large"))
+        #expect(b.ask?.alertTitle == "Remove the music model?")
+        #expect(b.ask?.alertText == Decide.modelRemoval(s).alertText)
+    }
+
+    @Test("no row ever sends removeModel", arguments: ["48-models-first-16gib", "50-models-large-only", "51-models-both-large-chosen",
+                                                        "52-models-small-downloading", "53-models-second-failed"])
+    func neverRemoveModel(_ name: String) throws {
+        let c = try models(Fixture.load(name))
+        for r in c.rows {
+            for b in r.buttons { #expect(b.command != .removeModel && b.ask?.command != .removeModel) }
+            if let b = remove(r) { #expect(b.command == .removeOneModel(id: r.id) && b.ask?.command == b.command) }
+        }
+    }
+
+    /// Large on disk, a 300,000,000-byte part of Small.
+    func smallPart() throws -> Snapshot {
+        var s = try Fixture.load("50-models-large-only")
+        s.models[0].downloadBytes = 709_846_656 - 300_000_000
+        return s
+    }
+
+    @Test("a part beside a complete model: how much is downloaded, Resume and Remove")
+    func partBeside() throws {
+        let row = try models(smallPart()).rows[0]
+        #expect(row.sub == "0.28 of 0.66 GiB downloaded" && row.error.isEmpty && row.progress == nil)
+        #expect(row.buttons == [
+            ModelsCard.Button(kind: .resume, control: Control(text: "Resume", help: "Resume"), command: .downloadModel(id: "small"), ask: nil),
+            ModelsCard.Button(kind: .remove, control: Control(text: "Remove", help: "Remove Small"), command: .removeOneModel(id: "small"),
+                              ask: ModelRemoval(alertTitle: "Remove Small?", alertText: "It frees 0.28 GiB. Your tunes stay.", remove: "Remove", cancel: "Cancel",
+                                                command: .removeOneModel(id: "small"))),
+        ])
+    }
+
+    @Test("a part with no model complete: how much of that model's download is here, Resume, and Remove as the last model")
+    func partAlone() throws {
+        var s = try Fixture.load("49-models-first-64gib")
+        s.models[1].downloadBytes = 8_128_417_536 - 4_000_000_000
+        s.models[0].downloadBytes = 4_380_940_544 - 3_671_093_888
+        s.need.onDiskBytes = 4_000_000_000
+        let c = try models(s)
+        var last = Decide.modelRemoval(s)
+        last.command = .removeOneModel(id: "large")
+        #expect(c.rows[1].sub == "3.73 of 7.57 GiB downloaded")
+        #expect(c.rows[1].buttons == [
+            ModelsCard.Button(kind: .resume, control: Control(text: "Resume", help: "Resume"), command: .download, ask: nil),
+            ModelsCard.Button(kind: .remove, control: Control(text: "Remove", help: "Remove Large"), command: .removeOneModel(id: "large"), ask: last),
+        ])
+        #expect(c.rows[0].sub == "3.42 of 4.08 GiB downloaded")
+        #expect(c.rows[0].buttons.map(\.command) == [.downloadModel(id: "small"), .removeOneModel(id: "small")])
+    }
+
+    @Test("with the shared size unknown and nothing complete, a row says only what is left to download")
+    func partUnknown() throws {
+        var s = try Fixture.load("49-models-first-64gib")
+        s.sharedBytes = 0
+        s.models[1].downloadBytes = 8_128_417_536 - 4_000_000_000
+        let row = try models(s).rows[1]
+        #expect(row.sub == "3.84 GiB to download · about 8 GiB of memory")
+        #expect(row.buttons.map(\.kind) == [.download])
+    }
+
+    @Test("a part while another model downloads: Remove, no Resume")
+    func partWhileFetching() throws {
+        var s = try smallPart()
+        s.models.append(ModelChoice(id: "medium", name: "Medium", variant: "2B Q8", fileBytes: 2 << 30, downloadBytes: 1 << 30, onDisk: false,
+                                    ramBytes: 6 << 30, suggested: false, chosen: false, downloading: true))
+        s.download = Download(file: 1, files: 1, name: "language model", done: 1 << 30, total: 2 << 30, rate: 0, error: nil, model: "medium")
+        #expect(try models(s).rows[0].buttons.map(\.kind) == [.remove])
+    }
+
+    @Test("the footnote names the shared size, and leaves it out when unknown", arguments: [
+        (Int64(3_671_093_888), "The models share 3.42 GiB of other files, kept while a model remains. This card is also under Music Models… in the menu bar icon's menu."),
+        (2_147_483_648, "The models share 2 GiB of other files, kept while a model remains. This card is also under Music Models… in the menu bar icon's menu."),
+        (0, "This card is also under Music Models… in the menu bar icon's menu."),
+    ])
+    func footnote(_ shared: Int64, _ text: String) throws {
+        var s = try Fixture.load("51-models-both-large-chosen")
+        s.sharedBytes = shared
+        #expect(try models(s).footnote == text)
     }
 }
 

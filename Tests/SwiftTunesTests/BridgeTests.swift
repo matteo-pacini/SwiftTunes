@@ -426,6 +426,17 @@ struct DemoModelsTests {
         return DemoEngine(options: try #require(DemoOptions(arguments: ["SwiftTunes", "--demo", file.path])))
     }
 
+    /// The demo over `name`'s last snapshot changed by `change`, read from a
+    /// file of its own that is removed once read.
+    private func demo(_ name: String, _ change: (inout Snapshot) -> Void) throws -> DemoEngine {
+        var s = try demo(name).snapshot
+        change(&s)
+        let file = FileManager.default.temporaryDirectory.appending(path: "demo-models-\(UUID().uuidString).jsonl")
+        try JSONEncoder().encode(s).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        return DemoEngine(options: try #require(DemoOptions(arguments: ["SwiftTunes", "--demo", file.path])))
+    }
+
     @Test("--demo-open models opens the models card")
     func open() throws {
         let options = try #require(DemoOptions(arguments: ["SwiftTunes", "--demo", "x.jsonl", "--demo-open", "models"]))
@@ -493,5 +504,56 @@ struct DemoModelsTests {
         #expect(s.models.map(\.onDisk) == [false, false])
         #expect(s.models.map(\.downloadBytes) == [4_380_940_544, 8_128_417_536])
         #expect(s.need.downloadBytes == 8_128_417_536)
+    }
+
+    /// Large on disk and a 300,000,000-byte part of Small.
+    private func smallPart(_ s: inout Snapshot) {
+        s.models[0].downloadBytes -= 300_000_000
+        s.need.onDiskBytes += 300_000_000
+    }
+
+    @Test("Remove on a part beside a complete model: the part goes, nothing else")
+    func removePart() throws {
+        let engine = try demo("50-models-large-only", smallPart)
+        engine.send(.removeOneModel(id: "small"))
+        let s = engine.snapshot
+        #expect(s.models[0].downloadBytes == 709_846_656 && !s.models[0].onDisk)
+        #expect(s.models[1].onDisk && s.need.onDiskBytes == 8_128_417_536 && s.setup == .ready)
+    }
+
+    @Test("Remove on a part with no model complete: everything goes")
+    func removePartAlone() throws {
+        let engine = try demo("49-models-first-64gib") { s in
+            s.models[1].downloadBytes -= 4_000_000_000
+            s.models[0].downloadBytes -= 3_671_093_888
+            s.need.downloadBytes = s.models[1].downloadBytes
+            s.need.onDiskBytes = 4_000_000_000
+        }
+        engine.send(.removeOneModel(id: "small"))
+        let s = engine.snapshot
+        #expect(s.need.onDiskBytes == 0 && s.setup == .missing)
+        #expect(s.models.map(\.downloadBytes) == [4_380_940_544, 8_128_417_536])
+    }
+
+    @Test("removing the last model counts the shared files from sharedBytes, not from what is left on disk")
+    func removeLastWithPart() throws {
+        let engine = try demo("50-models-large-only", smallPart)
+        engine.send(.removeOneModel(id: "large"))
+        #expect(engine.snapshot.models.map(\.downloadBytes) == [4_380_940_544, 8_128_417_536])
+    }
+
+    @Test("Resume on a failed second download fetches that model again")
+    func resumeFailed() throws {
+        let engine = try demo("53-models-second-failed")
+        engine.send(.downloadModel(id: "small"))
+        let s = engine.snapshot
+        #expect(s.models[0].downloading && s.download?.model == "small" && s.download?.error == nil && s.setup == .ready)
+    }
+
+    @Test("Resume on a part fetches what is left of it")
+    func resumePart() throws {
+        let engine = try demo("50-models-large-only", smallPart)
+        engine.send(.downloadModel(id: "small"))
+        #expect(engine.snapshot.download?.total == 409_846_656 && engine.snapshot.download?.files == 1)
     }
 }
