@@ -211,7 +211,7 @@ private let GiB: Int64 = 1 << 30
         await rig.send(.setComposer(on: true))
         #expect(await rig.run { rig.snap.ready == 1 })
         let file = try #require(rig.tunes("Jazz").first)
-        #expect(try await Self.modelTag(rig.genreDir("Jazz").appending(path: file)) == "small")
+        #expect(try await Self.modelTag(rig.genreDir("Jazz").appending(path: file)) == "ACE-Step 1.5 Turbo 0.6B Q8")
         await rig.close()
     }
 
@@ -229,6 +229,17 @@ private let GiB: Int64 = 1 << 30
         #expect(try choice(rig, id).onDisk && choice(rig, id).chosen && choice(rig, id).downloadBytes == 0)
         let requests = await rig.host.requests
         #expect(!requests.contains { $0.hasSuffix("/" + (id == "small" ? large : small)) })
+        await rig.close()
+    }
+
+    @Test func theFirstDownloadKeepsItsModelChosenWhenAnotherIsAdded() async throws {
+        let rig = try await Rig(ready: false, memory: 16 * GiB)
+        await rig.send(.download)
+        #expect(await rig.run { rig.snap.setup == .ready })
+        #expect(state(rig).model == "small")
+        await rig.send(.downloadModel(id: "large"))
+        #expect(await rig.run { rig.snap.download == nil })
+        #expect(try choice(rig, "large").onDisk && choice(rig, "small").chosen)
         await rig.close()
     }
 
@@ -317,6 +328,18 @@ private let GiB: Int64 = 1 << 30
         #expect(onDisk(rig) == ([large] + shared).sorted())
         #expect(try !choice(rig, "small").onDisk && choice(rig, "large").onDisk && choice(rig, "large").chosen)
         #expect(rig.snap.setup == .ready && rig.snap.error == nil)
+        await rig.close()
+    }
+
+    @Test func aFailureToRemoveOneNamesIt() async throws {
+        let rig = try await bothRig()
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: rig.paths.models.path)
+        await rig.send(.removeOneModel(id: "small"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: rig.paths.models.path)
+        #expect(rig.snap.error == "could not remove Small: Permission denied")
+        #expect(try choice(rig, "small").onDisk)
+        await rig.send(.removeOneModel(id: "small"))
+        #expect(try rig.snap.error == nil && !choice(rig, "small").onDisk)
         await rig.close()
     }
 

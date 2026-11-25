@@ -14,9 +14,11 @@ nonisolated enum RealServer {
 
 /// One tune composed end to end by the engine with a real ace-server and the
 /// real weights. Off unless TUNES_REAL_ACE_SERVER (the server binary),
-/// TUNES_REAL_MODELS (a folder holding the four pinned files) and
-/// TUNES_REAL_OUT (an empty folder for the run's files) are set. Nothing is
-/// played: the player is the silent fake.
+/// TUNES_REAL_MODELS (a folder holding a pinned model's file and the shared
+/// files) and TUNES_REAL_OUT (an empty folder for the run's files) are set.
+/// TUNES_REAL_MODEL, a model's id (`small`, `large`), makes the tune with
+/// that model, which must be in the folder; absent, the engine chooses as it
+/// would at launch. Nothing is played: the player is the silent fake.
 @Suite(.serialized, .enabled(if: RealServer.configured), .timeLimit(.minutes(20)))
 struct RealServerTests {
     static let env = ProcessInfo.processInfo.environment
@@ -47,7 +49,12 @@ struct RealServerTests {
             pins: package.appending(path: "Config/pins.json"), clock: LivePieces.clock(), random: SystemRandomNumberGenerator(),
             player: player, launcher: tap, holds: LivePieces.holds(), probe: LivePieces.probe()
         ))
+        if let id = Self.env["TUNES_REAL_MODEL"], !id.isEmpty {
+            engine.send(.chooseModel(id: id))
+            #expect(engine.chosenModel()?.id == id, "\(id) is not in TUNES_REAL_MODELS or not in the pins")
+        }
         #expect(engine.snapshot.setup == .ready)
+        let model = engine.chosenModel()
 
         var log: [String] = []
         var peak: Int64 = 0
@@ -85,6 +92,7 @@ struct RealServerTests {
 
         let tunes = Files.list(paths.music.appending(path: "Lo-fi")).filter(TuneFiles.isTune)
         var report = log
+        report.append("model: \(model.map { "\($0.id), \($0.file.name)" } ?? "-")")
         report.append("first tune after \(String(format: "%.1f", elapsed)) s")
         report.append("timings: writing \(done.expect.map { "\($0.writingS)" } ?? "-") s, rendering \(done.expect.map { "\($0.renderingS)" } ?? "-") s")
         report.append("device: \(done.model.device)")

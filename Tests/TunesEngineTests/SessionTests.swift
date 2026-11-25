@@ -39,7 +39,16 @@ struct Seen {
     var dump: String {
         var out: [String] = []
         switch card {
-        case .setup(let c): out += ["setup \(c.kind)", c.title, c.detail] + c.rows.map { "\($0.label): \($0.value)" } + ["[\(c.button.text) \(c.button.enabled)]"]
+        case .setup(let c):
+            out += ["setup \(c.kind)", c.title, c.detail]
+            out += c.models.map { "(\($0.chosen ? "x" : " ")) \($0.name) \($0.variant) \($0.tag) | \($0.sub)" } + (c.modelsNote.isEmpty ? [] : [c.modelsNote])
+            out += c.rows.map { "\($0.label): \($0.value)" } + ["[\(c.button.text) \(c.button.enabled)]"]
+        case .models(let c):
+            out += ["models", c.label, c.title, c.detail]
+            out += c.rows.map { r in
+                "\(r.ticked ? "✓" : "-") \(r.name) \(r.variant) | \(r.sub)\(r.error.isEmpty ? "" : " | \(r.error)") [\(r.buttons.map(\.control.text).joined(separator: ", "))]"
+            }
+            out.append(c.footnote)
         case .chooser(let c): out += ["chooser", c.title, c.chip, c.strip ?? "-"] + c.cells.map { "\($0.name) · \($0.sub)" }
         case .editor(let e): out += ["editor", e.title]
         case .share(let c): out += ["share", c.head, c.name, c.meta] + c.rows.map { "\($0.title) / \($0.sub) \($0.on.map { "\($0)" } ?? "")" }
@@ -95,7 +104,11 @@ struct Seen {
         var seen = step("first launch")
         #expect(seen.setup?.kind == .missing)
         #expect(seen.setup?.detail == "ACE-Step 1.5 Turbo composes on this computer. Nothing is sent anywhere after the download.")
-        #expect(seen.setup?.rows.contains { $0.label == "memory while composing" && $0.value == "about 8 GiB of memory" } == true)
+        // Each model's row quotes its memory: the rig's Mac has 64 GiB, so
+        // Large is suggested and chosen.
+        #expect(seen.setup?.rows.map(\.label) == ["download", "free on disk"])
+        #expect(seen.setup?.models.map { "\($0.name) \($0.chosen) \($0.tag)" } == ["Small false ", "Large true Suggested"])
+        #expect(seen.setup?.models.last?.sub == "\(Format.gib(rig.snap.need.downloadBytes, decimals: 2)) download · about 8 GiB of memory")
         #expect(seen.setup?.button.text == "Download" && seen.setup?.command == .download)
         #expect(seen.status.dim && seen.status.dot == nil)
 
@@ -316,6 +329,131 @@ struct Seen {
         #expect(seen.player?.composer.standIn?.text == "The music model is not on this Mac.", "\(seen.dump)")
 
         // The whole session, kept for a reader of a failure.
+        if ProcessInfo.processInfo.environment["TUNES_SESSION_LOG"] != nil {
+            print(log.joined(separator: "\n"))
+        }
+        await rig.close()
+    }
+
+    /// A first run on a 16 GiB Mac: Small suggested and fetched, a tune made
+    /// with it, then Large added from the models card, used, and Small
+    /// removed.
+    @Test func aFirstRunOnA16GiBMac() async throws {
+        let rig = try await Rig(ready: false, memory: 16 << 30)
+        var log: [String] = []
+        func step(_ name: String, _ panel: Panel = Panel()) -> Seen {
+            let seen = see(rig, panel)
+            log.append("== \(name)\n\(seen.dump)")
+            return seen
+        }
+        func row(_ c: ModelsCard, _ id: String) throws -> ModelsCard.Row { try #require(c.rows.first { $0.id == id }) }
+        func models(_ seen: Seen) throws -> ModelsCard {
+            guard case .models(let c) = seen.card else { throw CardMissing() }
+            return c
+        }
+        struct CardMissing: Error {}
+        func small(_ s: Snapshot) throws -> ModelChoice { try #require(s.models.first { $0.id == "small" }) }
+        func large(_ s: Snapshot) throws -> ModelChoice { try #require(s.models.first { $0.id == "large" }) }
+        let smallFile = rig.smallFile.name
+        let largeFile = "fake-lm.gguf"
+
+        // First launch: the two models under the sentence, Small suggested
+        // and chosen, the download its size.
+        var seen = step("first launch")
+        var setup = try #require(seen.setup)
+        var s = rig.snap
+        #expect(setup.kind == .missing && setup.title == "SwiftTunes needs a music model")
+        #expect(setup.models.map { "\($0.name) \($0.variant) \($0.chosen) \($0.tag)" } == ["Small 0.6B Q8 true Suggested", "Large 4B Q8 false "])
+        #expect(setup.models.map(\.sub) == [
+            "\(Format.gib(try small(s).downloadBytes, decimals: 2)) download · about 4 GiB of memory",
+            "\(Format.gib(try large(s).downloadBytes, decimals: 2)) download · about 8 GiB of memory",
+        ])
+        #expect(setup.models.map(\.command) == [.chooseModel(id: "small"), .chooseModel(id: "large")])
+        #expect(setup.modelsNote == "This Mac has 16 GiB of memory. Large follows the prompt and the words more closely; Small is quicker and lighter. You can add the other later.")
+        #expect(setup.rows.map { "\($0.label): \($0.value)" } == [
+            "download: \(Format.gib(try small(s).downloadBytes, decimals: 2))", "free on disk: \(Format.gib(s.need.diskFreeBytes))",
+        ])
+        #expect(try s.need.downloadBytes == small(s).downloadBytes)
+        #expect(setup.button.text == "Download" && setup.command == .download)
+
+        // Download: Small and the shared files, then ready.
+        await rig.send(setup.command)
+        #expect(await rig.run { rig.snap.setup == .ready })
+        s = rig.snap
+        #expect(try small(s).onDisk && small(s).chosen && !large(s).onDisk)
+        #expect(Files.list(rig.paths.models).sorted() == [smallFile, "fake-dit.gguf", "fake-text.gguf", "fake-vae.gguf"].sorted())
+        #expect(rig.snapshots.contains { $0.download?.model == "small" && $0.download?.files == 4 })
+        seen = step("downloaded")
+        #expect(seen.chooser != nil)
+
+        // The composer on: a tune made with Small, the capsule naming it.
+        await rig.send(.selectGenre(id: "jazz"))
+        await rig.send(.setComposer(on: true))
+        #expect(await rig.run { rig.snap.tune != nil })
+        seen = step("a tune with Small")
+        var p = try #require(seen.player)
+        #expect(p.composer.lines.compactMap(\.models).map(\.text) == ["Small"])
+        #expect(p.composer.lines.compactMap(\.models).first?.help == "Music models")
+        let withSmall = await rig.ace.lmModels
+        #expect(!withSmall.isEmpty && withSmall.allSatisfy { $0 == smallFile })
+
+        // The models card: Small ticked and removable as the only one, Large
+        // to download.
+        let panel = Panel().openingModels()
+        seen = step("models card", panel)
+        var card = try models(seen)
+        s = rig.snap
+        #expect(card.label == "MUSIC MODELS" && card.title == "Music models")
+        #expect(card.detail == "New tunes are made with the ticked one. A change applies from the next tune.")
+        #expect(try row(card, "small").ticked && !row(card, "large").ticked)
+        #expect(try row(card, "small").sub == "\(Format.gib(small(s).fileBytes, decimals: 2)) on this Mac · about 4 GiB of memory")
+        #expect(try row(card, "large").sub == "\(Format.gib(large(s).downloadBytes, decimals: 2)) to download · about 8 GiB of memory")
+        #expect(try row(card, "small").buttons.map(\.control.text) == ["Remove"])
+        let download = try #require(row(card, "large").buttons.first)
+        #expect(download.control.text == "Download" && download.command == .downloadModel(id: "large"))
+
+        // Download Large: its own file only, composing carries on.
+        await rig.send(download.command)
+        #expect(await rig.run { (try? large(rig.snap).onDisk) == true && rig.snap.download == nil })
+        #expect(await rig.host.requests.filter { $0.hasSuffix(".gguf") }.last == "/resolve/rev/" + largeFile)
+        #expect(rig.snapshots.contains { $0.download?.model == "large" && $0.download?.files == 1 })
+        seen = step("Large downloaded", panel)
+        card = try models(seen)
+        #expect(try row(card, "small").ticked && row(card, "small").buttons.isEmpty)
+        #expect(try row(card, "large").buttons.map(\.control.text) == ["Use", "Remove"])
+        #expect(rig.snap.composing && rig.snap.setup == .ready)
+
+        // Use Large: the next tune names its file.
+        let use = try #require(row(card, "large").buttons.first)
+        #expect(use.command == .chooseModel(id: "large"))
+        await rig.send(use.command)
+        seen = step("Large used", panel)
+        card = try models(seen)
+        #expect(try row(card, "large").ticked && row(card, "large").buttons.isEmpty)
+        #expect(try row(card, "small").buttons.map(\.control.text) == ["Use", "Remove"])
+        let before = await rig.ace.lmModels.count
+        rig.player.finish()
+        #expect(await rig.run { rig.snap.ready == 2 && rig.snap.job == nil })
+        let after = await rig.ace.lmModels.dropFirst(before)
+        #expect(!after.isEmpty && after.allSatisfy { $0 == largeFile })
+        p = try #require(step("a tune with Large").player)
+        #expect(p.composer.lines.compactMap(\.models).map(\.text) == ["Large"])
+
+        // Remove Small: asked first, then only its file goes.
+        let remove = try #require(row(card, "small").buttons.last)
+        let ask = try #require(remove.ask)
+        s = rig.snap
+        let frees = Format.gib(try small(s).fileBytes, decimals: 2)
+        #expect(ask.alertTitle == "Remove Small?" && ask.alertText == "It frees \(frees). Your tunes stay.")
+        #expect(remove.command == .removeOneModel(id: "small"))
+        await rig.send(remove.command)
+        seen = step("Small removed", panel)
+        card = try models(seen)
+        #expect(Files.list(rig.paths.models).sorted() == [largeFile, "fake-dit.gguf", "fake-text.gguf", "fake-vae.gguf"].sorted())
+        #expect(try row(card, "small").buttons.map(\.control.text) == ["Download"])
+        #expect(try row(card, "large").ticked && row(card, "large").buttons.map(\.control.text) == ["Remove"])
+        #expect(rig.snap.composing && rig.snap.setup == .ready && rig.snap.error == nil)
+
         if ProcessInfo.processInfo.environment["TUNES_SESSION_LOG"] != nil {
             print(log.joined(separator: "\n"))
         }
