@@ -1,16 +1,9 @@
 {
   "model": {
     "name": "ACE-Step 1.5 Turbo",
-    "variant": "4B Q8",
     "base_url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF",
     "revision": "666ac70204440867d8c01ba4b119cc79c95b370a",
-    "files": [
-      {
-        "role": "lm",
-        "name": "acestep-5Hz-lm-4B-Q8_0.gguf",
-        "sha256": "972f91147a167f0c041f1b158d67985a82c0f6a852e68cdf70e46030cf08b1bc",
-        "bytes": 4457323648
-      },
+    "shared": [
       {
         "role": "dit",
         "name": "acestep-v15-turbo-Q8_0.gguf",
@@ -30,8 +23,35 @@
         "bytes": 337420928
       }
     ],
-    "silence_code": 35847,
-    "ram_bytes": 8589934592
+    "choices": [
+      {
+        "id": "small",
+        "name": "Small",
+        "variant": "0.6B Q8",
+        "file": {
+          "role": "lm",
+          "name": "acestep-5Hz-lm-0.6B-Q8_0.gguf",
+          "sha256": "bdaf9e292d4470f31c19cafeaca1b74936a114667e3a85e5d33b65247e9908ec",
+          "bytes": 709846656
+        },
+        "ram_bytes": 4294967296,
+        "suggested_from_bytes": 0
+      },
+      {
+        "id": "large",
+        "name": "Large",
+        "variant": "4B Q8",
+        "file": {
+          "role": "lm",
+          "name": "acestep-5Hz-lm-4B-Q8_0.gguf",
+          "sha256": "972f91147a167f0c041f1b158d67985a82c0f6a852e68cdf70e46030cf08b1bc",
+          "bytes": 4457323648
+        },
+        "ram_bytes": 8589934592,
+        "suggested_from_bytes": 25769803776
+      }
+    ],
+    "silence_code": 35847
   },
   "keep": 50,
   "ahead": 2,
