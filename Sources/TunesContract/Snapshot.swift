@@ -66,6 +66,8 @@ public struct Snapshot: Codable, Equatable, Sendable {
     public var models: [ModelChoice]
     /// The Mac's installed memory. Decodes as 0 when absent.
     public var memoryBytes: Int64
+    /// The size of the files every model shares. Decodes as 0 when absent.
+    public var sharedBytes: Int64
     /// One line for the strip over the player: the first present of the
     /// genres file's error, the play error, the file error. Plain text.
     public var error: String?
@@ -102,12 +104,14 @@ public struct Snapshot: Codable, Equatable, Sendable {
         played: [QueuedTune] = [],
         volume: Double = 1,
         models: [ModelChoice] = [],
-        memoryBytes: Int64 = 0
+        memoryBytes: Int64 = 0,
+        sharedBytes: Int64 = 0
     ) {
         self.played = played
         self.volume = volume
         self.models = models
         self.memoryBytes = memoryBytes
+        self.sharedBytes = sharedBytes
         self.version = version
         self.setup = setup
         self.download = download
@@ -170,6 +174,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
         case model
         case models
         case memoryBytes = "memory_bytes"
+        case sharedBytes = "shared_bytes"
         case error
     }
 
@@ -204,6 +209,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
         model = try c.decode(Model.self, forKey: .model)
         models = try c.decodeIfPresent([ModelChoice].self, forKey: .models) ?? []
         memoryBytes = try c.decodeIfPresent(Int64.self, forKey: .memoryBytes) ?? 0
+        sharedBytes = try c.decodeIfPresent(Int64.self, forKey: .sharedBytes) ?? 0
         error = try c.decodeIfPresent(String.self, forKey: .error)
         played = try c.decodeIfPresent([QueuedTune].self, forKey: .played) ?? []
         volume = try c.decodeIfPresent(Double.self, forKey: .volume) ?? 1
@@ -242,6 +248,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
         try c.encode(model, forKey: .model)
         try c.encode(models, forKey: .models)
         try c.encode(memoryBytes, forKey: .memoryBytes)
+        try c.encode(sharedBytes, forKey: .sharedBytes)
         try c.encode(error, forKey: .error)
     }
 }

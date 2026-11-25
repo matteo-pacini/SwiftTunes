@@ -35,12 +35,12 @@ public enum Command: Sendable, Equatable {
     /// Makes the model with this id the chosen one. Ignored unless the pins
     /// list it; once any model is on disk, ignored unless that one is.
     case chooseModel(id: String)
-    /// Fetches that model's own file and any shared file missing. Ignored
-    /// when it is on disk or a download runs.
+    /// Fetches that model's own file and any shared file missing, carrying
+    /// on from a part file. Ignored when it is on disk or a download runs.
     case downloadModel(id: String)
     /// Removes that model's own file and its part file only. Ignored for the
-    /// chosen model unless it is the only one on disk, when it acts as
-    /// `removeModel`.
+    /// chosen model while another model is on disk. With no other model on
+    /// disk it acts as `removeModel`.
     case removeOneModel(id: String)
     case cancelDownload
     /// Re-reads the genres file and memory, then notifies.
