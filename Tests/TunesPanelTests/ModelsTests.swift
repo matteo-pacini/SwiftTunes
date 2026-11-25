@@ -124,9 +124,9 @@ struct ModelsComposerTests {
         #expect(c.lines.isEmpty && c.standIn?.command == .download)
     }
 
-    static let withModelLine = ["06-first-tune", "10-writing", "11-after-scrap", "15-failed-playing", "19-outside-text", "20-session", "22-writing-again",
-                            "25-kept-playing-new-ready", "36-sung-lyrics", "37-thin-rewrite", "38-own-words", "39-twelve-queue",
-                            "40-twelve-repeat-off", "45-round-played", "47-round-fifty"]
+    static let withModelLine = ["06-first-tune", "10-writing", "11-after-scrap", "15-failed-playing", "19-outside-text", "22-writing-again",
+                            "25-kept-playing-new-ready", "37-thin-rewrite", "39-twelve-queue",
+                            "40-twelve-repeat-off", "47-round-fifty"]
     static let withoutModelLine = ["05-queue-full", "07-composer-off-kept", "08-nothing-kept", "09-kept-tunes", "12-held-power", "13-held-memory",
                               "14-no-device", "16-genres-error", "17-paused", "21-stopped", "23-pick-after-pause", "24-pick-after-stop",
                               "29-after-save", "30-shuffle-on", "31-shuffle-off", "32-repeat-one", "33-ended", "34-pinned",
@@ -150,7 +150,7 @@ struct ModelsComposerTests {
 
     @Test("every player fixture without models is in one of the two lists")
     func listsComplete() throws {
-        let players = try Fixture.states.filter { !$0.contains("-models-") }.filter { name in
+        let players = try Fixture.states.filter { try Fixture.load($0).models.isEmpty }.filter { name in
             if case .player = card(try Fixture.load(name)) { return true }
             return false
         }
