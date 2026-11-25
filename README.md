@@ -50,9 +50,11 @@ from Omarchy.
   Finder, or export a copy.
 - **Rename.** Click the playing tune's name to give it another.
 - **Two music models.** Small is quicker and lighter, Large follows the
-  prompt and the words more closely. The model's name in the composer bar
+  prompt and the words more closely. Music Models… in the menu bar icon's
+  menu, or the model's name in the composer bar once one is downloaded,
   opens a card to download the other, choose which one makes new tunes, or
-  remove one when you want the space back; your tunes stay and keep playing.
+  remove one when you want the space back (the one in use only after
+  choosing the other); your tunes stay and keep playing.
 - Every tune gets a picture drawn from its name, tempo and key.
 
 ## A look
