@@ -915,7 +915,7 @@ extension Snapshot {
     static let empty = Snapshot(
         version: 1, setup: .missing, download: nil, need: Need(downloadBytes: 0, diskFreeBytes: 0, ramBytes: Rules.ramBytes),
         genres: [], genre: nil, keptTotal: 0, composing: false, ahead: 2, player: .none, stopped: false, tune: nil, pos: 0,
-        posAt: 0, queue: [], shuffle: true, repeat: .all, ended: false, roundLeft: 0, keep: 50, ready: 0, keptPlaying: false,
+        posAt: 0, queue: [], shuffle: false, repeat: .all, ended: false, roundLeft: 0, keep: 50, ready: 0, keptPlaying: false,
         canNext: false, job: nil, expect: nil, undo: nil,
         model: Model(name: "ACE-Step 1.5 Turbo", variant: "4B Q8", device: "Metal", state: .unloaded, since: 0, silenceS: nil,
                      detail: nil, failures: 0, retryAt: nil, ramUsedBytes: nil, ramFreeBytes: nil),

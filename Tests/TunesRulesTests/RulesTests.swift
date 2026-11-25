@@ -235,7 +235,12 @@ private func codes(_ parts: (String, Int)...) -> [Int] {
     }
 
     @Test func stateFileMissingReadsAsDefaults() {
-        #expect(SavedState.parse(nil) == SavedState(shuffle: true, repeat: .all, volume: 1))
+        #expect(SavedState.parse(nil) == SavedState(shuffle: false, repeat: .all, volume: 1))
+    }
+
+    @Test(arguments: [(#"{"repeat": "one"}"#, false), (#"{"shuffle": true}"#, true), (#"{"shuffle": false}"#, false)])
+    func shuffleIsOffUnlessSavedOn(_ text: String, _ want: Bool) {
+        #expect(SavedState.parse(text).shuffle == want)
     }
 
     @Test func stateFileRoundTrips() {

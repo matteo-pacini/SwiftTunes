@@ -28,7 +28,7 @@ public struct SavedState: Equatable, Sendable {
     public static let firstModel = "large"
 
     public init(
-        timings: [String: StageTimings] = [:], model: String? = nil, shuffle: Bool = true, repeat: RepeatMode = .all,
+        timings: [String: StageTimings] = [:], model: String? = nil, shuffle: Bool = false, repeat: RepeatMode = .all,
         volume: Double = 1
     ) {
         self.timings = timings
@@ -39,7 +39,7 @@ public struct SavedState: Equatable, Sendable {
     }
 
     /// The state file's text read back; anything missing or malformed reads
-    /// as its default: no timings, no model, shuffle on, repeat all, volume
+    /// as its default: no timings, no model, shuffle off, repeat all, volume
     /// 1. A volume outside 0…1 is malformed. Without `timings`, the
     /// `writing` and `rendering` arrays are `firstModel`'s.
     public static func parse(_ text: String?) -> SavedState {
