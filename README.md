@@ -6,7 +6,7 @@
 
 A macOS menu bar app that plays endless music by genre, composed on your Mac
 by ACE-Step 1.5 Turbo through an embedded `ace-server` running on the GPU.
-Nothing is sent anywhere once the model is downloaded.
+Nothing is sent anywhere once a model is downloaded.
 
 **[Download the latest release](https://github.com/matteo-pacini/SwiftTunes/releases/latest)**:
 a signed and notarized zip, for a Mac with Apple silicon and macOS 26 or
@@ -49,8 +49,10 @@ from Omarchy.
   the file anywhere, or use the system share sheet; copy its path, show it in
   Finder, or export a copy.
 - **Rename.** Click the playing tune's name to give it another.
-- **Removing the model.** The menu removes the 7.57 GiB model when you want
-  the space back; your tunes stay and keep playing.
+- **Two music models.** Small is quicker and lighter, Large follows the
+  prompt and the words more closely. The model's name in the composer bar
+  opens a card to download the other, choose which one makes new tunes, or
+  remove one when you want the space back; your tunes stay and keep playing.
 - Every tune gets a picture drawn from its name, tempo and key.
 
 ## A look
@@ -71,8 +73,11 @@ from Omarchy.
 ## Requirements
 
 - A Mac with Apple silicon, macOS 26 or later.
-- About 8 GiB of memory free while a tune is being composed.
-- 7.57 GiB of disk for the model, downloaded from Hugging Face on first use.
+- For the Small model, about 4 GiB of memory free while a tune is being
+  composed and 4.08 GiB of disk; for Large, about 8 GiB of memory and
+  7.57 GiB of disk. A Mac with less than 24 GiB of memory is offered Small
+  first; you choose, and the model is downloaded from Hugging Face on first
+  use.
 
 To build: Xcode 27.2 and `cmake`. `cmake` is
 the one tool beyond Xcode, needed only to build `ace-server`; the build uses
@@ -136,6 +141,6 @@ licences:
 - Inspired by [Flowtunes](https://github.com/omacom/flowtunes) from Omarchy.
 - `ace-server` is built from [acestep.cpp](https://github.com/ServeurpersoCom/acestep.cpp)
   (MIT).
-- The model is [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) (MIT),
+- The models are [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) (MIT),
   in the GGUF conversion at
   [Serveurperso/ACE-Step-1.5-GGUF](https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF).

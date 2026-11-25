@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- There are now two music models. Small (0.6B) is a 4.08 GiB download and
+  takes about 4 GiB of memory while composing; Large (4B) is 7.57 GiB and
+  takes about 8 GiB.
+- On first run SwiftTunes suggests one from your Mac's memory, and you
+  choose which to download.
+- The model's name in the composer bar opens a Music models card: download
+  the other model, pick which one makes new tunes (from the next tune), or
+  remove one. Music Models… in the menu bar icon's menu opens the same card.
+- Sing my words can make its tune with either model when both are on your
+  Mac.
+
 ## 0.1.1
 
 - A new tune now joins the end of the round and plays when the round
