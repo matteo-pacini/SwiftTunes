@@ -11,6 +11,8 @@ nonisolated struct TuneTags: Sendable {
     var key: String?
     /// The words, for a sung tune.
     var lyrics: String? = nil
+    /// The id of the model that made it.
+    var model: String? = nil
 }
 
 /// What reading a tune's audio gives.
@@ -184,6 +186,9 @@ nonisolated enum AudioWork {
         }
         if let lyrics = tags.lyrics, !lyrics.isEmpty {
             items.append(item(.iTunesMetadataLyrics, lyrics as NSString))
+        }
+        if let model = tags.model {
+            items.append(item(.iTunesMetadataEncodedBy, model as NSString))
         }
         return items
     }

@@ -59,7 +59,7 @@ extension Engine {
         if ownWordsPending != nil || job?.words != nil {
             return .failure(Refusal(field: nil, text: "A tune with your words is already being made."))
         }
-        ownWordsPending = OwnWords(words: words, name: GenreRules.trim(name), genreID: g.id)
+        ownWordsPending = OwnWords(words: words, name: GenreRules.trim(name), genreID: g.id, model: model)
         changed()
         maybeCompose()
         return .success(())
@@ -296,7 +296,7 @@ extension Engine {
         let j = job
         job = nil
         if let j, let words = j.words, keepOwnWords {
-            ownWordsPending = OwnWords(words: words, name: j.name, genreID: j.genre.id)
+            ownWordsPending = OwnWords(words: words, name: j.name, genreID: j.genre.id, model: j.model?.id)
         }
         cancelTimer("poll")
         cancelTimer("lost")
@@ -370,15 +370,17 @@ extension Engine {
     }
 
     /// A job for genre `g`: its tempo, caption and name drawn now; sung
-    /// when the genre is, or with the user's words.
+    /// when the genre is, or with the user's words. Made with the chosen
+    /// model, or the one the words ask for while it is on disk.
     func makeJob(_ g: Genre, own: OwnWords?) -> JobRecord {
         jobSeq += 1
         let sung = own != nil || g.sung
+        let asked = own?.model.flatMap { pins?.choice($0) }.flatMap { onDisk($0) ? $0 : nil }
         return JobRecord(
             token: jobSeq, genre: g, bpm: Composing.bpm(g.bpm, rng: &rng),
             caption: Composing.caption(caption: g.caption, turns: g.turns, sung: sung, rng: &rng),
             name: own?.name ?? Composing.name(moods: g.moods, things: g.things, rng: &rng), writeAt: clock.now,
-            sung: sung, words: own?.words
+            sung: sung, words: own?.words, model: asked ?? chosenModel()
         )
     }
 
@@ -391,6 +393,8 @@ extension Engine {
             ("duration", .int(pins?.duration ?? 180)), ("bpm", .int(j.bpm)),
         ]
         if j.sung { fields.append(("vocal_language", .string(Rules.vocalLanguage))) }
+        // Without it the server takes the first language model by file name.
+        if let m = j.model { fields.append(("lm_model", .string(m.file.name))) }
         return .object(fields)
     }
 
@@ -593,7 +597,7 @@ extension Engine {
         let g = j.genre
         var lyrics: String?
         if j.sung, case .string(let w)? = j.plan["lyrics"], !WordsRules.sungLines(w).isEmpty { lyrics = w }
-        let tags = TuneTags(title: j.name, genre: g.name, bpm: bpm, key: key.isEmpty ? nil : key, lyrics: lyrics)
+        let tags = TuneTags(title: j.name, genre: g.name, bpm: bpm, key: key.isEmpty ? nil : key, lyrics: lyrics, model: j.model?.id)
         let token = j.token
         let cut = j.cut
         spawn { [weak self] in
@@ -661,8 +665,12 @@ extension Engine {
         prune(g, fresh: target)
         changed()
         guard mine, let j = job else { return }
-        timings.writing = Timings.adding(j.writtenS ?? 0, to: timings.writing)
-        timings.rendering = Timings.adding(clock.now - j.renderAt, to: timings.rendering)
+        if let id = j.model?.id {
+            var t = stageTimings(id)
+            t.writing = Timings.adding(j.writtenS ?? 0, to: t.writing)
+            t.rendering = Timings.adding(clock.now - j.renderAt, to: t.rendering)
+            timings[id] = t
+        }
         saveState()
         job = nil
         failures = 0
@@ -717,15 +725,69 @@ extension Engine {
         maybeCompose()
     }
 
+    // MARK: - The models
+
+    func complete(_ f: ModelFile) -> Bool {
+        Files.size(env.paths.models.appending(path: f.name)) == f.bytes
+    }
+
+    /// Its own file and the shared files are complete.
+    func onDisk(_ c: ModelPin) -> Bool {
+        complete(c.file) && (pins?.shared ?? []).allSatisfy(complete)
+    }
+
+    func suggestedModel() -> ModelPin? {
+        guard let pins else { return nil }
+        return pins.choices[ModelRules.suggested(from: pins.choices.map(\.suggestedFrom), memory: memoryBytes)]
+    }
+
+    /// The model new tunes are made with, or, while none is on disk, the
+    /// one `download` fetches.
+    func chosenModel() -> ModelPin? {
+        guard let pins else { return nil }
+        let suggested = ModelRules.suggested(from: pins.choices.map(\.suggestedFrom), memory: memoryBytes)
+        return pins.choices[ModelRules.chosen(saved: chosenID, ids: pins.choices.map(\.id), onDisk: pins.choices.map(onDisk),
+                                              suggested: suggested)]
+    }
+
+    func stageTimings(_ id: String?) -> StageTimings {
+        id.flatMap { timings[$0] } ?? StageTimings()
+    }
+
+    /// From the next tune on; a tune being made keeps its model.
+    func chooseModel(_ id: String) {
+        guard let pins, let c = pins.choice(id), chosenID != id else { return }
+        guard onDisk(c) || !pins.choices.contains(where: onDisk) else { return }
+        chosenID = id
+        saveState()
+        checkSetup()
+        changed()
+    }
+
     // MARK: - Download
 
+    /// Fetches what the chosen model lacks.
     func download() {
-        guard dlTask == nil, setup != .ready, let pins else { return }
+        guard let c = chosenModel(), !onDisk(c) else { return }
+        startDownload(c)
+    }
+
+    /// Fetches another model's own file and any shared file missing; a
+    /// failed or cancelled one carries on from its part.
+    func downloadModel(_ id: String) {
+        guard let c = pins?.choice(id), !onDisk(c) else { return }
+        startDownload(c)
+    }
+
+    func startDownload(_ c: ModelPin) {
+        guard dlTask == nil, let pins else { return }
+        let files = ([c.file] + pins.shared).filter { !complete($0) }
         removeError = nil
         dlToken += 1
         let token = dlToken
-        dl = Download(file: 1, files: pins.files.count, name: Rules.roleWords[pins.files[0].role] ?? "", done: 0,
-                      total: pins.files.reduce(0) { $0 + $1.bytes }, rate: 0, error: nil)
+        dlFiles = files
+        dl = Download(file: 1, files: files.count, name: Rules.roleWords[files[0].role] ?? "", done: 0,
+                      total: files.reduce(0) { $0 + $1.bytes }, rate: 0, error: nil, model: c.id)
         dlRate = RateWindow()
         let previous = dlPrevious
         let models = env.paths.models
@@ -733,7 +795,7 @@ extension Engine {
             // One download writes at a time: a cancelled one finishes first.
             await previous?.value
             let (events, cont) = AsyncStream<DownloadEvent>.makeStream()
-            async let outcome = Downloader.run(files: pins.files, into: models, base: pins.baseURL, revision: pins.revision, events: cont)
+            async let outcome = Downloader.run(files: files, into: models, base: pins.baseURL, revision: pins.revision, events: cont)
             for await e in events { self?.downloadProgress(token, e) }
             self?.downloadDone(token, await outcome)
         }
@@ -742,11 +804,11 @@ extension Engine {
     }
 
     func downloadProgress(_ token: Int, _ event: DownloadEvent) {
-        guard token == dlToken, dlTask != nil, var d = dl, let pins else { return }
+        guard token == dlToken, dlTask != nil, var d = dl else { return }
         switch event {
         case .progress(let index, let done, let total, let block):
             d.file = index
-            d.name = Rules.roleWords[pins.files[index - 1].role] ?? ""
+            d.name = Rules.roleWords[dlFiles[index - 1].role] ?? ""
             d.done = done
             d.total = total
             d.rate = block > 0 ? dlRate.add(block, at: clock.now) : 0
@@ -795,7 +857,7 @@ extension Engine {
 
     // MARK: - Removing the model
 
-    /// What the model's files and their parts take on disk now.
+    /// What every listed model file and its part take on disk now.
     func modelBytesOnDisk() -> Int64 {
         (pins?.files ?? []).reduce(0) { sum, f in
             sum + (Files.size(env.paths.models.appending(path: f.name)) ?? 0)
@@ -803,7 +865,7 @@ extension Engine {
         }
     }
 
-    /// Stops all composing and deletes the pinned files and their parts,
+    /// Stops all composing and deletes every listed file and its part,
     /// nothing else in the folder. What plays plays on.
     func removeModel() {
         // A download may not have written its first bytes yet: it counts.
@@ -815,20 +877,43 @@ extension Engine {
         spawn { [weak self] in
             // A cancelled download may still hold a part open: it ends first.
             await writing?.value
-            self?.deleteModelFiles()
+            self?.deleteModelFiles(self?.pins?.files ?? [])
         }
     }
 
-    func deleteModelFiles() {
+    /// Deletes one model's own file and its part, nothing else. The chosen
+    /// one goes only as the last on disk, and then as `removeModel`.
+    func removeOneModel(_ id: String) {
+        guard let pins, let c = pins.choice(id) else { return }
+        if c.id == chosenModel()?.id {
+            guard !pins.choices.contains(where: { $0.id != id && onDisk($0) }) else { return }
+            removeModel()
+            return
+        }
+        let fetching = dlTask != nil && dl?.model == id
+        let names = [c.file.name, c.file.name + ".part"]
+        guard fetching || names.contains(where: { Files.exists(env.paths.models.appending(path: $0)) }) else { return }
+        if fetching { cancelDownload() }
+        let writing = dlPrevious
+        spawn { [weak self] in
+            // A cancelled download may still hold a part open: it ends first.
+            await writing?.value
+            self?.deleteModelFiles([c.file], of: id)
+        }
+    }
+
+    /// Deletes `files` and their parts; with `model`, only that model's
+    /// download is forgotten.
+    func deleteModelFiles(_ files: [ModelFile], of model: String? = nil) {
         var failure: Int32?
-        for f in pins?.files ?? [] {
+        for f in files {
             for name in [f.name, f.name + ".part"] where unlink(env.paths.models.appending(path: name).path) != 0 {
                 if errno != ENOENT && failure == nil { failure = errno }
             }
         }
         // Whatever was deleted stays deleted.
         removeError = failure.map { "could not remove the music model: \(String(cString: strerror($0)))" }
-        dl = nil
+        if model == nil || dl?.model == model { dl = nil }
         checkSetup()
         changed()
     }

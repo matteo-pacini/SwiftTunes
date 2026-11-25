@@ -4,7 +4,7 @@ import Foundation
 nonisolated public struct EnginePaths: Sendable {
     /// `genres.json` and `state.json`.
     public var support: URL
-    /// The four model files.
+    /// The model files the pins list.
     public var models: URL
     /// The wave cache, scrapped tunes and work files.
     public var caches: URL
@@ -133,12 +133,14 @@ public struct EngineEnvironment {
     public var host: String
     /// Picks the port the server is started on.
     public var freePort: () -> Int
+    /// The Mac's installed memory.
+    public var memoryBytes: Int64
 
     public init(
         paths: EnginePaths, aceServer: URL, defaultGenres: URL, pins: URL, clock: any EngineClock,
         random: any RandomNumberGenerator, player: any TunePlayer, launcher: any ServerLauncher,
         holds: any HoldSource, probe: any SystemProbe, timeZone: TimeZone = .current, host: String = "127.0.0.1",
-        freePort: @escaping () -> Int = LoopbackPort.free
+        freePort: @escaping () -> Int = LoopbackPort.free, memoryBytes: Int64 = Int64(ProcessInfo.processInfo.physicalMemory)
     ) {
         self.paths = paths
         self.aceServer = aceServer
@@ -153,6 +155,7 @@ public struct EngineEnvironment {
         self.timeZone = timeZone
         self.host = host
         self.freePort = freePort
+        self.memoryBytes = memoryBytes
     }
 }
 

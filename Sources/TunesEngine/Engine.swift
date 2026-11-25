@@ -88,12 +88,18 @@ final class JobRecord {
     let words: String?
     /// Plans written again for too few sung lines; its own count.
     var thinRewrites = 0
+    /// The model it is made with, from start to end; nil without pins.
+    let model: ModelPin?
     /// A POST for this job is waiting for its answer.
     var posting = false
     /// The job was cancelled during that POST; its id is cancelled on arrival.
     var cancelWhenPosted = false
 
-    init(token: Int, genre: Genre, bpm: Int, caption: String, name: String, writeAt: Double, sung: Bool = false, words: String? = nil) {
+    init(
+        token: Int, genre: Genre, bpm: Int, caption: String, name: String, writeAt: Double, sung: Bool = false, words: String? = nil,
+        model: ModelPin? = nil
+    ) {
+        self.model = model
         self.sung = sung
         self.words = words
         self.token = token
@@ -110,6 +116,8 @@ struct OwnWords {
     var words: String
     var name: String
     var genreID: String
+    /// The model asked for; nil for the chosen one.
+    var model: String?
 }
 
 struct Scrap {
@@ -187,7 +195,12 @@ final class Engine: EngineAPI {
     var genresSig: [Int64]?
     var genresError: String?
     var saved: SavedState
-    var timings: (writing: [Double], rendering: [Double])
+    /// By model id.
+    var timings: [String: StageTimings]
+    /// The model the user chose, as saved; nil until one is chosen.
+    var chosenID: String?
+    /// The Mac's installed memory, read once.
+    let memoryBytes: Int64
     var shuffle: Bool
     var repeatMode: RepeatMode
     var volume: Double
@@ -200,6 +213,8 @@ final class Engine: EngineAPI {
     var dlToken = 0
     var dlLastSent = -Double.infinity
     var dlRate = RateWindow()
+    /// What the running download fetches, in order.
+    var dlFiles: [ModelFile] = []
 
     // Player and queue
     var genre: Genre?
@@ -273,7 +288,9 @@ final class Engine: EngineAPI {
             pinsError = "pins.json cannot be read"
         }
         saved = SavedState.parse(Files.read(env.paths.support.appending(path: "state.json")))
-        timings = (saved.writing, saved.rendering)
+        timings = saved.timings
+        chosenID = saved.model
+        memoryBytes = env.memoryBytes
         shuffle = saved.shuffle
         repeatMode = saved.repeat
         volume = saved.volume
@@ -463,12 +480,21 @@ final class Engine: EngineAPI {
             let b = Files.size(env.paths.models.appending(path: f.name + ".part")) ?? 0
             present[f.name] = max(a, b)
         }
-        let files = (pins?.files ?? []).map { (name: $0.name, bytes: $0.bytes) }
+        let chosen = chosenModel()
+        let suggested = suggestedModel()
+        let models = (pins?.choices ?? []).map { c in
+            ModelChoice(id: c.id, name: c.name, variant: c.variant, fileBytes: c.file.bytes,
+                        downloadBytes: TuneFiles.needBytes(([c.file] + (pins?.shared ?? [])).map { ($0.name, $0.bytes) }, present: present),
+                        onDisk: onDisk(c), ramBytes: c.ramBytes, suggested: c.id == suggested?.id, chosen: c.id == chosen?.id,
+                        downloading: dlTask != nil && dl?.model == c.id)
+        }
+        let chosenTimings = stageTimings(chosen?.id)
         let jobView: Job? = job.flatMap { j in
-            switch j.step {
-            case .lm?: Job(stage: .writing, started: j.writeAt, expectS: Timings.median(timings.writing), writtenS: nil,
+            let t = stageTimings(j.model?.id)
+            return switch j.step {
+            case .lm?: Job(stage: .writing, started: j.writeAt, expectS: Timings.median(t.writing), writtenS: nil,
                            sung: j.sung, ownWords: j.words != nil, name: j.words != nil ? j.name : nil)
-            case .synth?, .finish?: Job(stage: .rendering, started: j.renderAt, expectS: Timings.median(timings.rendering), writtenS: j.writtenS,
+            case .synth?, .finish?: Job(stage: .rendering, started: j.renderAt, expectS: Timings.median(t.rendering), writtenS: j.writtenS,
                                         sung: j.sung, ownWords: j.words != nil, name: j.words != nil ? j.name : nil)
             case nil: nil
             }
@@ -491,9 +517,9 @@ final class Engine: EngineAPI {
             version: 1,
             setup: setup,
             download: dl,
-            need: Need(downloadBytes: TuneFiles.needBytes(files, present: present),
+            need: Need(downloadBytes: models.first { $0.chosen }?.downloadBytes ?? 0,
                        diskFreeBytes: env.probe.diskFree(near: env.paths.models),
-                       ramBytes: pins?.ramBytes ?? Rules.ramBytes, onDiskBytes: modelBytesOnDisk()),
+                       ramBytes: chosen?.ramBytes ?? Rules.ramBytes, onDiskBytes: modelBytesOnDisk()),
             genres: genres.map { GenreSummary(id: $0.id, name: $0.name, kept: listTunes($0).count, palette: $0.palette, sung: $0.sung) },
             genre: genre?.id,
             keptTotal: order.count,
@@ -514,22 +540,24 @@ final class Engine: EngineAPI {
             keptPlaying: current?.kept == true && newReady() == 0,
             canNext: current != nil && appended != nil,
             job: jobView,
-            expect: Timings.expect(writing: timings.writing, rendering: timings.rendering),
+            expect: Timings.expect(writing: chosenTimings.writing, rendering: chosenTimings.rendering),
             undo: undo,
-            model: Model(name: pins?.name ?? "ACE-Step 1.5 Turbo", variant: pins?.variant ?? "4B Q8",
+            model: Model(name: pins?.name ?? "ACE-Step 1.5 Turbo", variant: chosen?.variant ?? "4B Q8",
                          device: lastDevice ?? "Metal", state: state, since: since, silenceS: silenceS, detail: detail,
                          failures: failures, retryAt: retryAt, ramUsedBytes: ram, ramFreeBytes: nil, thinWords: thinWords),
             error: genresError ?? playError ?? fileError ?? pinsError ?? removeError,
             played: playedNow().map { QueuedTune(name: $0.name, file: $0.stem, bpm: $0.bpm, key: $0.key, length: $0.length,
                                                  kept: true, new: false, pinned: pinned($0), pos: orderPos($0), sung: $0.sung) },
-            volume: volume
+            volume: volume,
+            models: models,
+            memoryBytes: memoryBytes
         )
     }
 
     // MARK: - Saved state and genres
 
     func saveState() {
-        let want = SavedState(writing: timings.writing, rendering: timings.rendering, shuffle: shuffle, repeat: repeatMode, volume: volume)
+        let want = SavedState(timings: timings, model: chosenID, shuffle: shuffle, repeat: repeatMode, volume: volume)
         guard want != saved else { return }
         do {
             try Files.writeAtomic(Data(want.text.utf8), to: stateFile)
@@ -564,11 +592,12 @@ final class Engine: EngineAPI {
 
     func genreByID(_ id: String) -> Genre? { genres.first { $0.id == id } }
 
+    /// Ready with the chosen model on disk, though another model downloads.
     func checkSetup() {
-        if dlTask != nil {
-            setup = .downloading
-        } else if let files = pins?.files, files.allSatisfy({ Files.size(env.paths.models.appending(path: $0.name)) == $0.bytes }) {
+        if let c = chosenModel(), onDisk(c) {
             setup = .ready
+        } else if dlTask != nil {
+            setup = .downloading
         } else if dl?.error != nil {
             setup = .failed
         } else {
@@ -600,7 +629,9 @@ final class Engine: EngineAPI {
         case .retry: retry()
         case .download: download()
         case .cancelDownload: cancelDownload()
-        case .chooseModel, .downloadModel, .removeOneModel: break
+        case .chooseModel(let id): chooseModel(id)
+        case .downloadModel(let id): downloadModel(id)
+        case .removeOneModel(let id): removeOneModel(id)
         case .removeModel:
             removeModel()
         case .previous: previous()

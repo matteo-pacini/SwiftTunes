@@ -126,6 +126,8 @@ public actor FakeAceServer {
     public var lmLyrics: [String] { lmBodies.map { $0["lyrics"] as? String ?? "(none)" } }
     /// The vocal_language of each /lm request, nil where none was sent.
     public var lmLanguages: [String?] { lmBodies.map { $0["vocal_language"] as? String } }
+    /// The lm_model of each /lm request, nil where none was sent.
+    public var lmModels: [String?] { lmBodies.map { $0["lm_model"] as? String } }
     /// The words the fake writes when asked to.
     public static let words = """
     [Verse]

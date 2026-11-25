@@ -54,7 +54,7 @@ import TunesRules
         #expect(rig.snap.canNext)
         #expect(rig.tunes("Jazz").count == 3)
         let state = SavedState.parse(Files.read(rig.paths.support.appending(path: "state.json")))
-        #expect(state.writing.count == 3 && state.rendering.count == 3)
+        #expect(state.timings["large"]?.writing.count == 3 && state.timings["large"]?.rendering.count == 3)
 
         // Playing the next one frees a place: the composer starts again.
         rig.player.finish()

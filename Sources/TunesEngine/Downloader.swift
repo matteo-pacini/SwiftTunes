@@ -10,18 +10,36 @@ nonisolated struct ModelFile: Sendable, Equatable {
     var bytes: Int64
 }
 
-/// The pins file: the model and the composer's numbers.
-nonisolated struct Pins: Sendable {
+/// One music model the pins list.
+nonisolated struct ModelPin: Sendable, Equatable {
+    var id: String
     var name: String
     var variant: String
+    /// Its own file, the language model: what `/lm` names in `lm_model`.
+    var file: ModelFile
+    var ramBytes: Int64
+    /// The installed memory from which it is suggested.
+    var suggestedFrom: Int64
+}
+
+/// The pins file: the models and the composer's numbers.
+nonisolated struct Pins: Sendable {
+    var name: String
     var baseURL: String
     var revision: String
-    var files: [ModelFile]
+    /// The files every model needs.
+    var shared: [ModelFile]
+    /// Smallest first.
+    var choices: [ModelPin]
     var silenceCode: Int
-    var ramBytes: Int64
     var keep: Int
     var ahead: Int
     var duration: Int
+
+    /// Every file the pins name: the models' own, then the shared ones.
+    var files: [ModelFile] { choices.map(\.file) + shared }
+
+    func choice(_ id: String) -> ModelPin? { choices.first { $0.id == id } }
 
     struct Mistake: Error, CustomStringConvertible {
         var description: String
@@ -33,8 +51,8 @@ nonisolated struct Pins: Sendable {
             guard case .string(let s)? = v, !s.isEmpty else { throw Mistake(description: key) }
             return s
         }
-        func int(_ v: JSONValue?, _ key: String) throws(Mistake) -> Int {
-            guard case .int(let n)? = v, n > 0 || key == "model.silence_code" else { throw Mistake(description: key) }
+        func int(_ v: JSONValue?, _ key: String, zero: Bool = false) throws(Mistake) -> Int {
+            guard case .int(let n)? = v, n > 0 || zero && n == 0 else { throw Mistake(description: key) }
             return n
         }
         func file(_ f: JSONValue?, _ at: String) throws(Mistake) -> ModelFile {
@@ -45,18 +63,27 @@ nonisolated struct Pins: Sendable {
             return ModelFile(role: role, name: name, sha256: try string(f?["sha256"], "\(at).sha256").lowercased(),
                              bytes: Int64(try int(f?["bytes"], "\(at).bytes")))
         }
-        guard case .array(let shared)? = m["shared"], !shared.isEmpty else { throw Mistake(description: "model.shared") }
-        guard case .array(let choices)? = m["choices"],
-              let li = choices.firstIndex(where: { if case .string("large")? = $0["id"] { true } else { false } })
-        else { throw Mistake(description: "model.choices") }
-        let large = choices[li]
-        var files = [try file(large["file"], "model.choices[\(li)].file")]
-        for (i, f) in shared.enumerated() { files.append(try file(f, "model.shared[\(i)]")) }
+        guard case .array(let sharedList)? = m["shared"], !sharedList.isEmpty else { throw Mistake(description: "model.shared") }
+        var shared: [ModelFile] = []
+        for (i, f) in sharedList.enumerated() { shared.append(try file(f, "model.shared[\(i)]")) }
+        guard case .array(let choiceList)? = m["choices"], !choiceList.isEmpty else { throw Mistake(description: "model.choices") }
+        var choices: [ModelPin] = []
+        for (i, c) in choiceList.enumerated() {
+            let at = "model.choices[\(i)]"
+            let id = try string(c["id"], "\(at).id")
+            guard !choices.contains(where: { $0.id == id }) else { throw Mistake(description: "\(at).id") }
+            let own = try file(c["file"], "\(at).file")
+            guard own.role == "lm" else { throw Mistake(description: "\(at).file.role") }
+            choices.append(ModelPin(
+                id: id, name: try string(c["name"], "\(at).name"), variant: try string(c["variant"], "\(at).variant"), file: own,
+                ramBytes: Int64(try int(c["ram_bytes"], "\(at).ram_bytes")),
+                suggestedFrom: Int64(try int(c["suggested_from_bytes"], "\(at).suggested_from_bytes", zero: true))
+            ))
+        }
         return Pins(
-            name: try string(m["name"], "model.name"), variant: try string(large["variant"], "model.choices[\(li)].variant"),
+            name: try string(m["name"], "model.name"),
             baseURL: try string(m["base_url"], "model.base_url"), revision: try string(m["revision"], "model.revision"),
-            files: files, silenceCode: try int(m["silence_code"], "model.silence_code"),
-            ramBytes: Int64(try int(large["ram_bytes"], "model.choices[\(li)].ram_bytes")),
+            shared: shared, choices: choices, silenceCode: try int(m["silence_code"], "model.silence_code", zero: true),
             keep: try int(raw["keep"], "keep"), ahead: try int(raw["ahead"], "ahead"), duration: try int(raw["duration"], "duration")
         )
     }

@@ -282,7 +282,12 @@ final class Rig {
     var engine: Engine!
     var snapshots: [Snapshot] = []
     var token: (any SnapshotObservation)?
+    /// The Large model's files and the shared ones.
     var modelFiles: [String: Data] = [:]
+    /// The Small model's own file.
+    var smallFile = (name: "fake-lm-small.gguf", data: Data())
+    /// The Mac's installed memory the engine is told; from 24 GiB Large is suggested.
+    var memoryBytes: Int64
     let seed: UInt64
     /// Replaces the fake launcher when set.
     var realLauncher: (any ServerLauncher)?
@@ -319,9 +324,12 @@ final class Rig {
     """
 
     /// - Parameters:
-    ///   - ready: whether the model files are in place already.
+    ///   - ready: whether the Large model and the shared files are in place already.
     ///   - keep: the newest-N rule's N.
-    init(ready: Bool = true, keep: Int = 50, ahead: Int = 2, root: URL? = nil, genres: String = Rig.genresText, seed: UInt64 = 11) async throws {
+    ///   - memory: the Mac's installed memory the engine is told.
+    init(ready: Bool = true, keep: Int = 50, ahead: Int = 2, root: URL? = nil, genres: String = Rig.genresText, seed: UInt64 = 11,
+         memory: Int64 = 64 << 30) async throws {
+        memoryBytes = memory
         self.seed = seed
         self.root = root ?? FileManager.default.temporaryDirectory.appending(path: "tunes-engine-\(UUID().uuidString)", directoryHint: .isDirectory)
         paths = EnginePaths(
@@ -348,12 +356,16 @@ final class Rig {
             let sha = sha256Hex(data)
             entries.append(#"{"role": "\#(role)", "name": "\#(name)", "sha256": "\#(sha)", "bytes": \#(data.count)}"#)
         }
-        await host.set(files: modelFiles)
+        smallFile.data = Data((0..<3000).map { UInt8(($0 * 17 + 5) & 0xFF) })
+        let small = #"{"role": "lm", "name": "\#(smallFile.name)", "sha256": "\#(sha256Hex(smallFile.data))", "bytes": \#(smallFile.data.count)}"#
+        await host.set(files: modelFiles.merging([smallFile.name: smallFile.data]) { a, _ in a })
         let pins = """
         {"model": {"name": "ACE-Step 1.5 Turbo", "base_url": "http://127.0.0.1:\(hostHTTP.port)",
         "revision": "rev", "shared": [\(entries.dropFirst().joined(separator: ", "))],
-        "choices": [{"id": "large", "name": "Large", "variant": "4B Q8", "file": \(entries[0]),
-        "ram_bytes": 8589934592, "suggested_from_bytes": 0}], "silence_code": 35847},
+        "choices": [{"id": "small", "name": "Small", "variant": "0.6B Q8", "file": \(small),
+        "ram_bytes": 4294967296, "suggested_from_bytes": 0},
+        {"id": "large", "name": "Large", "variant": "4B Q8", "file": \(entries[0]),
+        "ram_bytes": 8589934592, "suggested_from_bytes": 25769803776}], "silence_code": 35847},
         "keep": \(keep), "ahead": \(ahead), "duration": 12}
         """
         try Data(pins.utf8).write(to: self.root.appending(path: "pins.json"))
@@ -364,9 +376,17 @@ final class Rig {
         make()
     }
 
+    /// Places the Large model and the shared files.
     func placeModels() throws {
         try FileManager.default.createDirectory(at: paths.models, withIntermediateDirectories: true)
         for (name, data) in modelFiles { try data.write(to: paths.models.appending(path: name)) }
+    }
+
+    /// Places the Small model's file and the shared files.
+    func placeSmall() throws {
+        try FileManager.default.createDirectory(at: paths.models, withIntermediateDirectories: true)
+        try smallFile.data.write(to: paths.models.appending(path: smallFile.name))
+        for (name, data) in modelFiles where name != "fake-lm.gguf" { try data.write(to: paths.models.appending(path: name)) }
     }
 
     var environment: EngineEnvironment {
@@ -375,7 +395,7 @@ final class Rig {
             paths: paths, aceServer: URL(filePath: "/nonexistent/ace-server"),
             defaultGenres: root.appending(path: "genres-default.json"), pins: root.appending(path: "pins.json"),
             clock: clock, random: SplitMix64(seed: seed), player: player, launcher: realLauncher ?? launcher, holds: holds, probe: probe,
-            timeZone: TimeZone(identifier: "UTC")!, freePort: { port }
+            timeZone: TimeZone(identifier: "UTC")!, freePort: { port }, memoryBytes: memoryBytes
         )
     }
 

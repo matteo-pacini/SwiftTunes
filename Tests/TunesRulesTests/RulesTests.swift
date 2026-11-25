@@ -208,13 +208,13 @@ private func codes(_ parts: (String, Int)...) -> [Int] {
     }
 
     @Test(arguments: [
-        (#"{"writing": [60.5, 70], "rendering": [40]}"#, SavedState(writing: [60.5, 70], rendering: [40])),
+        (#"{"writing": [60.5, 70], "rendering": [40]}"#, SavedState(timings: ["large": StageTimings(writing: [60.5, 70], rendering: [40])])),
         (#"{"writing": ["x"], "rendering": 4}"#, SavedState()),
         (#"{"counter": 7}"#, SavedState()),
-        (#"{"writing": [1, 2, 3, 4, 5, 6, 7]}"#, SavedState(writing: [3, 4, 5, 6, 7])),
+        (#"{"writing": [1, 2, 3, 4, 5, 6, 7]}"#, SavedState(timings: ["large": StageTimings(writing: [3, 4, 5, 6, 7])])),
         (#"{"writing": [-1]}"#, SavedState()),
         ("not json", SavedState()),
-        (#"{"shuffle": false, "repeat": "one", "writing": [1]}"#, SavedState(writing: [1], shuffle: false, repeat: .one)),
+        (#"{"shuffle": false, "repeat": "one", "writing": [1]}"#, SavedState(timings: ["large": StageTimings(writing: [1])], shuffle: false, repeat: .one)),
         (#"{"shuffle": 0, "repeat": "twice"}"#, SavedState()),
         (#"{"volume": 0.25}"#, SavedState(volume: 0.25)),
         (#"{"volume": 0}"#, SavedState(volume: 0)),
@@ -222,6 +222,13 @@ private func codes(_ parts: (String, Int)...) -> [Int] {
         (#"{"volume": 1.5}"#, SavedState()),
         (#"{"volume": -0.1}"#, SavedState()),
         (#"{"volume": null}"#, SavedState()),
+        (#"{"model": "small", "timings": {"small": {"writing": [40], "rendering": [20]}}}"#,
+         SavedState(timings: ["small": StageTimings(writing: [40], rendering: [20])], model: "small")),
+        // With timings per model, the arrays at the top are not read.
+        (#"{"writing": [60], "timings": {"small": {"writing": [40]}, "large": {"rendering": [30, -1]}}}"#,
+         SavedState(timings: ["small": StageTimings(writing: [40])])),
+        (#"{"model": "", "timings": 4}"#, SavedState()),
+        (#"{"model": 7}"#, SavedState()),
     ])
     func stateFileReadBack(_ text: String, _ want: SavedState) {
         #expect(SavedState.parse(text) == want)
@@ -232,8 +239,10 @@ private func codes(_ parts: (String, Int)...) -> [Int] {
     }
 
     @Test func stateFileRoundTrips() {
-        let s = SavedState(writing: [33.3, 35], rendering: [31.8], shuffle: false, repeat: .off, volume: 0.42)
-        #expect(s.text == #"{"writing": [33.3, 35.0], "rendering": [31.8], "shuffle": false, "repeat": "off", "volume": 0.42}"# + "\n")
+        let s = SavedState(timings: ["small": StageTimings(writing: [20]), "large": StageTimings(writing: [33.3, 35], rendering: [31.8])],
+                           model: "small", shuffle: false, repeat: .off, volume: 0.42)
+        #expect(s.text == #"{"model": "small", "timings": {"large": {"writing": [33.3, 35.0], "rendering": [31.8]}, "#
+            + #""small": {"writing": [20.0], "rendering": []}}, "shuffle": false, "repeat": "off", "volume": 0.42}"# + "\n")
         #expect(SavedState.parse(s.text) == s)
     }
 }
