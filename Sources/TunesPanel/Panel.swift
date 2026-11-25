@@ -5,7 +5,7 @@ import TunesContract
 /// holds besides the snapshot. A value; every change returns a new one.
 public struct Panel: Sendable, Equatable {
     public enum Mode: Sendable, Equatable {
-        case player, chooser, editor, share, words
+        case player, chooser, editor, share, words, models
     }
 
     public var mode: Mode = .player
@@ -31,6 +31,8 @@ public struct Panel: Sendable, Equatable {
         public var touched = false
         public var refused: String?
         public var busy = false
+        /// The id of the model picked in the sheet; nil for the chosen one.
+        public var model: String?
     }
 
     /// The playing tune's name as a text field.
@@ -116,6 +118,15 @@ public enum EditorField: String, Sendable, Equatable, Hashable, CaseIterable {
 // MARK: - Moving between cards
 
 extension Panel {
+    /// The models capsule or the menu's `Music Models…`: the models card.
+    public func openingModels() -> Panel {
+        var p = self
+        p.mode = .models
+        p.rename = nil
+        p.notice = nil
+        return p
+    }
+
     /// The genre button: the chooser.
     public func openingChooser() -> Panel {
         var p = self
@@ -363,11 +374,12 @@ extension GenreFieldsText {
 // MARK: - Esc
 
 extension Panel {
-    /// What Esc does on the card showing: the setup cards and the player
-    /// close the popover (`close` true); the chooser goes back to the player,
+    /// What Esc does on the card showing: the models card goes back to the
+    /// player; the setup cards and the player close the popover (`close` true); the chooser goes back to the player,
     /// or closes when no genre is picked; the share sheet goes back to the
     /// player; the editor discards, and its delete question keeps the genre.
     public func escaping(_ snapshot: Snapshot) -> (panel: Panel, close: Bool) {
+        if mode == .models { return (backToPlayer(), false) }
         if snapshot.setup != .ready { return (self, true) }
         if rename != nil, mode == .player { return (cancellingRename(), false) }
         switch mode {
@@ -379,7 +391,7 @@ extension Panel {
             return (backToPlayer(), false)
         case .chooser:
             return snapshot.genre == nil ? (self, true) : (backToPlayer(), false)
-        case .player:
+        case .player, .models:
             return (self, true)
         }
     }
@@ -679,6 +691,23 @@ extension Panel {
         var p = self
         p.words = w
         return (p, w.text, w.name)
+    }
+
+    /// A model's capsule in the sheet: the tune is to be made with it.
+    public func pickingWordsModel(_ id: String, in snapshot: Snapshot) -> Panel {
+        guard mode == .words, var w = words, !w.busy, snapshot.models.contains(where: { $0.id == id && $0.onDisk }) else { return self }
+        w.model = id
+        var p = self
+        p.words = w
+        return p
+    }
+
+    /// The model id Compose passes to `composeWithWords`: the one lit in the
+    /// sheet's Model row, or nil, for the chosen one, while the row is not
+    /// shown.
+    public func wordsModel(_ snapshot: Snapshot) -> String? {
+        guard let w = words else { return nil }
+        return Decide.wordsModel(snapshot, picked: w.model)
     }
 
     /// The answer to `composeWithWords`: accepted closes the sheet; a

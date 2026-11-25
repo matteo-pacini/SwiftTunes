@@ -9,11 +9,12 @@ public enum Decide {
 
     // MARK: Which card
 
-    /// The setup cards while the model is not in place and no genre has a
-    /// kept tune; then the editor, the share sheet, the chooser (also while
+    /// The models card while it is open; the setup cards while the model is
+    /// not in place and no genre has a kept tune; then the editor, the share sheet, the chooser (also while
     /// no genre is picked), the player. Without the model, kept tunes still
     /// play and the composer bar stands in for the setup cards.
     public static func card(_ s: Snapshot, _ p: Panel, now: Double, home: String) -> Card {
+        if p.mode == .models { return .models(models(s)) }
         if setupShows(s) { return .setup(setup(s)) }
         if p.mode == .editor, let e = p.editor { return .editor(editor(s, e)) }
         if p.mode == .share, let sh = p.share { return .share(share(s, sh, home: home)) }
@@ -47,15 +48,28 @@ public enum Decide {
                              rows: downloaded.map { [$0] } ?? [], progress: nil,
                              button: Control(text: "Resume", help: "Resume"), command: .download)
         case .missing, .ready:
-            let rows: [SetupCard.Row] = [
+            var rows: [SetupCard.Row] = [
                 .init(label: "download", value: Format.gib(s.need.downloadBytes, decimals: 2)),
                 .init(label: "free on disk", value: Format.gib(s.need.diskFreeBytes)),
-                .init(label: "memory while composing", value: "about \(Format.gib(s.need.ramBytes)) of memory"),
             ]
+            // With models listed each row quotes its own memory figure.
+            if s.models.isEmpty {
+                rows.append(.init(label: "memory while composing", value: "about \(Format.gib(s.need.ramBytes)) of memory"))
+            }
             let model = s.model.name.isEmpty ? "The music model" : s.model.name
-            return SetupCard(kind: .missing, title: "SwiftTunes needs a music model",
-                             detail: "\(model) composes on this computer. Nothing is sent anywhere after the download.",
-                             rows: rows, progress: nil, button: Control(text: "Download", help: "Download"), command: .download)
+            var card = SetupCard(kind: .missing, title: "SwiftTunes needs a music model",
+                                 detail: "\(model) composes on this computer. Nothing is sent anywhere after the download.",
+                                 rows: rows, progress: nil, button: Control(text: "Download", help: "Download"), command: .download)
+            if !s.models.isEmpty {
+                card.models = s.models.map { m in
+                    SetupCard.Choice(id: m.id, name: m.name, variant: m.variant, chosen: m.chosen, tag: m.suggested ? "Suggested" : "",
+                                     sub: "\(Format.gib(m.downloadBytes, decimals: 2)) download · \(memory(m))",
+                                     control: Control(lit: m.chosen, text: m.name, help: m.name), command: .chooseModel(id: m.id))
+                }
+                let mac = s.memoryBytes > 0 ? "This Mac has \(Format.gib(s.memoryBytes)) of memory. " : ""
+                card.modelsNote = mac + "Large follows the prompt and the words more closely; Small is quicker and lighter. You can add the other later."
+            }
+            return card
         }
     }
 
@@ -470,8 +484,40 @@ public enum Decide {
             note: "It is made once, with the genre's sound, and joins the end of the round when ready. The model may not sing every word as written.",
             refused: w.refused ?? "",
             cancel: Control(enabled: !w.busy, text: "Cancel", help: "Cancel"),
-            compose: Control(enabled: !w.busy && wordsError == nil && nameError == nil, text: "Compose", help: "Compose")
+            compose: Control(enabled: !w.busy && wordsError == nil && nameError == nil, text: "Compose", help: "Compose"),
+            modelLabel: "Model",
+            models: wordsPicks(s, w)
         )
+    }
+
+    /// The sheet's Model row: one capsule per model on disk, while more than
+    /// one is.
+    static func wordsPicks(_ s: Snapshot, _ w: Panel.Words) -> [WordsCard.ModelPick] {
+        let lit = wordsModel(s, picked: w.model)
+        guard lit != nil else { return [] }
+        return s.models.filter(\.onDisk).map {
+            WordsCard.ModelPick(id: $0.id, control: Control(enabled: !w.busy, lit: $0.id == lit, text: $0.name, help: $0.name))
+        }
+    }
+
+    /// The model a words tune is made with while the sheet offers a choice:
+    /// the one picked while it is on disk, else the chosen one; nil while
+    /// fewer than two are on disk.
+    static func wordsModel(_ s: Snapshot, picked: String?) -> String? {
+        let onDisk = s.models.filter(\.onDisk)
+        guard onDisk.count > 1 else { return nil }
+        if let picked, onDisk.contains(where: { $0.id == picked }) { return picked }
+        return onDisk.first(where: \.chosen)?.id ?? onDisk.first?.id
+    }
+
+    /// `about N GiB of memory`.
+    static func memory(_ m: ModelChoice) -> String {
+        "about \(Format.gib(m.ramBytes)) of memory"
+    }
+
+    /// The models capsule: the chosen model's name; nil with none listed.
+    static func modelsCapsule(_ s: Snapshot) -> Control? {
+        s.models.first(where: \.chosen).map { Control(text: $0.name, help: "Music models") }
     }
 
     /// The composer bar without the model: what to download, the download
@@ -524,6 +570,7 @@ public enum Decide {
                     lines.append(.init("A tune takes about \(memory) of memory while it is made."))
                 }
             }
+            if let capsule = modelsCapsule(s) { lines.append(.init("", models: capsule)) }
             return PlayerCard.Composer(on: false, label: "off", labelTone: .soft, pill: "off", pillTone: .soft, toggle: Control(help: "Composer on"), lines: lines, retry: nil, words: wordsControl(s))
         }
         var right = ""
@@ -580,8 +627,13 @@ public enum Decide {
         default:
             break
         }
+        let capsule = modelsCapsule(s)
         if [.starting, .writing, .rendering, .failed].contains(m.state) && !m.name.isEmpty {
-            lines.append(.init([m.name, m.variant, m.device].filter { !$0.isEmpty }.joined(separator: " · ")))
+            // With models listed the capsule names the model; the variant goes.
+            let parts = capsule == nil ? [m.name, m.variant, m.device] : [m.name, m.device]
+            lines.append(.init(parts.filter { !$0.isEmpty }.joined(separator: " · "), models: capsule))
+        } else if m.state == .idle, let capsule {
+            lines.append(.init("", models: capsule))
         }
         let canRetry = m.state == .failed || m.state == .noDevice
         let pill: String? = label != "on" ? label : (right.isEmpty ? nil : right)
@@ -648,12 +700,69 @@ public enum Decide {
                          meter: allowed && meterShown && s.player == .playing)
     }
 
-    /// `Remove Music Model…`: enabled while anything of the model is on
-    /// disk; its alert says how much removing frees.
+    /// The menu's music-model item: `Music Models…`, always enabled; with no
+    /// models listed, `Remove Music Model…`, enabled while anything of the
+    /// model is on disk.
+    public static func modelsMenu(_ s: Snapshot) -> ModelsMenu {
+        s.models.isEmpty
+            ? ModelsMenu(title: "Remove Music Model…", enabled: s.need.onDiskBytes > 0, opensCard: false, removal: modelRemoval(s))
+            : ModelsMenu(title: "Music Models…", enabled: true, opensCard: true, removal: modelRemoval(s))
+    }
+
+    /// The models card: a row per model with its sizes, its download and
+    /// what can be done with it.
+    static func models(_ s: Snapshot) -> ModelsCard {
+        let onDisk = s.models.filter(\.onDisk).count
+        let fetching = s.setup == .downloading || s.models.contains(where: \.downloading)
+        let rows = s.models.map { m -> ModelsCard.Row in
+            // A download that names no model is the chosen one's.
+            let d = s.download.flatMap { ($0.model ?? (m.chosen ? m.id : nil)) == m.id ? $0 : nil }
+            var row = ModelsCard.Row(id: m.id, name: m.name, variant: m.variant, ticked: m.chosen,
+                                     sub: m.onDisk ? "\(Format.gib(m.fileBytes, decimals: 2)) on this Mac · \(memory(m))"
+                                                   : "\(Format.gib(m.downloadBytes, decimals: 2)) to download · \(memory(m))",
+                                     progress: nil, error: "", buttons: [])
+            if m.downloading || (d != nil && d?.error == nil && s.setup == .downloading) {
+                if let d {
+                    row.sub = "\(Format.gibNumber(d.done)) of \(Format.gib(d.total, decimals: 2)) · \(Format.rate(d.rate))"
+                    row.progress = d.total > 0 ? min(1, max(0, Double(d.done) / Double(d.total))) : 0
+                }
+                row.buttons = [.init(kind: .cancel, control: Control(text: "Cancel", help: "Cancel"), command: .cancelDownload, ask: nil)]
+            } else if let error = d?.error, !m.onDisk {
+                row.error = Format.sentence(error)
+                // `download` fetches what the chosen model lacks; another model's
+                // download resumes by its id.
+                row.buttons = [.init(kind: .resume, control: Control(text: "Resume", help: "Resume"),
+                                     command: m.chosen ? .download : .downloadModel(id: m.id), ask: nil)]
+            } else if m.onDisk {
+                if !m.chosen {
+                    row.buttons.append(.init(kind: .use, control: Control(text: "Use", help: "Use \(m.name)"), command: .chooseModel(id: m.id), ask: nil))
+                }
+                if onDisk == 1 {
+                    let all = modelRemoval(s)
+                    row.buttons.append(.init(kind: .remove, control: Control(text: "Remove", help: "Remove \(m.name)"), command: all.command, ask: all))
+                } else if !m.chosen {
+                    let one = ModelRemoval(alertTitle: "Remove \(m.name)?", alertText: "It frees \(Format.gib(m.fileBytes, decimals: 2)). Your tunes stay.",
+                                           remove: "Remove", cancel: "Cancel", command: .removeOneModel(id: m.id))
+                    row.buttons.append(.init(kind: .remove, control: Control(text: "Remove", help: "Remove \(m.name)"), command: one.command, ask: one))
+                }
+            } else if !fetching {
+                row.buttons = [.init(kind: .download, control: Control(text: "Download", help: "Download \(m.name)"), command: .downloadModel(id: m.id), ask: nil)]
+            }
+            return row
+        }
+        return ModelsCard(
+            back: Control(text: "Back", help: "Back"),
+            label: "MUSIC MODELS",
+            title: "Music models",
+            detail: "New tunes are made with the ticked one. A change applies from the next tune.",
+            rows: rows,
+            footnote: "Both share 3.42 GiB of other files, kept while a model remains. This card is also under Music Models… in the menu bar icon's menu."
+        )
+    }
+
+    /// Removing every model file; the alert says how much it frees.
     public static func modelRemoval(_ s: Snapshot) -> ModelRemoval {
         ModelRemoval(
-            menuTitle: "Remove Music Model…",
-            enabled: s.need.onDiskBytes > 0,
             alertTitle: "Remove the music model?",
             alertText: "It frees \(Format.gib(s.need.onDiskBytes, decimals: 2)). Composing stops until it is downloaded again; your tunes stay.",
             remove: "Remove",

@@ -52,6 +52,24 @@ struct WordsView: View {
                 }
                 .font(.system(size: 12.5))
                 if !card.nameError.isEmpty { error(card.nameError) }
+                if !card.models.isEmpty {
+                    HStack {
+                        Text(verbatim: card.modelLabel).foregroundStyle(.secondary)
+                        Spacer()
+                        HStack(spacing: 6) {
+                            ForEach(card.models, id: \.id) { pick in
+                                Button { model.pickWordsModel(pick.id) } label: {
+                                    Text(verbatim: pick.control.text).font(.system(size: 12, weight: .medium)).fixedSize().padding(.horizontal, 9).padding(.vertical, 3)
+                                }
+                                .buttonStyle(.plain)
+                                .glassEffect(pick.control.lit ? .regular.tint(.white.opacity(0.3)).interactive() : .regular.interactive(), in: .capsule)
+                                .disabled(!pick.control.enabled)
+                                .helped(pick.control)
+                            }
+                        }
+                    }
+                    .font(.system(size: 12.5))
+                }
                 Text(verbatim: card.note).font(.system(size: 11.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 if !card.refused.isEmpty { error(card.refused) }
                 HStack(spacing: 8) {

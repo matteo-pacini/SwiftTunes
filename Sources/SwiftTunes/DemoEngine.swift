@@ -10,7 +10,7 @@ import TunesPanel
 /// A time written "@-N" or "@+N" in the file is N seconds before or after
 /// the launch. CARD is `player`, `chooser`, `new`, `edit:<id>`, `ask:<id>`,
 /// `share` (the playing tune), `share:<queue index>`, `rename`,
-/// `rename:<text typed>`, `lyrics`, `words` or `words-sample`; the
+/// `rename:<text typed>`, `lyrics`, `words`, `words-sample` or `models`; the
 /// popover opens on it at launch.
 struct DemoOptions {
     var file: URL
@@ -47,6 +47,7 @@ struct DemoOptions {
         case lyrics
         /// The own-words sheet, empty or with sample words.
         case words(sample: Bool)
+        case models
 
         @MainActor func apply(to model: PanelModel) async {
             switch self {
@@ -65,6 +66,7 @@ struct DemoOptions {
                 try? await Task.sleep(for: .milliseconds(200))
                 model.askDelete()
             case .lyrics: model.toggleLyrics()
+            case .models: model.openModels()
             case .words(let sample):
                 model.openWords()
                 if sample {
@@ -117,6 +119,7 @@ struct DemoOptions {
         case "lyrics": open = .lyrics
         case "words": open = .words(sample: false)
         case "words-sample": open = .words(sample: true)
+        case "models": open = .models
         case let v?:
             let parts = v.split(separator: ":", maxSplits: 1).map(String.init)
             switch (parts.first, parts.count == 2 ? parts[1] : nil) {
@@ -240,21 +243,65 @@ final class DemoEngine: EngineAPI {
             guard s.played.indices.contains(index), s.played[index].name == name else { return }
             s.played.remove(at: index)
         case .removeModel:
-            // The demo's model is a figure in a fixture; no file is touched.
-            guard s.need.onDiskBytes > 0 else { return }
-            s.composing = false
-            s.job = nil
+            guard Self.removeAll(&s) else { return }
+        case .chooseModel(let id):
+            guard let i = s.models.firstIndex(where: { $0.id == id }),
+                  s.models[i].onDisk || !s.models.contains(where: \.onDisk) else { return }
+            for j in s.models.indices { s.models[j].chosen = j == i }
+            s.model.variant = s.models[i].variant
+            s.need.ramBytes = s.models[i].ramBytes
+            s.need.downloadBytes = s.models[i].downloadBytes
+        case .downloadModel(let id):
+            // Nothing is fetched: the row shows a download that never moves.
+            guard let i = s.models.firstIndex(where: { $0.id == id }), !s.models[i].onDisk,
+                  s.setup != .downloading, !s.models.contains(where: \.downloading) else { return }
+            let m = s.models[i]
+            s.models[i].downloading = true
+            s.download = Download(file: 1, files: m.downloadBytes > m.fileBytes ? 4 : 1, name: "language model",
+                                  done: 0, total: m.downloadBytes, rate: 0, error: nil, model: id)
+            if !s.models.contains(where: \.onDisk) { s.setup = .downloading }
+        case .cancelDownload:
+            guard s.download != nil else { return }
             s.download = nil
-            s.model.state = .unloaded
-            s.need.downloadBytes += s.need.onDiskBytes
-            s.need.onDiskBytes = 0
-            s.setup = .missing
+            for j in s.models.indices { s.models[j].downloading = false }
+            if s.setup != .ready { s.setup = .missing }
+        case .removeOneModel(let id):
+            guard let i = s.models.firstIndex(where: { $0.id == id }), s.models[i].onDisk else { return }
+            if s.models.filter(\.onDisk).count == 1 {
+                guard Self.removeAll(&s) else { return }
+            } else {
+                guard !s.models[i].chosen else { return }
+                s.models[i].onDisk = false
+                s.models[i].downloadBytes = s.models[i].fileBytes
+                s.need.onDiskBytes -= s.models[i].fileBytes
+            }
         default:
             return
         }
         guard s != snapshot else { return }
         snapshot = s
         changed()
+    }
+
+    /// Every model file gone, as removing the music model does. The demo's
+    /// models are figures in a fixture; no file is touched.
+    private static func removeAll(_ s: inout Snapshot) -> Bool {
+        guard s.need.onDiskBytes > 0 else { return false }
+        let shared = s.need.onDiskBytes - s.models.filter(\.onDisk).map(\.fileBytes).reduce(0, +)
+        s.composing = false
+        s.job = nil
+        s.download = nil
+        s.model.state = .unloaded
+        s.need.downloadBytes += s.need.onDiskBytes
+        s.need.onDiskBytes = 0
+        s.setup = .missing
+        for j in s.models.indices {
+            s.models[j].onDisk = false
+            s.models[j].downloading = false
+            s.models[j].downloadBytes = s.models[j].fileBytes + max(0, shared)
+            if s.models[j].chosen { s.need.downloadBytes = s.models[j].downloadBytes }
+        }
+        return true
     }
 
     private static func queued(_ t: PlayingTune) -> QueuedTune {
@@ -331,7 +378,7 @@ final class DemoEngine: EngineAPI {
 
     /// Accepts the words and shows them as the job being written; nothing
     /// is composed.
-    func composeWithWords(_ words: String, name: String) async -> Result<Void, Refusal> {
+    func composeWithWords(_ words: String, name: String, model: String?) async -> Result<Void, Refusal> {
         guard snapshot.genres.first(where: { $0.id == snapshot.genre })?.sung == true else {
             return .failure(Refusal(field: nil, text: "That genre is not sung."))
         }

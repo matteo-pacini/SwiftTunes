@@ -12,6 +12,16 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(verbatim: card.title).font(.system(size: 20, weight: .bold, design: .rounded))
             Text(verbatim: card.detail).font(.system(size: 12.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if !card.models.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(card.models, id: \.id) { choice in
+                        if choice.id != card.models.first?.id { Divider() }
+                        ChoiceRow(choice: choice, model: model)
+                    }
+                }
+                .glassEffect(.regular, in: .rect(cornerRadius: 13))
+                Text(verbatim: card.modelsNote).font(.system(size: 12.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
             if let progress = card.progress {
                 ProgressView(value: progress).progressViewStyle(.linear)
             }
@@ -41,6 +51,38 @@ struct SetupView: View {
     }
 }
 
+/// One model on the first run: the round mark, the name and variant, the
+/// suggestion, the sizes. A click chooses it.
+struct ChoiceRow: View {
+    let choice: SetupCard.Choice
+    let model: PanelModel
+    @State private var hovered = false
+
+    var body: some View {
+        Button { model.send(choice.command) } label: {
+            HStack(spacing: 10) {
+                Image(systemName: choice.chosen ? "largecircle.fill.circle" : "circle").font(.system(size: 14))
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        Text(verbatim: choice.name).font(.system(size: 12.5, weight: .semibold))
+                        Text(verbatim: choice.variant).font(.system(size: 11)).foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                        if !choice.tag.isEmpty { Pill(text: choice.tag) }
+                    }
+                    Text(verbatim: choice.sub).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(hovered ? Color.primary.opacity(0.08) : .clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .helped(choice.control)
+        .onHover { hovered = $0 }
+    }
+}
+
 /// A button style chosen at run time.
 struct AnyPrimitiveButtonStyle: PrimitiveButtonStyle {
     private let make: (Configuration) -> AnyView
@@ -50,6 +92,77 @@ struct AnyPrimitiveButtonStyle: PrimitiveButtonStyle {
     }
 
     func makeBody(configuration: Configuration) -> some View { make(configuration) }
+}
+
+// MARK: - Music models
+
+struct ModelsView: View {
+    let card: ModelsCard
+    let model: PanelModel
+
+    var body: some View {
+        GlassEffectContainer(spacing: 6) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    BackLink(control: card.back, action: model.backToPlayer)
+                    Spacer()
+                    Caps(text: card.label)
+                }
+                Text(verbatim: card.title).font(.system(size: 20, weight: .bold, design: .rounded))
+                Text(verbatim: card.detail).font(.system(size: 12.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                if !card.rows.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(card.rows, id: \.id) { row in
+                            if row.id != card.rows.first?.id { Divider() }
+                            ModelRow(row: row, model: model)
+                        }
+                    }
+                    .glassEffect(.regular, in: .rect(cornerRadius: 13))
+                }
+                Text(verbatim: card.footnote).font(.system(size: 11.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+/// One model: the tick, the name and variant, its sizes or its download,
+/// its buttons.
+struct ModelRow: View {
+    let row: ModelsCard.Row
+    let model: PanelModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .opacity(row.ticked ? 1 : 0)
+                    .accessibilityHidden(!row.ticked)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        Text(verbatim: row.name).font(.system(size: 12.5, weight: .semibold))
+                        Text(verbatim: row.variant).font(.system(size: 11)).foregroundStyle(.secondary)
+                    }
+                    Text(verbatim: row.sub).font(.system(size: 11.5)).foregroundStyle(.secondary).contentTransition(.numericText())
+                }
+                Spacer(minLength: 0)
+                ForEach(row.buttons, id: \.control.text) { button in
+                    Button { model.press(button) } label: { Text(verbatim: button.control.text) }
+                        .buttonStyle(button.kind == .download || button.kind == .resume ? AnyPrimitiveButtonStyle(.glassProminent) : AnyPrimitiveButtonStyle(.glass))
+                        .controlSize(.small)
+                        .disabled(!button.control.enabled)
+                        .helped(button.control)
+                }
+            }
+            if let progress = row.progress {
+                ProgressView(value: progress).progressViewStyle(.linear)
+            }
+            if !row.error.isEmpty {
+                Text(verbatim: row.error).font(.system(size: 11.5)).foregroundStyle(Tone.red.color).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .groupedRow()
+    }
 }
 
 // MARK: - Chooser

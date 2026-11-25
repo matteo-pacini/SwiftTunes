@@ -34,10 +34,11 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         host.sizingOptions = .preferredContentSize
         popover.contentViewController = host
         menu.delegate = self
-        // Items say for themselves whether they act: Remove Music Model… is
-        // off with nothing on disk.
+        // Items say for themselves whether they act: Remove Music Model…, shown
+        // while the pins list no models, is off with nothing on disk.
         menu.autoenablesItems = false
         model.close = { [weak self] in self?.popover.performClose(nil) }
+        model.confirm = { Self.confirm($0) }
     }
 
     func update(_ s: Snapshot) {
@@ -105,20 +106,31 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             menu.addItem(line)
         }
         menu.addItem(.separator())
-        let removal = Decide.modelRemoval(model.snapshot)
-        let remove = NSMenuItem(title: removal.menuTitle, action: #selector(removeModel), keyEquivalent: "")
-        remove.target = self
-        remove.isEnabled = removal.enabled
-        menu.addItem(remove)
+        let models = Decide.modelsMenu(model.snapshot)
+        let item = NSMenuItem(title: models.title, action: #selector(modelsItem), keyEquivalent: "")
+        item.target = self
+        item.isEnabled = models.enabled
+        menu.addItem(item)
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "Quit SwiftTunes", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
     }
 
+    /// `Music Models…` opens the popover on the models card; with no models
+    /// listed, `Remove Music Model…` asks first.
+    @objc private func modelsItem() {
+        let models = Decide.modelsMenu(model.snapshot)
+        guard models.enabled else { return }
+        if models.opensCard {
+            show()
+            model.openModels()
+        } else if Self.confirm(models.removal) {
+            model.send(models.removal.command)
+        }
+    }
+
     /// Asks first; Cancel is the default, Remove the destructive choice.
-    @objc private func removeModel() {
-        let removal = Decide.modelRemoval(model.snapshot)
-        guard removal.enabled else { return }
+    private static func confirm(_ removal: ModelRemoval) -> Bool {
         let alert = NSAlert()
         alert.messageText = removal.alertTitle
         alert.informativeText = removal.alertText
@@ -126,9 +138,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         let remove = alert.addButton(withTitle: removal.remove)
         remove.hasDestructiveAction = true
         NSApp.activate()
-        if alert.runModal() == .alertSecondButtonReturn {
-            model.send(removal.command)
-        }
+        return alert.runModal() == .alertSecondButtonReturn
     }
 
     @objc private func toggleLogin() {

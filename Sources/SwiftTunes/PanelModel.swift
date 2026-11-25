@@ -191,6 +191,7 @@ final class PanelModel {
     func typeWords(_ text: String, caret: Int) { set(panel.typedWords(text, caret: caret)) }
     func insertMark(_ index: Int) { set(panel.insertingMark(index)) }
     func typeWordsName(_ name: String) { set(panel.typedWordsName(name)) }
+    func pickWordsModel(_ id: String) { set(panel.pickingWordsModel(id, in: snapshot)) }
 
     func closeWords() {
         wordsCall?.cancel()
@@ -202,11 +203,25 @@ final class PanelModel {
         let (p, words, name) = panel.composingWords()
         set(p)
         guard let words, let name else { return }
+        let modelID = p.wordsModel(snapshot)
         wordsCall = Task { [weak self, engine] in
-            let result = await engine.composeWithWords(words, name: name)
+            let result = await engine.composeWithWords(words, name: name, model: modelID)
             guard let self, !Task.isCancelled else { return }
             set(panel.composedWords(result))
         }
+    }
+
+    // MARK: Music models
+
+    /// Asks the user to confirm a removal; true to go ahead.
+    @ObservationIgnored var confirm: ((ModelRemoval) -> Bool)?
+
+    func openModels() { set(panel.openingModels()) }
+
+    /// A models card button: its command, once confirmed when it asks.
+    func press(_ button: ModelsCard.Button) {
+        if let ask = button.ask, confirm?(ask) != true { return }
+        send(button.command)
     }
 
     // MARK: Chooser

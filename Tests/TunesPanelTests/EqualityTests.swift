@@ -111,17 +111,39 @@ struct EqualityTests {
         ] as [Change<PlayerCard.StandIn>])
         expectEachFieldCounts(base.lines[0], [
             ("pre", { $0.pre += "x" }), ("em", { $0.em += "x" }), ("post", { $0.post += "x" }), ("tone", { $0.tone = other($0.tone) }),
-            ("right", { $0.right += "x" }), ("rightTone", { $0.rightTone = other($0.rightTone) }),
+            ("right", { $0.right += "x" }), ("rightTone", { $0.rightTone = other($0.rightTone) }), ("models", { flip(&$0.models, anyControl) }),
         ] as [Change<PlayerCard.Line>])
     }
 
     @Test func setupCard() throws {
+        let choice = SetupCard.Choice(id: "small", name: "Small", variant: "v", chosen: false, tag: "", sub: "s", control: anyControl, command: .chooseModel(id: "small"))
         let base = try TunesPanelTests.setup(Fixture.load("02-downloading"))
         expectEachFieldCounts(base, [
             ("kind", { $0.kind = .failed }), ("title", { $0.title += "x" }), ("detail", { $0.detail += "x" }), ("rows", { $0.rows.removeLast() }),
             ("progress", { flip(&$0.progress, 0.1) }), ("button", { $0.button.lit.toggle() }), ("command", { $0.command = .refresh }),
+            ("models", { $0.models.append(choice) }), ("modelsNote", { $0.modelsNote += "x" }),
         ] as [Change<SetupCard>])
         expectEachFieldCounts(base.rows[0], [("label", { $0.label += "x" }), ("value", { $0.value += "x" })] as [Change<SetupCard.Row>])
+        expectEachFieldCounts(choice, [
+            ("id", { $0.id += "x" }), ("name", { $0.name += "x" }), ("variant", { $0.variant += "x" }), ("chosen", { $0.chosen.toggle() }),
+            ("tag", { $0.tag += "x" }), ("sub", { $0.sub += "x" }), ("control", { $0.control.lit.toggle() }), ("command", { $0.command = .refresh }),
+        ] as [Change<SetupCard.Choice>])
+    }
+
+    @Test func modelsCard() throws {
+        let base = try models(Fixture.load("51-models-both-large-chosen"))
+        expectEachFieldCounts(base, [
+            ("back", { $0.back.lit.toggle() }), ("label", { $0.label += "x" }), ("title", { $0.title += "x" }), ("detail", { $0.detail += "x" }),
+            ("rows", { $0.rows.removeLast() }), ("footnote", { $0.footnote += "x" }),
+        ] as [Change<ModelsCard>])
+        expectEachFieldCounts(base.rows[0], [
+            ("id", { $0.id += "x" }), ("name", { $0.name += "x" }), ("variant", { $0.variant += "x" }), ("ticked", { $0.ticked.toggle() }),
+            ("sub", { $0.sub += "x" }), ("progress", { flip(&$0.progress, 0.2) }), ("error", { $0.error += "x" }), ("buttons", { $0.buttons.removeLast() }),
+        ] as [Change<ModelsCard.Row>])
+        expectEachFieldCounts(base.rows[0].buttons[1], [
+            ("kind", { $0.kind = .use }), ("control", { $0.control.lit.toggle() }), ("command", { $0.command = .refresh }),
+            ("ask", { $0.ask = nil }),
+        ] as [Change<ModelsCard.Button>])
     }
 
     @Test func chooserCard() throws {
@@ -181,13 +203,16 @@ struct EqualityTests {
     @Test func wordsCard() throws {
         let s = try sungSnapshot()
         guard case .words(let base) = card(s, Panel().openingWords(s, name: "n")) else { Issue.record("not the sheet"); return }
+        let pick = WordsCard.ModelPick(id: "small", control: anyControl)
         expectEachFieldCounts(base, [
             ("back", { $0.back.lit.toggle() }), ("label", { $0.label += "x" }), ("title", { $0.title += "x" }), ("inserts", { $0.inserts.removeLast() }),
             ("text", { $0.text += "x" }), ("caret", { $0.caret += 1 }), ("counter", { $0.counter += "x" }), ("counterRight", { $0.counterRight += "x" }),
             ("wordsError", { $0.wordsError += "x" }), ("nameLabel", { $0.nameLabel += "x" }), ("name", { $0.name += "x" }),
             ("nameError", { $0.nameError += "x" }), ("note", { $0.note += "x" }), ("refused", { $0.refused += "x" }),
             ("cancel", { $0.cancel.lit.toggle() }), ("compose", { $0.compose.lit.toggle() }),
+            ("modelLabel", { $0.modelLabel += "x" }), ("models", { $0.models.append(pick) }),
         ] as [Change<WordsCard>])
+        expectEachFieldCounts(pick, [("id", { $0.id += "x" }), ("control", { $0.control.lit.toggle() })] as [Change<WordsCard.ModelPick>])
     }
 
     @Test func smallValues() throws {
@@ -196,9 +221,13 @@ struct EqualityTests {
         ] as [Change<StatusItem>])
         let removal = Decide.modelRemoval(try Fixture.load("44-model-on-disk"))
         expectEachFieldCounts(removal, [
-            ("menuTitle", { $0.menuTitle += "x" }), ("enabled", { $0.enabled.toggle() }), ("alertTitle", { $0.alertTitle += "x" }),
+            ("alertTitle", { $0.alertTitle += "x" }),
             ("alertText", { $0.alertText += "x" }), ("remove", { $0.remove += "x" }), ("cancel", { $0.cancel += "x" }), ("command", { $0.command = .refresh }),
         ] as [Change<ModelRemoval>])
+        expectEachFieldCounts(Decide.modelsMenu(try Fixture.load("44-model-on-disk")), [
+            ("title", { $0.title += "x" }), ("enabled", { $0.enabled.toggle() }), ("opensCard", { $0.opensCard.toggle() }),
+            ("removal", { $0.removal.alertText += "x" }),
+        ] as [Change<ModelsMenu>])
         expectEachFieldCounts(Animating(backdrop: false, heroForming: false, jobForming: false, meter: false), [
             ("backdrop", { $0.backdrop.toggle() }), ("heroForming", { $0.heroForming.toggle() }), ("jobForming", { $0.jobForming.toggle() }),
             ("meter", { $0.meter.toggle() }),

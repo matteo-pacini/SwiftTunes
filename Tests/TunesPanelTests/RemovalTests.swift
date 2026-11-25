@@ -45,14 +45,13 @@ struct RemovalTests {
         #expect(Decide.statusItem(try Fixture.load("01-not-set-up")).dim)
     }
 
-    @Test("Remove Music Model…: enabled while anything is on disk; the alert says how much it frees", arguments: [
-        ("44-model-on-disk", true, "It frees 7.57 GiB. Composing stops until it is downloaded again; your tunes stay."),
-        ("42-downloading-kept", true, "It frees 2.9 GiB. Composing stops until it is downloaded again; your tunes stay."),
-        ("41-no-model-kept", false, "It frees 0 GiB. Composing stops until it is downloaded again; your tunes stay."),
+    @Test("removing the music model: the alert says how much it frees", arguments: [
+        ("44-model-on-disk", "It frees 7.57 GiB. Composing stops until it is downloaded again; your tunes stay."),
+        ("42-downloading-kept", "It frees 2.9 GiB. Composing stops until it is downloaded again; your tunes stay."),
+        ("41-no-model-kept", "It frees 0 GiB. Composing stops until it is downloaded again; your tunes stay."),
     ])
-    func removal(_ name: String, _ enabled: Bool, _ text: String) throws {
+    func removal(_ name: String, _ text: String) throws {
         let r = Decide.modelRemoval(try Fixture.load(name))
-        #expect(r.menuTitle == "Remove Music Model…" && r.enabled == enabled)
         #expect(r.alertTitle == "Remove the music model?" && r.alertText == text)
         #expect(r.remove == "Remove" && r.cancel == "Cancel" && r.command == .removeModel)
     }
