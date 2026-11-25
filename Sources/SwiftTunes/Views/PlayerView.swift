@@ -386,6 +386,20 @@ struct ComposerBar: View {
                             .controlSize(.small)
                             .helped(retry)
                     }
+                    if let models = line.models {
+                        Button(action: model.openModels) {
+                            HStack(spacing: 5) {
+                                Text(verbatim: models.text)
+                                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
+                            }
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                        .helped(models)
+                    }
                 }
             }
             if let words = composer.words {

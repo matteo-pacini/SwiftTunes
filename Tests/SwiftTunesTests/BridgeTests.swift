@@ -416,3 +416,82 @@ struct DemoRoundTests {
         #expect(engine.snapshot.played.map(\.name) == ["Blue Avenue", "Smoky Martini", "Easy Lounge"])
     }
 }
+
+@Suite("Demo models")
+@MainActor
+struct DemoModelsTests {
+    private func demo(_ name: String, open: String? = nil) throws -> DemoEngine {
+        let file = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "TunesPanelTests/Fixtures/\(name).jsonl")
+        return DemoEngine(options: try #require(DemoOptions(arguments: ["SwiftTunes", "--demo", file.path])))
+    }
+
+    @Test("--demo-open models opens the models card")
+    func open() throws {
+        let options = try #require(DemoOptions(arguments: ["SwiftTunes", "--demo", "x.jsonl", "--demo-open", "models"]))
+        guard case .models? = options.open else { Issue.record("not models: \(String(describing: options.open))"); return }
+    }
+
+    @Test("Use: that model is chosen, its variant and memory figure the composer's")
+    func use() throws {
+        let engine = try demo("51-models-both-large-chosen")
+        engine.send(.chooseModel(id: "small"))
+        let s = engine.snapshot
+        #expect(s.models.map(\.chosen) == [true, false])
+        #expect(s.model.variant == "0.6B Q8" && s.need.ramBytes == 4 << 30)
+    }
+
+    @Test("choosing a model not on disk while another is: nothing")
+    func useNotOnDisk() throws {
+        let engine = try demo("50-models-large-only")
+        let before = engine.snapshot
+        engine.send(.chooseModel(id: "small"))
+        #expect(engine.snapshot == before)
+    }
+
+    @Test("the first run: a click on a row chooses it, and the download follows it")
+    func firstRun() throws {
+        let engine = try demo("48-models-first-16gib")
+        engine.send(.chooseModel(id: "large"))
+        #expect(engine.snapshot.models.map(\.chosen) == [false, true])
+        #expect(engine.snapshot.need.downloadBytes == 8_128_417_536)
+    }
+
+    @Test("Download, then Cancel: the row downloads, then offers Download again")
+    func downloadCancel() throws {
+        let engine = try demo("50-models-large-only")
+        engine.send(.downloadModel(id: "small"))
+        #expect(engine.snapshot.models[0].downloading && engine.snapshot.download?.model == "small")
+        #expect(engine.snapshot.setup == .ready)
+        engine.send(.cancelDownload)
+        #expect(!engine.snapshot.models[0].downloading && engine.snapshot.download == nil)
+    }
+
+    @Test("Remove one of two: its file goes, the shared files stay")
+    func removeOne() throws {
+        let engine = try demo("51-models-both-large-chosen")
+        engine.send(.removeOneModel(id: "small"))
+        let s = engine.snapshot
+        #expect(!s.models[0].onDisk && s.models[0].downloadBytes == 709_846_656)
+        #expect(s.need.onDiskBytes == 8_128_417_536 && s.setup == .ready)
+    }
+
+    @Test("the chosen one while another is on disk: nothing")
+    func removeChosen() throws {
+        let engine = try demo("51-models-both-large-chosen")
+        let before = engine.snapshot
+        engine.send(.removeOneModel(id: "large"))
+        #expect(engine.snapshot == before)
+    }
+
+    @Test("the only one on disk: removed as the music model, shared files and all")
+    func removeLast() throws {
+        let engine = try demo("50-models-large-only")
+        engine.send(.removeOneModel(id: "large"))
+        let s = engine.snapshot
+        #expect(s.setup == .missing && s.need.onDiskBytes == 0 && !s.composing)
+        #expect(s.models.map(\.onDisk) == [false, false])
+        #expect(s.models.map(\.downloadBytes) == [4_380_940_544, 8_128_417_536])
+        #expect(s.need.downloadBytes == 8_128_417_536)
+    }
+}

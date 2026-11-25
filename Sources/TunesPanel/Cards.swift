@@ -31,6 +31,7 @@ public enum Card: Sendable, Equatable {
     case editor(EditorCard)
     case share(ShareCard)
     case player(PlayerCard)
+    case models(ModelsCard)
 }
 
 // MARK: - Your own words
@@ -59,6 +60,16 @@ public struct WordsCard: Sendable, Equatable {
     public var refused: String
     public var cancel: Control
     public var compose: Control
+    /// `Model`.
+    public var modelLabel: String
+    /// One capsule per model on disk, the one the tune is made with lit;
+    /// empty, and the row not shown, unless more than one is on disk.
+    public var models: [ModelPick]
+
+    public struct ModelPick: Sendable, Equatable {
+        public var id: String
+        public var control: Control
+    }
 }
 
 // MARK: - Setup
@@ -75,10 +86,68 @@ public struct SetupCard: Sendable, Equatable {
     /// Download, Cancel or Resume.
     public var button: Control
     public var command: Command
+    /// The models to choose from before the first download, under the
+    /// detail; empty while the pins list none and on the other kinds.
+    public var models: [Choice] = []
+    /// Under the models: the Mac's memory and how the models differ.
+    public var modelsNote: String = ""
 
     public struct Row: Sendable, Equatable {
         public var label: String
         public var value: String
+    }
+
+    /// One model as a row; a click chooses it.
+    public struct Choice: Sendable, Equatable {
+        public var id: String
+        public var name: String
+        public var variant: String
+        /// The round mark filled.
+        public var chosen: Bool
+        /// `Suggested` or "".
+        public var tag: String
+        /// `X.XX GiB download · about N GiB of memory`.
+        public var sub: String
+        public var control: Control
+        public var command: Command
+    }
+}
+
+// MARK: - Music models
+
+public struct ModelsCard: Sendable, Equatable {
+    public var back: Control
+    /// `MUSIC MODELS`.
+    public var label: String
+    public var title: String
+    public var detail: String
+    public var rows: [Row]
+    public var footnote: String
+
+    public struct Row: Sendable, Equatable {
+        public var id: String
+        public var name: String
+        public var variant: String
+        /// The model new tunes are made with.
+        public var ticked: Bool
+        /// Its size on this Mac or to download, and its memory; while it
+        /// downloads, the amounts and the speed.
+        public var sub: String
+        /// 0…1 while it downloads.
+        public var progress: Double?
+        /// Why its download stopped, or "".
+        public var error: String
+        public var buttons: [Button]
+    }
+
+    public struct Button: Sendable, Equatable {
+        public enum Kind: Sendable, Equatable { case use, remove, download, cancel, resume }
+        public var kind: Kind
+        public var control: Control
+        /// What a click sends; with `ask`, only once the user confirms.
+        public var command: Command
+        /// The question asked first.
+        public var ask: ModelRemoval?
     }
 }
 
@@ -373,14 +442,17 @@ public struct PlayerCard: Sendable, Equatable {
         public var tone: Tone
         public var right: String
         public var rightTone: Tone
+        /// The capsule at the line's end that opens the models card.
+        public var models: Control?
 
-        init(_ pre: String, em: String = "", post: String = "", tone: Tone = .dim, right: String = "", rightTone: Tone = .dim) {
+        init(_ pre: String, em: String = "", post: String = "", tone: Tone = .dim, right: String = "", rightTone: Tone = .dim, models: Control? = nil) {
             self.pre = pre
             self.em = em
             self.post = post
             self.tone = tone
             self.right = right
             self.rightTone = rightTone
+            self.models = models
         }
 
         /// The line's text as read.
@@ -418,11 +490,18 @@ public struct Animating: Sendable, Equatable {
     public var meter: Bool
 }
 
-/// The status item menu's `Remove Music Model…` and the alert it asks with.
-public struct ModelRemoval: Sendable, Equatable {
-    public var menuTitle: String
-    /// Some model file or part file is on disk.
+/// The status item menu's music-model item: `Music Models…`, opening the
+/// models card, or, while the pins list no models, `Remove Music Model…`,
+/// asking `removal` first.
+public struct ModelsMenu: Sendable, Equatable {
+    public var title: String
     public var enabled: Bool
+    public var opensCard: Bool
+    public var removal: ModelRemoval
+}
+
+/// The alert asked before a music model is removed, and what it sends.
+public struct ModelRemoval: Sendable, Equatable {
     public var alertTitle: String
     public var alertText: String
     public var remove: String
