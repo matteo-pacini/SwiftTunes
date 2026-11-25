@@ -61,6 +61,11 @@ public struct Snapshot: Codable, Equatable, Sendable {
     public var undo: Undo?
     /// The composer's model and its state.
     public var model: Model
+    /// Every music model the pins list, smallest first. Decodes as empty when
+    /// absent.
+    public var models: [ModelChoice]
+    /// The Mac's installed memory. Decodes as 0 when absent.
+    public var memoryBytes: Int64
     /// One line for the strip over the player: the first present of the
     /// genres file's error, the play error, the file error. Plain text.
     public var error: String?
@@ -95,10 +100,14 @@ public struct Snapshot: Codable, Equatable, Sendable {
         model: Model,
         error: String?,
         played: [QueuedTune] = [],
-        volume: Double = 1
+        volume: Double = 1,
+        models: [ModelChoice] = [],
+        memoryBytes: Int64 = 0
     ) {
         self.played = played
         self.volume = volume
+        self.models = models
+        self.memoryBytes = memoryBytes
         self.version = version
         self.setup = setup
         self.download = download
@@ -159,6 +168,8 @@ public struct Snapshot: Codable, Equatable, Sendable {
         case expect
         case undo
         case model
+        case models
+        case memoryBytes = "memory_bytes"
         case error
     }
 
@@ -191,6 +202,8 @@ public struct Snapshot: Codable, Equatable, Sendable {
         expect = try c.decodeIfPresent(Expect.self, forKey: .expect)
         undo = try c.decodeIfPresent(Undo.self, forKey: .undo)
         model = try c.decode(Model.self, forKey: .model)
+        models = try c.decodeIfPresent([ModelChoice].self, forKey: .models) ?? []
+        memoryBytes = try c.decodeIfPresent(Int64.self, forKey: .memoryBytes) ?? 0
         error = try c.decodeIfPresent(String.self, forKey: .error)
         played = try c.decodeIfPresent([QueuedTune].self, forKey: .played) ?? []
         volume = try c.decodeIfPresent(Double.self, forKey: .volume) ?? 1
@@ -227,6 +240,8 @@ public struct Snapshot: Codable, Equatable, Sendable {
         try c.encode(expect, forKey: .expect)
         try c.encode(undo, forKey: .undo)
         try c.encode(model, forKey: .model)
+        try c.encode(models, forKey: .models)
+        try c.encode(memoryBytes, forKey: .memoryBytes)
         try c.encode(error, forKey: .error)
     }
 }
@@ -256,8 +271,11 @@ public struct Download: Codable, Equatable, Sendable {
     /// Bytes per second.
     public var rate: Double
     public var error: String?
+    /// The id of the model being fetched. Decodes as nil when absent.
+    public var model: String?
 
-    public init(file: Int, files: Int, name: String, done: Int64, total: Int64, rate: Double, error: String?) {
+    public init(file: Int, files: Int, name: String, done: Int64, total: Int64, rate: Double, error: String?, model: String? = nil) {
+        self.model = model
         self.file = file
         self.files = files
         self.name = name
@@ -268,7 +286,7 @@ public struct Download: Codable, Equatable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case file, files, name, done, total, rate, error
+        case file, files, name, done, total, rate, error, model
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -280,17 +298,18 @@ public struct Download: Codable, Equatable, Sendable {
         try c.encode(total, forKey: .total)
         try c.encode(rate, forKey: .rate)
         try c.encode(error, forKey: .error)
+        try c.encode(model, forKey: .model)
     }
 }
 
-/// What setup needs.
+/// What setup needs, all about the chosen model.
 public struct Need: Codable, Equatable, Sendable {
     /// Still to fetch.
     public var downloadBytes: Int64
     public var diskFreeBytes: Int64
-    /// 8 GiB: the figure the wording quotes.
+    /// The chosen model's memory figure, the one the wording quotes.
     public var ramBytes: Int64
-    /// What the model files and their parts take now: what removal frees.
+    /// What all model files and their parts take now: what removal frees.
     public var onDiskBytes: Int64
 
     public init(downloadBytes: Int64, diskFreeBytes: Int64, ramBytes: Int64, onDiskBytes: Int64 = 0) {
@@ -601,11 +620,62 @@ public struct Undo: Codable, Equatable, Sendable {
     }
 }
 
+/// One music model the pins list.
+public struct ModelChoice: Codable, Equatable, Sendable {
+    /// `small` or `large`.
+    public var id: String
+    /// `Small` or `Large`.
+    public var name: String
+    /// `0.6B Q8` or `4B Q8`.
+    public var variant: String
+    /// Its own file.
+    public var fileBytes: Int64
+    /// What fetching it would still download, the shared files included
+    /// while they are missing.
+    public var downloadBytes: Int64
+    /// Its file and the shared files are complete.
+    public var onDisk: Bool
+    /// The memory figure quoted for it.
+    public var ramBytes: Int64
+    /// True for exactly one, chosen from `Snapshot.memoryBytes`.
+    public var suggested: Bool
+    /// True for exactly one: the model new tunes are made with, or, while
+    /// none is on disk, the one `download` fetches.
+    public var chosen: Bool
+    public var downloading: Bool
+
+    public init(id: String, name: String, variant: String, fileBytes: Int64, downloadBytes: Int64, onDisk: Bool, ramBytes: Int64, suggested: Bool, chosen: Bool, downloading: Bool) {
+        self.id = id
+        self.name = name
+        self.variant = variant
+        self.fileBytes = fileBytes
+        self.downloadBytes = downloadBytes
+        self.onDisk = onDisk
+        self.ramBytes = ramBytes
+        self.suggested = suggested
+        self.chosen = chosen
+        self.downloading = downloading
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case variant
+        case fileBytes = "file_bytes"
+        case downloadBytes = "download_bytes"
+        case onDisk = "on_disk"
+        case ramBytes = "ram_bytes"
+        case suggested
+        case chosen
+        case downloading
+    }
+}
+
 /// The composer's model and its state.
 public struct Model: Codable, Equatable, Sendable {
     /// `ACE-Step 1.5 Turbo`
     public var name: String
-    /// `4B Q8`
+    /// The chosen model's: `0.6B Q8` or `4B Q8`.
     public var variant: String
     /// The Metal device's name from the server's log, or `Metal` before one
     /// was seen.
