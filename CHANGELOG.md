@@ -12,6 +12,8 @@
   remove one. Music Models… in the menu bar icon's menu opens the same card.
 - Sing my words can make its tune with either model when both are on your
   Mac.
+- On a new installation shuffle starts off, so tunes play in the order they
+  were made. If you have already set shuffle, your setting is kept.
 
 ## 0.1.1
 
