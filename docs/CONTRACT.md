@@ -113,6 +113,7 @@ seconds as `Double`. Sizes are bytes as `Int64`. A field marked optional is
 | `model` | `model` | `Model` | The composer's model and its state. |
 | `models` | `models` | `[ModelChoice]` | Every music model the pins list, smallest first (spec, "Music models"). Decodes as empty when absent. |
 | `memoryBytes` | `memory_bytes` | `Int64` | The Mac's installed memory. Decodes as 0 when absent. |
+| `sharedBytes` | `shared_bytes` | `Int64` | The size of the files every model shares. Decodes as 0 when absent. |
 | `error` | `error` | `String?` | One line for the strip over the player: the first present of the pins file's error, the genres file's error, the play error, the file error. Plain text. |
 
 `Download`: `file` (`Int`, 1-based), `files` (`Int`), `name` (`String`: one of
@@ -218,8 +219,8 @@ public enum Command: Sendable, Equatable {
     case retry                         // only in failed or no_device [R42]
     case download                      // fetches what the chosen model lacks
     case chooseModel(id: String)       // spec, "Music models"; ignored unless listed; once any model is on disk, ignored unless that one is
-    case downloadModel(id: String)     // another model's file, and any shared file missing; ignored when it is on disk or a download runs
-    case removeOneModel(id: String)    // its own file only; ignored for the chosen model unless it is the only one on disk, when it acts as removeModel
+    case downloadModel(id: String)     // that model's file, and any shared file missing, carrying on from a part; ignored when it is on disk or a download runs
+    case removeOneModel(id: String)    // its own file and part only; ignored for the chosen model while another is on disk; with no other model on disk it acts as removeModel
     case cancelDownload
     case removeModel                   // spec, "Removing the music model"; ignored when nothing is on disk
     case refresh                       // re-reads the genres file and memory, then notifies

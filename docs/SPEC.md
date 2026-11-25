@@ -656,3 +656,47 @@ earlier sentence that assumes one model. It is release 0.2.0.
   above and equality for each new field; `SessionTests` through a first
   run choosing Small; one real-server tune with each model on the real
   Mac; the README, the changelog and the screenshots that change.
+
+## Music models: what a review settled
+
+This section adds to "Music models" and wins where they differ.
+
+- **The choice never moves by itself.** The first model to be complete on
+  disk becomes the chosen one and is saved then, whichever command fetched
+  it. A model downloaded later is never chosen until `Use` is pressed.
+  When the chosen model's file is no longer on disk (deleted outside the
+  app) and another model is, the other becomes the chosen one and is
+  saved: downloading the first again does not switch back.
+- **Checked before each tune.** Before a tune is started the engine looks
+  at the files. With the chosen model gone and another on disk, the choice
+  moves as above. With no model on disk, `setup` becomes `missing` and the
+  composer stops, as after a removal. `setup` and `models` never disagree
+  in one snapshot.
+- **Resume follows the download.** Wherever a failed or cancelled download
+  is offered again (the setup card, the composer bar's stand-in, a row of
+  the models card), it carries on with the model that download was for:
+  `download` when that is the chosen model, `downloadModel` otherwise.
+- **Removing is decided when it happens.** A row's `Remove` always sends
+  `removeOneModel` with that model's id; the engine decides then whether
+  it is the only model on disk. The alert shown is chosen from what was on
+  screen: `Remove <name>?` with another model on disk, the one of
+  "Removing the music model" without.
+- **A model with only a part on disk** (a download cancelled or failed)
+  shows in its row `X.XX of Y.YY GiB downloaded`, with `Resume` and
+  `Remove`. `Remove` deletes the part; with no complete model on disk it
+  removes everything, shared files and their parts included.
+- **Removing a model a tune is being made with** (a words tune made with
+  the other model): the tune starts over with the chosen model.
+- **The footnote** is computed: `The models share X.XX GiB of other files,
+  kept while a model remains. This card is also under Music Models… in the
+  menu bar icon's menu.` The figure is the snapshot's `sharedBytes`.
+- **With no memory figure** (`memoryBytes` 0) the sentence under the setup
+  card's rows starts at `Large follows…`.
+- **The pins are checked:** choices must run by rising
+  `suggested_from_bytes`, and no file name may appear twice; otherwise the
+  pins are in error, as for any other fault in that file.
+- **Tests added for:** every one of the above; `lm_model` on a rewrite
+  after thin words and on the request after a failure; the first download
+  made through `downloadModel`; the suggestion with 0 bytes and at exactly
+  24 GiB with the real thresholds; the contract's new fields encoding, and
+  decoding when absent.
