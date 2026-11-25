@@ -258,6 +258,13 @@ final class FakeProcess: ServerProcess {
     }
 }
 
+extension Engine {
+    /// Words for the chosen model, as before a model could be named.
+    func composeWithWords(_ words: String, name: String) async -> Result<Void, Refusal> {
+        await composeWithWords(words, name: name, model: nil)
+    }
+}
+
 /// An engine on fakes in a folder of its own.
 final class Rig {
     static let start = 1_795_390_000.0
@@ -343,8 +350,10 @@ final class Rig {
         }
         await host.set(files: modelFiles)
         let pins = """
-        {"model": {"name": "ACE-Step 1.5 Turbo", "variant": "4B Q8", "base_url": "http://127.0.0.1:\(hostHTTP.port)",
-        "revision": "rev", "files": [\(entries.joined(separator: ", "))], "silence_code": 35847, "ram_bytes": 8589934592},
+        {"model": {"name": "ACE-Step 1.5 Turbo", "base_url": "http://127.0.0.1:\(hostHTTP.port)",
+        "revision": "rev", "shared": [\(entries.dropFirst().joined(separator: ", "))],
+        "choices": [{"id": "large", "name": "Large", "variant": "4B Q8", "file": \(entries[0]),
+        "ram_bytes": 8589934592, "suggested_from_bytes": 0}], "silence_code": 35847},
         "keep": \(keep), "ahead": \(ahead), "duration": 12}
         """
         try Data(pins.utf8).write(to: self.root.appending(path: "pins.json"))

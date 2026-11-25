@@ -52,7 +52,7 @@ extension Engine {
         }
     }
 
-    func composeWithWords(_ words: String, name: String) async -> Result<Void, Refusal> {
+    func composeWithWords(_ words: String, name: String, model: String?) async -> Result<Void, Refusal> {
         if let why = WordsRules.wordsError(words) { return .failure(Refusal(field: nil, text: why)) }
         if let why = TuneRules.nameError(name) { return .failure(Refusal(field: nil, text: why)) }
         guard let g = genre, g.sung else { return .failure(Refusal(field: nil, text: "That genre is not sung.")) }

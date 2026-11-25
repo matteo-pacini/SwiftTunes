@@ -37,21 +37,26 @@ nonisolated struct Pins: Sendable {
             guard case .int(let n)? = v, n > 0 || key == "model.silence_code" else { throw Mistake(description: key) }
             return n
         }
-        guard case .array(let list)? = m["files"], !list.isEmpty else { throw Mistake(description: "model.files") }
-        var files: [ModelFile] = []
-        for (i, f) in list.enumerated() {
-            let role = try string(f["role"], "model.files[\(i)].role")
-            guard Rules.roleWords[role] != nil else { throw Mistake(description: "model.files[\(i)].role") }
-            let name = try string(f["name"], "model.files[\(i)].name")
-            guard !name.hasPrefix("."), !name.contains("/") else { throw Mistake(description: "model.files[\(i)].name") }
-            files.append(ModelFile(role: role, name: name, sha256: try string(f["sha256"], "model.files[\(i)].sha256").lowercased(),
-                                   bytes: Int64(try int(f["bytes"], "model.files[\(i)].bytes"))))
+        func file(_ f: JSONValue?, _ at: String) throws(Mistake) -> ModelFile {
+            let role = try string(f?["role"], "\(at).role")
+            guard Rules.roleWords[role] != nil else { throw Mistake(description: "\(at).role") }
+            let name = try string(f?["name"], "\(at).name")
+            guard !name.hasPrefix("."), !name.contains("/") else { throw Mistake(description: "\(at).name") }
+            return ModelFile(role: role, name: name, sha256: try string(f?["sha256"], "\(at).sha256").lowercased(),
+                             bytes: Int64(try int(f?["bytes"], "\(at).bytes")))
         }
+        guard case .array(let shared)? = m["shared"], !shared.isEmpty else { throw Mistake(description: "model.shared") }
+        guard case .array(let choices)? = m["choices"],
+              let li = choices.firstIndex(where: { if case .string("large")? = $0["id"] { true } else { false } })
+        else { throw Mistake(description: "model.choices") }
+        let large = choices[li]
+        var files = [try file(large["file"], "model.choices[\(li)].file")]
+        for (i, f) in shared.enumerated() { files.append(try file(f, "model.shared[\(i)]")) }
         return Pins(
-            name: try string(m["name"], "model.name"), variant: try string(m["variant"], "model.variant"),
+            name: try string(m["name"], "model.name"), variant: try string(large["variant"], "model.choices[\(li)].variant"),
             baseURL: try string(m["base_url"], "model.base_url"), revision: try string(m["revision"], "model.revision"),
             files: files, silenceCode: try int(m["silence_code"], "model.silence_code"),
-            ramBytes: Int64(try int(m["ram_bytes"], "model.ram_bytes")),
+            ramBytes: Int64(try int(large["ram_bytes"], "model.choices[\(li)].ram_bytes")),
             keep: try int(raw["keep"], "keep"), ahead: try int(raw["ahead"], "ahead"), duration: try int(raw["duration"], "duration")
         )
     }

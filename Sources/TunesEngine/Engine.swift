@@ -600,6 +600,7 @@ final class Engine: EngineAPI {
         case .retry: retry()
         case .download: download()
         case .cancelDownload: cancelDownload()
+        case .chooseModel, .downloadModel, .removeOneModel: break
         case .removeModel:
             removeModel()
         case .previous: previous()
