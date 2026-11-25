@@ -329,7 +329,7 @@ struct EditorTests {
 @Suite("Modes")
 struct ModeTests {
     @Test("shuffle and repeat: lit while on, the repeat control names the mode it switches to", arguments: [
-        ("30-modes-default", true, true, "all", "Repeat one", true, Command.setShuffle(on: false), Command.setRepeat(.one)),
+        ("30-shuffle-on", true, true, "all", "Repeat one", true, Command.setShuffle(on: false), Command.setRepeat(.one)),
         ("31-shuffle-off", false, true, "all", "Repeat one", true, .setShuffle(on: true), .setRepeat(.one)),
         ("32-repeat-one", true, true, "one", "Repeat off", true, .setShuffle(on: false), .setRepeat(.off)),
         ("33-ended", true, false, "off", "Repeat all", false, .setShuffle(on: false), .setRepeat(.all)),
@@ -430,7 +430,7 @@ struct ModeTests {
         let p = try player(Fixture.load("34-pinned"))
         #expect(p.now.badge == "★ kept for good")
         #expect(p.next.rows.map { "\($0.name) \($0.star) \($0.tag) \($0.dim)" } == ["Lazy Avenue true  false", "Brass Lantern true  false"])
-        let plain = try player(Fixture.load("30-modes-default"))
+        let plain = try player(Fixture.load("30-shuffle-on"))
         #expect(plain.now.badge == "" && plain.next.rows.allSatisfy { !$0.star })
         // Rows are numbered by their place in the round, from 1.
         #expect(try player(Fixture.load("31-shuffle-off")).next.rows.dropFirst().prefix(2).map { [$0.number, $0.name] } == [["2", "Brass Lantern"], ["3", "Quiet Ledger"]])
@@ -439,7 +439,7 @@ struct ModeTests {
 
 @Suite("Share sheet")
 struct ShareTests {
-    func described(_ name: String = "30-modes-default", index: Int? = nil, line: Int = 0) throws -> (Snapshot, Panel) {
+    func described(_ name: String = "30-shuffle-on", index: Int? = nil, line: Int = 0) throws -> (Snapshot, Panel) {
         let s = try Fixture.load(name)
         let (p, target) = try openShare(s, index: index)
         let t = try #require(target)
@@ -448,7 +448,7 @@ struct ShareTests {
 
     @Test("the share control on the playing tune: the sheet, waiting for its description")
     func open() throws {
-        let s = try Fixture.load("30-modes-default")
+        let s = try Fixture.load("30-shuffle-on")
         let (p, target) = try openShare(s, index: nil)
         #expect(target == TuneTarget(name: "Lazy Avenue", index: nil))
         let c = try share(s, p)
@@ -483,7 +483,7 @@ struct ShareTests {
 
     @Test("an answer for another tune, or a second one, changes nothing")
     func notCrossed() throws {
-        let s = try Fixture.load("30-modes-default")
+        let s = try Fixture.load("30-shuffle-on")
         let (p, _) = try openShare(s, index: nil)
         let other = p.described(.success(Answers.info(try Answers.share()[5])), target: TuneTarget(name: "Brass Lantern", index: 0), now: NOW)
         #expect(other == p)
@@ -493,7 +493,7 @@ struct ShareTests {
 
     @Test("a refusal of the description closes the sheet with its words")
     func refused() throws {
-        let s = try Fixture.load("30-modes-default")
+        let s = try Fixture.load("30-shuffle-on")
         let (p, t) = try openShare(s, index: nil)
         let closed = p.described(.failure(Refusal(field: nil, text: "That tune is no longer there.")), target: t!, now: NOW)
         #expect(closed.mode == .player)
@@ -535,7 +535,7 @@ struct ShareTests {
 
     @Test("nothing acts before the tune is described")
     func notYet() throws {
-        let s = try Fixture.load("30-modes-default")
+        let s = try Fixture.load("30-shuffle-on")
         let (p, _) = try openShare(s, index: nil)
         #expect(p.sharing(s).1 == nil)
         #expect(p.didFileAction(.copyPath, done: true, now: NOW) == p)
@@ -595,7 +595,7 @@ struct EscapeTests {
 
     @Test("the share sheet goes back to the player")
     func shareSheet() throws {
-        let s = try Fixture.load("30-modes-default")
+        let s = try Fixture.load("30-shuffle-on")
         let (p, _) = try openShare(s, index: nil)
         let (back, close) = p.escaping(s)
         #expect(!close && back.mode == .player && back.share == nil)

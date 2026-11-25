@@ -129,7 +129,7 @@ struct ModelsComposerTests {
                             "40-twelve-repeat-off", "45-round-played", "47-round-fifty"]
     static let withoutModelLine = ["05-queue-full", "07-composer-off-kept", "08-nothing-kept", "09-kept-tunes", "12-held-power", "13-held-memory",
                               "14-no-device", "16-genres-error", "17-paused", "21-stopped", "23-pick-after-pause", "24-pick-after-stop",
-                              "29-after-save", "30-modes-default", "31-shuffle-off", "32-repeat-one", "33-ended", "34-pinned",
+                              "29-after-save", "30-shuffle-on", "31-shuffle-off", "32-repeat-one", "33-ended", "34-pinned",
                               "41-no-model-kept", "42-downloading-kept", "43-download-failed-kept", "44-model-on-disk", "46-round-ended"]
 
     @Test("with no models listed: the variant on the model line and no capsule", arguments: withModelLine)
