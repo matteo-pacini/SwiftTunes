@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0
+
 - There are now two music models. Small (0.6B) is a 4.08 GiB download and
   takes about 4 GiB of memory while composing; Large (4B) is 7.57 GiB and
   takes about 8 GiB.
