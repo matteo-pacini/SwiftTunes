@@ -597,7 +597,8 @@ extension Engine {
         let g = j.genre
         var lyrics: String?
         if j.sung, case .string(let w)? = j.plan["lyrics"], !WordsRules.sungLines(w).isEmpty { lyrics = w }
-        let tags = TuneTags(title: j.name, genre: g.name, bpm: bpm, key: key.isEmpty ? nil : key, lyrics: lyrics, model: j.model?.id)
+        let tags = TuneTags(title: j.name, genre: g.name, bpm: bpm, key: key.isEmpty ? nil : key, lyrics: lyrics,
+                            model: j.model.map { "\(pins?.name ?? "") \($0.variant)" })
         let token = j.token
         let cut = j.cut
         spawn { [weak self] in
@@ -766,9 +767,15 @@ extension Engine {
 
     // MARK: - Download
 
-    /// Fetches what the chosen model lacks.
+    /// Fetches what the chosen model lacks, and saves it as chosen.
     func download() {
         guard let c = chosenModel(), !onDisk(c) else { return }
+        // Unsaved, a suggested Small would give way to a Large added later:
+        // a state file without a model means the largest on disk.
+        if chosenID != c.id {
+            chosenID = c.id
+            saveState()
+        }
         startDownload(c)
     }
 
@@ -898,13 +905,13 @@ extension Engine {
         spawn { [weak self] in
             // A cancelled download may still hold a part open: it ends first.
             await writing?.value
-            self?.deleteModelFiles([c.file], of: id)
+            self?.deleteModelFiles([c.file], of: c)
         }
     }
 
     /// Deletes `files` and their parts; with `model`, only that model's
-    /// download is forgotten.
-    func deleteModelFiles(_ files: [ModelFile], of model: String? = nil) {
+    /// download is forgotten and a failure names it.
+    func deleteModelFiles(_ files: [ModelFile], of model: ModelPin? = nil) {
         var failure: Int32?
         for f in files {
             for name in [f.name, f.name + ".part"] where unlink(env.paths.models.appending(path: name).path) != 0 {
@@ -912,8 +919,8 @@ extension Engine {
             }
         }
         // Whatever was deleted stays deleted.
-        removeError = failure.map { "could not remove the music model: \(String(cString: strerror($0)))" }
-        if model == nil || dl?.model == model { dl = nil }
+        removeError = failure.map { "could not remove \(model?.name ?? "the music model"): \(String(cString: strerror($0)))" }
+        if model == nil || dl?.model == model?.id { dl = nil }
         checkSetup()
         changed()
     }

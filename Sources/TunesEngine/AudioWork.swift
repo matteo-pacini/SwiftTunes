@@ -11,7 +11,7 @@ nonisolated struct TuneTags: Sendable {
     var key: String?
     /// The words, for a sung tune.
     var lyrics: String? = nil
-    /// The id of the model that made it.
+    /// The model that made it, as a person reads it: its name and variant.
     var model: String? = nil
 }
 
