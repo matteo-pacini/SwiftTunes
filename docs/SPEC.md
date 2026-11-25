@@ -700,3 +700,10 @@ This section adds to "Music models" and wins where they differ.
   made through `downloadModel`; the suggestion with 0 bytes and at exactly
   24 GiB with the real thresholds; the contract's new fields encoding, and
   decoding when absent.
+
+## Shuffle starts off
+
+A new installation starts with shuffle off: a round plays the kept tunes in
+the order they were made, newest last. A state file that says nothing
+about shuffle reads as off. A saved choice is kept as it is. Repeat still
+starts as all. This is part of release 0.2.0.
